@@ -33,6 +33,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
 
         // Send access request notification to administrator emails
         try {
+          const portalUrl =
+            typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
+              ? `${window.location.origin}${window.location.pathname}`
+              : 'https://erslua2026.github.io/ERSL_Website/';
           await fetch('https://formspree.io/f/xbjnqpyz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -40,7 +44,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
               subject: `[ERSL Website] New Access Request: ${name || email}`,
               applicant_name: name,
               applicant_email: email,
-              message: `New user requested member access to ERSL Website:\n\nName: ${name}\nEmail: ${email}\n\nPlease log into https://ersl.pages.dev/ -> Control Panel -> Members to approve this user.`,
+              message: `New user requested member access to ERSL Website:\n\nName: ${name}\nEmail: ${email}\n\nPlease log into ${portalUrl} -> Control Panel -> Members to approve this user.`,
               recipients: 'hongxing.liu@ua.edu, npurushothaman@ua.edu'
             }),
           });
