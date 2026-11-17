@@ -36,6 +36,7 @@ import {
   buildNormalizedSubTabs,
   DEFAULT_PROJECT_SUBPAGE,
   getVisibilityMeta,
+  parseLegacyInvestigators,
   PreviewRole,
   resolveProjectViewerAccess,
   VISIBILITY_OPTIONS,
@@ -729,10 +730,54 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               <div className="lg:col-span-4 space-y-4">
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3.5 text-xs">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                      Investigators
-                    </span>
-                    <p className="font-bold text-slate-800 mt-0.5">{subPage.piInfo || project.details}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                        Investigators (PI &amp; Co-PIs)
+                      </span>
+                      {showEditControls && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingInfo(true)}
+                          className="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                    {(() => {
+                      const invList =
+                        Array.isArray(subPage.investigators) && subPage.investigators.length > 0
+                          ? subPage.investigators
+                          : parseLegacyInvestigators(subPage.piInfo, project.details);
+                      if (invList.length > 0) {
+                        return (
+                          <div className="space-y-1.5 mt-1.5">
+                            {invList.map(inv => (
+                              <div key={inv.id} className="bg-white border border-slate-200 rounded-lg px-2.5 py-2 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-900">{inv.name}</div>
+                                  {inv.affiliation && (
+                                    <div className="text-[11px] text-slate-500">{inv.affiliation}</div>
+                                  )}
+                                </div>
+                                <span
+                                  className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shrink-0 border ${
+                                    inv.role === 'PI'
+                                      ? 'bg-red-50 text-[#9E1B32] border-red-200'
+                                      : 'bg-slate-100 text-slate-700 border-slate-200'
+                                  }`}
+                                >
+                                  {inv.role}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return (
+                        <p className="font-bold text-slate-800 mt-0.5">{subPage.piInfo || project.details}</p>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -849,6 +894,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           themes={themes}
           primaryColor={primaryColor}
           initialPiInfo={subPage.piInfo || project.details}
+          initialInvestigators={subPage.investigators}
           initialTimeline={subPage.timeline || 'Active Research Grant'}
           initialBoxFolderUrl={subPage.boxFolderUrl || ''}
           initialHeaderBgColor={subPage.headerBgColor || primaryColor}
@@ -858,6 +904,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               customSubTabs,
               {
                 piInfo: patch.piInfo,
+                investigators: patch.investigators,
                 timeline: patch.timeline,
                 boxFolderUrl: patch.boxFolderUrl,
                 headerBgColor: patch.headerBgColor,

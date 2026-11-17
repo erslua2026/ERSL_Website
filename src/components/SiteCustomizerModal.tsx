@@ -7,7 +7,7 @@ import {
   CustomPageData, LayoutMode, SiteConfig, TabConfig, TabPosition, TabVisibility
 } from '../types';
 import { defaultSiteConfig } from '../data/defaultSiteConfig';
-import { uploadImageWithBoxFallback } from '../lib/boxSync';
+import { ImageUploadField } from './ImageUploadField';
 
 interface SiteCustomizerModalProps {
   config: SiteConfig;
@@ -480,28 +480,26 @@ export const SiteCustomizerModal: React.FC<SiteCustomizerModalProps> = ({
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        value={slide.title}
-                        onChange={e => {
-                          const next = [...draft.homeSlides];
-                          next[sIdx] = { ...slide, title: e.target.value };
-                          setDraft({ ...draft, homeSlides: next });
-                        }}
-                        placeholder="Slide Title"
-                        className="p-2 bg-white border border-gray-300 rounded-lg font-bold"
-                      />
-                      <input
-                        value={slide.image}
-                        onChange={e => {
-                          const next = [...draft.homeSlides];
-                          next[sIdx] = { ...slide, image: e.target.value };
-                          setDraft({ ...draft, homeSlides: next });
-                        }}
-                        placeholder="Image URL or Box Direct Link"
-                        className="p-2 bg-white border border-gray-300 rounded-lg"
-                      />
-                    </div>
+                    <input
+                      value={slide.title}
+                      onChange={e => {
+                        const next = [...draft.homeSlides];
+                        next[sIdx] = { ...slide, title: e.target.value };
+                        setDraft({ ...draft, homeSlides: next });
+                      }}
+                      placeholder="Slide Title"
+                      className="w-full p-2 bg-white border border-gray-300 rounded-lg font-bold"
+                    />
+                    <ImageUploadField
+                      value={slide.image}
+                      onChange={nextImg => {
+                        const next = [...draft.homeSlides];
+                        next[sIdx] = { ...slide, image: nextImg };
+                        setDraft({ ...draft, homeSlides: next });
+                      }}
+                      category="Research"
+                      label={`Slide ${sIdx + 1} Photo (Upload, Paste Clipboard, or URL)`}
+                    />
                     <textarea
                       rows={2}
                       value={slide.desc}
@@ -519,46 +517,21 @@ export const SiteCustomizerModal: React.FC<SiteCustomizerModalProps> = ({
 
               <div className="bg-slate-50 border border-gray-200 rounded-xl p-4 space-y-3">
                 <h3 className="font-extrabold text-sm text-slate-900">Home Aims &amp; Mission, Logo, News &amp; Footer</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Mission Badge</label>
-                    <input
-                      value={draft.homeMission.badge}
-                      onChange={e => setDraft({ ...draft, homeMission: { ...draft.homeMission, badge: e.target.value } })}
-                      className="w-full p-2 bg-white border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <label className="font-bold text-slate-700 block">Lab Logo (Upload or Box Link)</label>
-                      <label className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-white cursor-pointer">
-                        Upload File
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={async (ev) => {
-                            const file = ev.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              const res = await uploadImageWithBoxFallback(file, 'Logos');
-                              setDraft(prev => ({ ...prev, logoUrl: res.url }));
-                            } catch (err: any) {
-                              alert(err?.message || 'Logo image upload failed.');
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                    <input
-                      value={draft.logoUrl?.startsWith('data:') ? 'Uploaded local image file (ready to save)' : (draft.logoUrl || '')}
-                      readOnly={Boolean(draft.logoUrl?.startsWith('data:'))}
-                      onChange={e => setDraft({ ...draft, logoUrl: e.target.value })}
-                      placeholder="https://alabama.box.com/shared/static/..."
-                      className="w-full p-2 bg-white border border-gray-300 rounded-lg"
-                    />
-                  </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Mission Badge</label>
+                  <input
+                    value={draft.homeMission.badge}
+                    onChange={e => setDraft({ ...draft, homeMission: { ...draft.homeMission, badge: e.target.value } })}
+                    className="w-full p-2 bg-white border border-gray-300 rounded-lg"
+                  />
                 </div>
+                <ImageUploadField
+                  value={draft.logoUrl || ''}
+                  onChange={nextLogo => setDraft(prev => ({ ...prev, logoUrl: nextLogo }))}
+                  category="Logos"
+                  previewShape="circle"
+                  label="Lab Logo (Upload, Paste Clipboard, or URL)"
+                />
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Mission Heading</label>
                   <input

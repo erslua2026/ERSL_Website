@@ -40,7 +40,8 @@ import { MemberManager } from './components/MemberManager';
 import { ProfessionalDevelopment } from './components/ProfessionalDevelopment';
 import { supabase, fetchProfile, profileToUser } from './lib/supabase';
 import { getCloudData, setCloudData, getLastCloudError } from './lib/cloudStore';
-import { getLastBoxStatus, uploadImageWithBoxFallback } from './lib/boxSync';
+import { getLastBoxStatus } from './lib/boxSync';
+import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
 
@@ -1682,7 +1683,7 @@ export default function App() {
                                 Cancel
                               </button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                            <div className="space-y-2.5 text-xs">
                               <div>
                                 <label className="block font-bold text-slate-700 mb-1">Section Badge</label>
                                 <input
@@ -1691,45 +1692,13 @@ export default function App() {
                                   className="w-full p-2 border border-gray-300 rounded-lg bg-white font-semibold"
                                 />
                               </div>
-                              <div>
-                                <div className="flex items-center justify-between gap-2 mb-1">
-                                  <label className="block font-bold text-slate-700">Lab Logo (Upload File or Box Direct Link)</label>
-                                  <label className="text-[11px] font-bold px-2.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-white cursor-pointer">
-                                    Upload Image
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      onChange={async (ev) => {
-                                        const file = ev.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                          const res = await uploadImageWithBoxFallback(file, 'Logos');
-                                          setHomeEditDraft(prev => prev ? { ...prev, logoUrl: res.url } : prev);
-                                        } catch (err: any) {
-                                          alert(err?.message || 'Logo image upload failed.');
-                                        }
-                                      }}
-                                    />
-                                  </label>
-                                </div>
-                                <input
-                                  value={homeEditDraft.logoUrl?.startsWith('data:') ? 'Uploaded local image file (ready to save)' : (homeEditDraft.logoUrl || '')}
-                                  readOnly={Boolean(homeEditDraft.logoUrl?.startsWith('data:'))}
-                                  onChange={e => setHomeEditDraft({ ...homeEditDraft, logoUrl: e.target.value })}
-                                  placeholder="https://alabama.box.com/shared/static/..."
-                                  className="w-full p-2 border border-gray-300 rounded-lg bg-white"
-                                />
-                                {homeEditDraft.logoUrl?.startsWith('data:') && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setHomeEditDraft({ ...homeEditDraft, logoUrl: '' })}
-                                    className="mt-1 text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
-                                  >
-                                    Clear uploaded logo &amp; use URL instead
-                                  </button>
-                                )}
-                              </div>
+                              <ImageUploadField
+                                value={homeEditDraft.logoUrl || ''}
+                                onChange={nextLogo => setHomeEditDraft(prev => (prev ? { ...prev, logoUrl: nextLogo } : prev))}
+                                category="Logos"
+                                previewShape="circle"
+                                label="Lab Logo (Upload from Computer, Paste Clipboard, or URL)"
+                              />
                             </div>
                             <div className="text-xs">
                               <label className="block font-bold text-slate-700 mb-1">Heading</label>

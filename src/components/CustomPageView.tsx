@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { CustomBlock, CustomPageData, CustomSubTab, SubTabVisibility, User } from '../types';
 import { isBoxUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { ImageUploadField } from './ImageUploadField';
 
 interface CustomPageViewProps {
   page: CustomPageData;
@@ -405,16 +406,31 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                 <label className="font-bold text-gray-700 block mb-1">Description / Content</label>
                 <textarea rows={3} value={bBody} onChange={e => setBBody(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">URL / Box Link</label>
-                  <input value={bUrl} onChange={e => setBUrl(e.target.value)} placeholder="https://ua.box.com/s/..." className="w-full p-2 border border-gray-300 rounded-lg" />
+              {bType === 'image' ? (
+                <div className="space-y-3">
+                  <ImageUploadField
+                    value={bUrl}
+                    onChange={setBUrl}
+                    category="General"
+                    label="Image (Upload from Computer, Paste Clipboard, or URL)"
+                  />
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Tag / Badge (Optional)</label>
+                    <input value={bTag} onChange={e => setBTag(e.target.value)} placeholder="e.g. Public, Figure, Map" className="w-full p-2 border border-gray-300 rounded-lg" />
+                  </div>
                 </div>
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Tag / Badge (Optional)</label>
-                  <input value={bTag} onChange={e => setBTag(e.target.value)} placeholder="e.g. Public, Box, Guide" className="w-full p-2 border border-gray-300 rounded-lg" />
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">URL / Box Link</label>
+                    <input value={bUrl} onChange={e => setBUrl(e.target.value)} placeholder="https://ua.box.com/s/..." className="w-full p-2 border border-gray-300 rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Tag / Badge (Optional)</label>
+                    <input value={bTag} onChange={e => setBTag(e.target.value)} placeholder="e.g. Public, Box, Guide" className="w-full p-2 border border-gray-300 rounded-lg" />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                 <button type="button" onClick={() => setBlockModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-100 font-bold text-slate-600 cursor-pointer">Cancel</button>
                 <button type="submit" className="px-5 py-2 rounded-lg text-white font-bold flex items-center gap-1 cursor-pointer" style={{ backgroundColor: primaryColor }}>

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { X, Save, Sparkles, Link as LinkIcon, Image as ImageIcon, Upload } from 'lucide-react';
+import { X, Save, Sparkles, Link as LinkIcon } from 'lucide-react';
 import { NewsItem, NewsCategory } from '../data/news';
-import { isBoxSharePageNotDirectFile } from '../lib/boxUtils';
-import { uploadImageWithBoxFallback } from '../lib/boxSync';
+import { ImageUploadField } from './ImageUploadField';
 
 interface NewsModalProps {
   item: NewsItem | null;
@@ -46,18 +45,6 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
       setTitle('Lab Research Note: [Topic or Method Overview]');
       setSummary('A quick look inside our latest modeling workflows: how we apply GeoAI and satellite altimetry to solve continental water challenges.');
       setLink('');
-    }
-  };
-
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const result = await uploadImageWithBoxFallback(file, 'News');
-      setImage(result.url);
-      setError('');
-    } catch (err: any) {
-      setError(err?.message || 'Image upload failed. You can also paste a Box Direct Link.');
     }
   };
 
@@ -147,11 +134,10 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
                   key={opt.id}
                   type="button"
                   onClick={() => setCategory(opt.id)}
-                  className={`text-xs p-2 rounded-xl border text-left flex items-center space-x-2 transition-all cursor-pointer ${
-                    category === opt.id
+                  className={`text-xs p-2 rounded-xl border text-left flex items-center space-x-2 transition-all cursor-pointer ${category === opt.id
                       ? 'border-[#9E1B32] bg-red-50/40 text-[#9E1B32] font-bold shadow-xs ring-1 ring-[#9E1B32]'
                       : 'border-slate-200 hover:bg-slate-50 text-slate-600'
-                  }`}
+                    }`}
                 >
                   <span className="text-sm">{opt.icon}</span>
                   <span className="truncate">{opt.label}</span>
@@ -200,51 +186,14 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
             />
           </div>
 
-          {/* News Image (Box Direct Link / URL / Upload) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5 text-[#9E1B32]" />
-                <span>News Image (Box Direct Link, URL, or Upload)</span>
-              </label>
-              {image && (
-                <button
-                  type="button"
-                  onClick={() => setImage('')}
-                  className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
-                >
-                  Remove Image
-                </button>
-              )}
-            </div>
-
-            {image && (
-              <div className="rounded-lg overflow-hidden border border-slate-200 bg-white max-h-36 flex items-center justify-center">
-                <img src={image} alt="News preview" className="w-full h-32 object-cover" />
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={image.startsWith('data:') ? '' : image}
-                onChange={e => setImage(e.target.value)}
-                placeholder="Paste Box Direct Link (https://ua.box.com/shared/static/...) or image URL"
-                className="flex-1 text-xs p-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:border-[#9E1B32]"
-              />
-              <label className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0">
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload</span>
-                <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
-              </label>
-            </div>
-
-            {isBoxSharePageNotDirectFile(image) && (
-              <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 p-2 rounded">
-                Tip: Standard Box <code>/s/...</code> links open a webpage rather than a raw image. In UA Box, open Shared Link Settings &rarr; copy the <strong>Direct Link</strong> (<code>.../shared/static/...</code>) so the image displays directly!
-              </p>
-            )}
-
+          {/* News Image (Upload, Clipboard Paste, or URL) */}
+          <div className="space-y-2">
+            <ImageUploadField
+              value={image}
+              onChange={setImage}
+              category="News"
+              label="News Image (Upload from Computer, Paste Clipboard, or URL)"
+            />
             <input
               type="text"
               value={imageCaption}

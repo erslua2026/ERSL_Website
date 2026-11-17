@@ -58,6 +58,13 @@ export interface ProjectCustomSubTab {
   blocks: ProjectContentBlock[];
 }
 
+export interface ProjectInvestigator {
+  id: string;
+  name: string;
+  role: string;
+  affiliation?: string;
+}
+
 export interface ProjectCollaborator {
   id: string;
   personId?: string;
@@ -84,6 +91,7 @@ export interface ProjectSubPageData {
   summary: string;
   objectives: string[];
   piInfo?: string;
+  investigators?: ProjectInvestigator[];
   timeline?: string;
   bannerImage?: string;
   boxFolderUrl?: string;

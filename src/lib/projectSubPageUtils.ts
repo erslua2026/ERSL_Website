@@ -4,6 +4,7 @@ import {
   ProjectCollaborator,
   ProjectContentBlock,
   ProjectCustomSubTab,
+  ProjectInvestigator,
   ProjectSubPageData,
   SubTabVisibility,
   User,
@@ -112,6 +113,38 @@ export const SUBTAB_PRESETS: Array<{
     description: 'Flexible sub-page with any combination of text, links, datasets, or files.',
   },
 ];
+
+export function parseLegacyInvestigators(piInfo?: string, details?: string): ProjectInvestigator[] {
+  const raw = (piInfo || details || '').trim();
+  if (!raw) return [];
+
+  const result: ProjectInvestigator[] = [];
+  // Split patterns like "PI: Dr. Hongxing Liu | Co-PIs: Dr. Sagy Cohen, Dr. Yuehan Lu"
+  const segments = raw.split(/[|;]/).map(s => s.trim()).filter(Boolean);
+
+  for (const seg of segments) {
+    const match = seg.match(/^(co-?pis?|pis?|principal investigator|lead|collaborators?)\s*:\s*(.+)$/i);
+    if (match) {
+      const prefix = match[1].toLowerCase();
+      const role = prefix.startsWith('co') ? 'Co-PI' : prefix.startsWith('pi') || prefix.startsWith('principal') ? 'PI' : 'Investigator';
+      const names = match[2].split(',').map(n => n.replace(/\([^)]*\)/g, '').trim()).filter(Boolean);
+      names.forEach((name, idx) => {
+        result.push({ id: `inv-${Date.now()}-${result.length}-${idx}`, name, role });
+      });
+    } else {
+      result.push({ id: `inv-${Date.now()}-${result.length}`, name: seg, role: 'PI' });
+    }
+  }
+  return result;
+}
+
+export function formatInvestigatorsSummary(list: ProjectInvestigator[]): string {
+  const clean = list.filter(i => i.name.trim());
+  if (clean.length === 0) return '';
+  return clean
+    .map(i => `${i.role ? `${i.role}: ` : ''}${i.name.trim()}${i.affiliation?.trim() ? ` (${i.affiliation.trim()})` : ''}`)
+    .join(' · ');
+}
 
 /**
  * Normalizes legacy ProjectSubPageData (fixed 4 sub-tabs) into the flexible

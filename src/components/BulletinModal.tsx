@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Save, Megaphone } from 'lucide-react';
 import { BulletinItem } from '../types';
-import { uploadImageWithBoxFallback } from '../lib/boxSync';
 import { BoxUploadButton } from './BoxUploadButton';
+import { ImageUploadField } from './ImageUploadField';
 
 interface BulletinModalProps {
   item: BulletinItem | null;
@@ -111,36 +111,13 @@ export const BulletinModal: React.FC<BulletinModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="font-bold text-gray-700">Image URL / Box Direct Link (Optional)</label>
-              <input
-                type="text"
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="https://ua.box.com/shared/static/..."
-                className="w-full p-2 bg-slate-50 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
-              />
-              <label className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-slate-900 hover:bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer">
-                Upload Image
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (!file) return;
-                    try {
-                      const res = await uploadImageWithBoxFallback(file, 'News');
-                      setImage(res.url);
-                    } catch (err: any) {
-                      alert(err?.message || 'Image upload failed.');
-                    }
-                  }}
-                />
-              </label>
-            </div>
+          <div className="space-y-3">
+            <ImageUploadField
+              value={image}
+              onChange={setImage}
+              category="News"
+              label="Bulletin Photo (Optional — Upload, Paste Clipboard, or URL)"
+            />
             <div className="space-y-1">
               <label className="font-bold text-gray-700">Box / Reference Document Link (Optional)</label>
               <input

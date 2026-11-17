@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Edit, Plus, Info, Sparkles, Search, Loader2, Check } from 'lucide-react';
-import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint } from '../types';
-import { isBoxSharePageNotDirectFile } from '../lib/boxUtils';
-import { BoxImageCategory, uploadImageWithBoxFallback } from '../lib/boxSync';
+import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint, ProjectInvestigator } from '../types';
 import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
+import { formatInvestigatorsSummary, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 import { BoxUploadButton } from './BoxUploadButton';
+import { ImageUploadField } from './ImageUploadField';
 
 interface EditModalProps {
   type: 'publication' | 'data-layer' | 'research-theme' | 'project' | 'instrument' | 'person' | 'software' | 'teaching';
@@ -183,6 +183,18 @@ export const EditModal: React.FC<EditModalProps> = ({
               : item.expectedGraduationDate,
           formerStints: existingStints,
         });
+      } else if (type === 'project') {
+        const existingInvs: ProjectInvestigator[] =
+          Array.isArray(item.subPage?.investigators) && item.subPage.investigators.length > 0
+            ? item.subPage.investigators
+            : parseLegacyInvestigators(item.subPage?.piInfo, item.details);
+        setFormData({
+          ...item,
+          investigators:
+            existingInvs.length > 0
+              ? existingInvs
+              : [{ id: `inv-${Date.now()}`, name: '', role: 'PI', affiliation: 'The University of Alabama' }],
+        });
       } else {
         setFormData({ ...item });
       }
@@ -259,6 +271,9 @@ export const EditModal: React.FC<EditModalProps> = ({
           summary: '',
           image: '',
           themeIds: themes.length > 0 ? [themes[0].id] : [],
+          investigators: [
+            { id: `inv-${Date.now()}`, name: '', role: 'PI', affiliation: 'The University of Alabama' },
+          ],
           subPage: {
             tabVisibility: { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
             objectives: [],
@@ -274,23 +289,6 @@ export const EditModal: React.FC<EditModalProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev: any) => ({ ...prev, [name]: value }));
-  };
-
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const categoryMap: Record<string, BoxImageCategory> = {
-      person: 'People',
-      'research-theme': 'Research',
-      instrument: 'Instruments',
-      project: 'Research',
-    };
-    try {
-      const result = await uploadImageWithBoxFallback(file, categoryMap[type] || 'General');
-      setFormData((prev: any) => ({ ...prev, image: result.url }));
-    } catch (err: any) {
-      alert(err?.message || 'Image upload failed.');
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -310,6 +308,37 @@ export const EditModal: React.FC<EditModalProps> = ({
         alert('Please connect this project to at least one Research Theme.');
         return;
       }
+      const cleanInvestigators: ProjectInvestigator[] = (
+        Array.isArray(formData.investigators) ? formData.investigators : []
+      )
+        .map((inv: ProjectInvestigator) => ({
+          ...inv,
+          name: (inv.name || '').trim(),
+          role: (inv.role || 'PI').trim(),
+          affiliation: inv.affiliation?.trim() || undefined,
+        }))
+        .filter((inv: ProjectInvestigator) => inv.name);
+      const piSummary = formatInvestigatorsSummary(cleanInvestigators);
+      const existingSub = formData.subPage || {
+        tabVisibility: { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
+        objectives: [],
+        resources: [],
+        events: [],
+        datasets: [],
+      };
+      onSave({
+        ...formData,
+        id: formData.id || `${type}-${Date.now()}`,
+        details: (formData.details || '').trim() || piSummary || '',
+        subPage: {
+          ...existingSub,
+          summary: existingSub.summary || formData.summary || '',
+          piInfo: piSummary || existingSub.piInfo || formData.details || '',
+          investigators: cleanInvestigators,
+          timeline: existingSub.timeline || formData.period || 'Active Research Grant',
+        },
+      });
+      return;
     }
 
     if (type === 'person' && formData.group === 'former') {
@@ -639,63 +668,12 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block font-bold text-gray-700">Research Theme Banner Photo</label>
-                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
-                  {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
-                    <div className="flex items-center space-x-4 w-full">
-                      <img
-                        src={formData.image}
-                        alt="Preview"
-                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0"
-                      />
-                      <div className="flex-1 text-left">
-                        <p className="text-xs font-bold text-gray-700 truncate">Theme Photo Selected</p>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                          {formData.image.startsWith('data:') ? 'Local Image File' : 'External Web URL Asset'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setFormData((prev: any) => ({ ...prev, image: '' }))}
-                          className="relative z-20 text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline"
-                        >
-                          Clear Photo Selection
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-2">
-                      <span className="text-2xl">📷</span>
-                      <p className="text-xs font-bold text-gray-600 mt-1">Upload theme banner from local browser</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">Drag & drop or click to choose file (Max 2MB)</p>
-                    </div>
-                  )}
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    title="Choose local image file"
-                  />
-                </div>
-
-                <div className="pt-1 space-y-1.5">
-                  <input
-                    type="text"
-                    name="image"
-                    placeholder="Or paste UA Box Direct Link (https://alabama.box.com/shared/static/...) or image URL..."
-                    value={(formData.image && !formData.image.startsWith('data:')) ? formData.image : ''}
-                    onChange={handleChange}
-                    className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
-                  />
-                  {isBoxSharePageNotDirectFile(formData.image) && (
-                    <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 leading-snug">
-                      This is a Box <code>/s/</code> share webpage link, not a direct image file URL. In UA Box, open <strong>Share → Link Settings</strong> and copy the <strong>Direct Link</strong> (<code>https://alabama.box.com/shared/static/...</code>).
-                    </p>
-                  )}
-                </div>
-              </div>
+              <ImageUploadField
+                value={formData.image || ''}
+                onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
+                category="Research"
+                label="Research Theme Banner Photo"
+              />
             </>
           )}
 
@@ -751,58 +729,12 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block font-bold text-gray-700">Equipment Display Image</label>
-                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
-                  {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
-                    <div className="flex items-center space-x-4 w-full">
-                      <img
-                        src={formData.image}
-                        alt="Preview"
-                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0"
-                      />
-                      <div className="flex-1 text-left">
-                        <p className="text-xs font-bold text-gray-700 truncate">Equipment Photo Selected</p>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                          {formData.image.startsWith('data:') ? 'Local Image File' : 'External Web URL Asset'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setFormData((prev: any) => ({ ...prev, image: '' }))}
-                          className="text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline"
-                        >
-                          Clear Photo Selection
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-2">
-                      <span className="text-2xl">📷</span>
-                      <p className="text-xs font-bold text-gray-600 mt-1">Upload equipment image from local browser</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">Drag & drop or click to choose file (Max 2MB)</p>
-                    </div>
-                  )}
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    title="Choose local image file"
-                  />
-                </div>
-
-                <div className="pt-1">
-                  <input
-                    type="text"
-                    name="image"
-                    placeholder="Or paste custom image URL instead..."
-                    value={(formData.image && !formData.image.startsWith('data:')) ? formData.image : ''}
-                    onChange={handleChange}
-                    className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
-                  />
-                </div>
-              </div>
+              <ImageUploadField
+                value={formData.image || ''}
+                onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
+                category="Instruments"
+                label="Equipment Display Image"
+              />
             </>
           )}
 
@@ -1136,58 +1068,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="block font-bold text-gray-700">Profile Portrait Photo</label>
-                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
-                  {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
-                    <div className="flex items-center space-x-4 w-full">
-                      <img
-                        src={formData.image}
-                        alt="Preview"
-                        className="w-16 h-16 rounded-full object-cover border border-gray-200 shadow-xs shrink-0"
-                      />
-                      <div className="flex-1 text-left">
-                        <p className="text-xs font-bold text-gray-700 truncate">Portrait Photo Selected</p>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                          {formData.image.startsWith('data:') ? 'Local Image File' : 'External Web URL Asset'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setFormData((prev: any) => ({ ...prev, image: '' }))}
-                          className="relative z-20 text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline cursor-pointer"
-                        >
-                          Clear Portrait Selection
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-2">
-                      <span className="text-2xl">👤</span>
-                      <p className="text-xs font-bold text-gray-600 mt-1">Upload profile photo from local browser</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">Drag & drop or click to choose file (Max 2MB)</p>
-                    </div>
-                  )}
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    title="Choose local image file"
-                  />
-                </div>
-
-                <div className="pt-1">
-                  <input
-                    type="text"
-                    name="image"
-                    placeholder="Or paste custom image URL instead..."
-                    value={(formData.image && !formData.image.startsWith('data:')) ? formData.image : ''}
-                    onChange={handleChange}
-                    className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
-                  />
-                </div>
-              </div>
+              <ImageUploadField
+                value={formData.image || ''}
+                onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
+                category="People"
+                previewShape="circle"
+                label="Profile Portrait Photo (Optional for Alumni/Collaborators)"
+              />
             </>
           )}
 
@@ -1400,6 +1287,91 @@ export const EditModal: React.FC<EditModalProps> = ({
                 </div>
               )}
 
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="font-extrabold text-slate-800 text-xs">
+                    Principal Investigators (PI &amp; Co-PIs)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev: any) => ({
+                        ...prev,
+                        investigators: [
+                          ...(Array.isArray(prev.investigators) ? prev.investigators : []),
+                          { id: `inv-${Date.now()}`, name: '', role: 'Co-PI', affiliation: '' },
+                        ],
+                      }))
+                    }
+                    className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Add Investigator
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(Array.isArray(formData.investigators) ? formData.investigators : []).map((inv: ProjectInvestigator, idx: number) => (
+                    <div key={inv.id} className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 items-center bg-white p-2 rounded-lg border border-gray-200">
+                      <select
+                        value={inv.role}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            investigators: prev.investigators.map((x: ProjectInvestigator, i: number) => (i === idx ? { ...x, role: val } : x)),
+                          }));
+                        }}
+                        className="sm:col-span-3 p-1.5 border border-gray-300 rounded text-xs font-bold bg-slate-50"
+                      >
+                        <option value="PI">PI</option>
+                        <option value="Co-PI">Co-PI</option>
+                        <option value="Co-Investigator">Co-Investigator</option>
+                        <option value="Lead Researcher">Lead Researcher</option>
+                        <option value="Senior Personnel">Senior Personnel</option>
+                        <option value="Collaborator">Collaborator</option>
+                      </select>
+                      <input
+                        value={inv.name}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            investigators: prev.investigators.map((x: ProjectInvestigator, i: number) => (i === idx ? { ...x, name: val } : x)),
+                          }));
+                        }}
+                        placeholder="Full Name (e.g., Dr. Hongxing Liu)"
+                        className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                      />
+                      <input
+                        value={inv.affiliation || ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            investigators: prev.investigators.map((x: ProjectInvestigator, i: number) => (i === idx ? { ...x, affiliation: val } : x)),
+                          }));
+                        }}
+                        placeholder="Institution (Optional)"
+                        className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={(formData.investigators?.length || 0) <= 1}
+                        onClick={() =>
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            investigators: prev.investigators.filter((_: any, i: number) => i !== idx),
+                          }))
+                        }
+                        className="sm:col-span-1 p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer flex justify-center text-xs font-bold"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="block font-bold text-gray-700">Project Summary *</label>
                 <textarea
@@ -1412,18 +1384,15 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Banner Photo URL (or UA Box Direct Link)</label>
-                <input
-                  type="url"
-                  name="image"
-                  placeholder="https://ua.box.com/shared/static/..."
+              <div className="space-y-1.5">
+                <ImageUploadField
                   value={formData.image || ''}
-                  onChange={handleChange}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
+                  category="Projects"
+                  label="Project Banner Photo (Optional — Upload, Paste Clipboard, or URL)"
                 />
                 <p className="text-[10px] text-gray-500">
-                  Tip: Click a project card after saving to edit its sub-webpage (Overview, Useful Resources, Events, Datasets & Public/Members visibility).
+                  Tip: Open any project card after saving to customize its sub-pages, text paragraphs, collaborators, datasets, software, and meeting notes.
                 </p>
               </div>
             </>

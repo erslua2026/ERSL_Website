@@ -7,12 +7,18 @@ import {
   ProjectContentBlock,
   ProjectContentBlockType,
   ProjectCustomSubTab,
+  ProjectInvestigator,
   ResearchTheme,
   SubTabVisibility,
 } from '../types';
 import { BoxUploadButton } from './BoxUploadButton';
-import { uploadImageWithBoxFallback } from '../lib/boxSync';
-import { SUBTAB_PRESETS, VISIBILITY_OPTIONS } from '../lib/projectSubPageUtils';
+import { ImageUploadField } from './ImageUploadField';
+import {
+  formatInvestigatorsSummary,
+  parseLegacyInvestigators,
+  SUBTAB_PRESETS,
+  VISIBILITY_OPTIONS,
+} from '../lib/projectSubPageUtils';
 import { BLOCK_TYPE_OPTIONS } from './ProjectBlockRenderer';
 
 interface ProjectInfoModalProps {
@@ -20,6 +26,7 @@ interface ProjectInfoModalProps {
   themes: ResearchTheme[];
   primaryColor: string;
   initialPiInfo: string;
+  initialInvestigators?: ProjectInvestigator[];
   initialTimeline: string;
   initialBoxFolderUrl: string;
   initialHeaderBgColor: string;
@@ -31,6 +38,7 @@ interface ProjectInfoModalProps {
     link: string;
     themeIds: string[];
     piInfo: string;
+    investigators: ProjectInvestigator[];
     timeline: string;
     boxFolderUrl?: string;
     headerBgColor?: string;
@@ -42,6 +50,7 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
   themes,
   primaryColor,
   initialPiInfo,
+  initialInvestigators,
   initialTimeline,
   initialBoxFolderUrl,
   initialHeaderBgColor,
@@ -51,7 +60,15 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
   const [title, setTitle] = useState(project.title);
   const [agency, setAgency] = useState(project.agency);
   const [details, setDetails] = useState(project.details);
-  const [piInfo, setPiInfo] = useState(initialPiInfo);
+  const [investigators, setInvestigators] = useState<ProjectInvestigator[]>(() => {
+    if (Array.isArray(initialInvestigators) && initialInvestigators.length > 0) {
+      return initialInvestigators;
+    }
+    const parsed = parseLegacyInvestigators(initialPiInfo, project.details);
+    return parsed.length > 0
+      ? parsed
+      : [{ id: `inv-${Date.now()}`, name: '', role: 'PI', affiliation: 'The University of Alabama' }];
+  });
   const [timeline, setTimeline] = useState(initialTimeline);
   const [boxFolderUrl, setBoxFolderUrl] = useState(initialBoxFolderUrl);
   const [link, setLink] = useState(project.link || '');
@@ -75,13 +92,24 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
       alert('Every research project must be connected to at least one Research Theme.');
       return;
     }
+    const cleanInvestigators = investigators
+      .map(inv => ({
+        ...inv,
+        name: inv.name.trim(),
+        role: (inv.role || 'PI').trim(),
+        affiliation: inv.affiliation?.trim() || undefined,
+      }))
+      .filter(inv => inv.name);
+    const formattedPiInfo = formatInvestigatorsSummary(cleanInvestigators) || initialPiInfo.trim();
+
     onSave({
       title: title.trim() || project.title,
       agency: agency.trim() || project.agency,
       details: details.trim(),
       link: link.trim() || '#',
       themeIds,
-      piInfo: piInfo.trim(),
+      piInfo: formattedPiInfo,
+      investigators: cleanInvestigators,
       timeline: timeline.trim(),
       boxFolderUrl: boxFolderUrl.trim() || undefined,
       headerBgColor: headerBgColor && headerBgColor !== primaryColor ? headerBgColor : undefined,
@@ -117,14 +145,77 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="font-bold text-gray-700 block mb-1">Banner Subtitle / Short Details</label>
-              <input value={details} onChange={e => setDetails(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" />
+          <div>
+            <label className="font-bold text-gray-700 block mb-1">Banner Subtitle / Short Details</label>
+            <input value={details} onChange={e => setDetails(e.target.value)} placeholder="e.g., NASA SWOT Science Team / Project Short Name" className="w-full p-2 border border-gray-300 rounded-lg" />
+          </div>
+
+          <div className="bg-slate-50 border border-gray-200 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-extrabold text-slate-800 text-xs">
+                Principal Investigators (PI, Co-PIs &amp; Leads)
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setInvestigators(prev => [
+                    ...prev,
+                    { id: `inv-${Date.now()}-${prev.length}`, name: '', role: 'Co-PI', affiliation: '' },
+                  ])
+                }
+                className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" /> Add Investigator
+              </button>
             </div>
-            <div>
-              <label className="font-bold text-gray-700 block mb-1">Investigators Line (Sidebar)</label>
-              <input value={piInfo} onChange={e => setPiInfo(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" />
+
+            <div className="space-y-2">
+              {investigators.map((inv, idx) => (
+                <div key={inv.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2 rounded-lg border border-gray-200">
+                  <select
+                    value={inv.role}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setInvestigators(prev => prev.map((x, i) => (i === idx ? { ...x, role: val } : x)));
+                    }}
+                    className="sm:col-span-3 p-1.5 border border-gray-300 rounded text-xs font-bold bg-slate-50"
+                  >
+                    <option value="PI">PI</option>
+                    <option value="Co-PI">Co-PI</option>
+                    <option value="Co-Investigator">Co-Investigator</option>
+                    <option value="Lead Researcher">Lead Researcher</option>
+                    <option value="Senior Personnel">Senior Personnel</option>
+                    <option value="Collaborator">Collaborator</option>
+                  </select>
+                  <input
+                    value={inv.name}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setInvestigators(prev => prev.map((x, i) => (i === idx ? { ...x, name: val } : x)));
+                    }}
+                    placeholder="Full Name (e.g., Dr. Hongxing Liu)"
+                    className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                  />
+                  <input
+                    value={inv.affiliation || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setInvestigators(prev => prev.map((x, i) => (i === idx ? { ...x, affiliation: val } : x)));
+                    }}
+                    placeholder="Institution (Optional)"
+                    className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={investigators.length <= 1}
+                    onClick={() => setInvestigators(prev => prev.filter((_, i) => i !== idx))}
+                    className="sm:col-span-1 p-1.5 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer flex justify-center"
+                    title="Remove investigator"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -136,9 +227,8 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
                 return (
                   <label
                     key={th.id}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${
-                      checked ? 'bg-red-50/50 border-[#9E1B32] font-bold text-slate-900' : 'bg-slate-50 border-gray-200 text-slate-600'
-                    }`}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${checked ? 'bg-red-50/50 border-[#9E1B32] font-bold text-slate-900' : 'bg-slate-50 border-gray-200 text-slate-600'
+                      }`}
                   >
                     <input type="checkbox" checked={checked} onChange={() => toggleTheme(th.id)} />
                     <span>{th.title}</span>
@@ -256,11 +346,10 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
                     key={p.kind}
                     type="button"
                     onClick={() => applyPreset(p)}
-                    className={`text-left p-2 rounded-lg border cursor-pointer transition-colors ${
-                      kind === p.kind
+                    className={`text-left p-2 rounded-lg border cursor-pointer transition-colors ${kind === p.kind
                         ? 'bg-red-50/70 border-[#9E1B32] text-slate-900 font-bold'
                         : 'bg-slate-50 border-gray-200 text-slate-700 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <div className="text-[11px] font-extrabold">{p.defaultLabel}</div>
                     <div className="text-[10px] text-slate-500 capitalize">Default: {p.defaultVisibility}</div>
@@ -287,11 +376,10 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
               {VISIBILITY_OPTIONS.map(opt => (
                 <label
                   key={opt.value}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer ${
-                    visibility === opt.value
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer ${visibility === opt.value
                       ? 'bg-slate-900 text-white border-slate-900'
                       : 'bg-slate-50 border-gray-200 text-slate-700 hover:bg-slate-100'
-                  }`}
+                    }`}
                 >
                   <input
                     type="radio"
@@ -365,11 +453,14 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [version, setVersion] = useState(existing?.version || '');
   const [caption, setCaption] = useState(existing?.caption || '');
   const [highlight, setHighlight] = useState(Boolean(existing?.highlight));
-  const [uploadingImg, setUploadingImg] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (type === 'image' && !url.trim()) {
+      alert('Please upload a local photo, paste from clipboard, or enter an image URL.');
+      return;
+    }
     onSave({
       id: existing?.id || `blk-${Date.now()}`,
       type,
@@ -528,38 +619,12 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
           {type === 'image' && (
             <>
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Upload Photo to UA Box or Paste Image URL *</label>
-                <input
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  required
-                  placeholder="https://alabama.box.com/shared/static/..."
-                  className="w-full p-2 border border-gray-300 rounded-lg mb-2"
-                />
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold cursor-pointer">
-                  <span>{uploadingImg ? 'Uploading photo...' : 'Upload Photo File'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingImg}
-                    onChange={async ev => {
-                      const file = ev.target.files?.[0];
-                      if (!file) return;
-                      setUploadingImg(true);
-                      try {
-                        const res = await uploadImageWithBoxFallback(file, 'Projects');
-                        setUrl(res.url);
-                      } catch (err: any) {
-                        alert(err?.message || 'Image upload failed.');
-                      } finally {
-                        setUploadingImg(false);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
+              <ImageUploadField
+                value={url}
+                onChange={setUrl}
+                category="Projects"
+                label="Project Photo (Upload from Computer, Paste Clipboard, or Paste URL)"
+              />
               <div>
                 <label className="font-bold text-gray-700 block mb-1">Caption</label>
                 <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Figure or field site description..." className="w-full p-2 border border-gray-300 rounded-lg" />
@@ -697,11 +762,10 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
                       key={person.id}
                       type="button"
                       onClick={() => toggleDirectoryPerson(person)}
-                      className={`text-left p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-between gap-2 ${
-                        active
+                      className={`text-left p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-between gap-2 ${active
                           ? 'bg-blue-50 border-blue-400 text-slate-900 font-bold'
                           : 'bg-slate-50 border-gray-200 text-slate-700 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       <div className="min-w-0">
                         <div className="truncate">{person.name}</div>
