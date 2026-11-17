@@ -1740,7 +1740,7 @@ export default function App() {
                             >
                               {siteConfig.homeMission.heading}
                             </h2>
-                            <p className="text-gray-600 text-sm leading-relaxed">
+                            <p className="text-gray-600 text-sm leading-relaxed text-justify">
                               {siteConfig.homeMission.description}
                             </p>
                             <div className="pt-1 flex flex-wrap gap-2.5 text-xs font-bold text-gray-700">
@@ -1910,7 +1910,7 @@ export default function App() {
                                     <h3 className="font-extrabold text-slate-800 text-sm leading-snug group-hover:text-[#9E1B32] transition-colors">
                                       {n.title}
                                     </h3>
-                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line line-clamp-4">
+                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line line-clamp-4 text-justify">
                                       {n.summary}
                                     </p>
                                   </div>
@@ -2027,7 +2027,7 @@ export default function App() {
                                 )}
                               </div>
                               {siteConfig.showSubheadings && (
-                                <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+                                <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed text-justify">
                                   {activeHeroTheme.description}
                                 </p>
                               )}
@@ -2258,7 +2258,7 @@ export default function App() {
                                     <h4 className="font-extrabold text-sm tracking-tight" style={{ color: subheadingAccent }}>
                                       {theme.title}
                                     </h4>
-                                    <p className="text-gray-600 text-xs leading-relaxed mt-1.5 line-clamp-3">{theme.description}</p>
+                                    <p className="text-gray-600 text-xs leading-relaxed mt-1.5 line-clamp-3 text-justify">{theme.description}</p>
                                   </div>
                                 </div>
 
@@ -2395,7 +2395,7 @@ export default function App() {
                                   <h4 className="font-extrabold text-slate-900 text-sm mt-2.5 group-hover:text-[#9E1B32] transition-colors">
                                     {proj.title}
                                   </h4>
-                                  <p className="text-gray-600 text-xs mt-1.5 leading-relaxed line-clamp-3">
+                                  <p className="text-gray-600 text-xs mt-1.5 leading-relaxed line-clamp-3 text-justify">
                                     {proj.summary || proj.details}
                                   </p>
 
@@ -2732,7 +2732,7 @@ export default function App() {
                             </div>
 
                             <h4 className="text-sm font-extrabold text-slate-900 mt-3">{soft.title}</h4>
-                            <p className="text-gray-600 text-xs mt-2 leading-relaxed">{soft.description}</p>
+                            <p className="text-gray-600 text-xs mt-2 leading-relaxed text-justify">{soft.description}</p>
                           </div>
 
                           <div className="border-t border-gray-100 pt-3 mt-4 flex justify-between items-center">
@@ -2824,7 +2824,7 @@ export default function App() {
                                   {data.availability}
                                 </span>
                               </div>
-                              <p className="text-gray-500 text-xs mt-2 leading-relaxed max-w-4xl">{data.description}</p>
+                              <p className="text-gray-500 text-xs mt-2 leading-relaxed max-w-4xl text-justify">{data.description}</p>
                             </div>
 
                             {/* Actions and access buttons */}
@@ -2968,7 +2968,7 @@ export default function App() {
 
                               <div className="p-5 overflow-hidden">
                                 <h4 className="font-extrabold text-[#9E1B32] text-sm tracking-tight leading-snug line-clamp-1">{inst.name}</h4>
-                                <p className="text-gray-500 text-[11px] leading-relaxed mt-2 line-clamp-4">{inst.description}</p>
+                                <p className="text-gray-500 text-[11px] leading-relaxed mt-2 line-clamp-4 text-justify">{inst.description}</p>
 
                                 {/* Dynamic Operating Manual Download Link (Point 1 of outstanding list) */}
                                 {inst.manualLink && (
@@ -3455,7 +3455,7 @@ export default function App() {
                             </div>
 
                             <h4 className="text-sm font-extrabold text-slate-800 mt-3">{material.title}</h4>
-                            <p className="text-gray-500 text-xs mt-2.5 leading-relaxed">{material.description}</p>
+                            <p className="text-gray-500 text-xs mt-2.5 leading-relaxed text-justify">{material.description}</p>
                           </div>
 
                           <div className="border-t border-gray-50 pt-4 mt-6 flex justify-between items-center">
@@ -3636,7 +3636,7 @@ export default function App() {
                                         <img src={imgUrl} alt={b.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                       </div>
                                     )}
-                                    <p className="text-gray-600 text-xs mt-2 leading-relaxed whitespace-pre-wrap">{b.content}</p>
+                                    <p className="text-gray-600 text-xs mt-2 leading-relaxed whitespace-pre-wrap text-justify">{b.content}</p>
                                   </div>
 
                                   <div className="border-t border-gray-100 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-400 font-bold">

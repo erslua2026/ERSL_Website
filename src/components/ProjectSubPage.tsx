@@ -631,7 +631,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                   {activeSubTabObj?.label}
                 </h3>
                 {activeSubTabObj?.description && (
-                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">
                     {activeSubTabObj.description}
                   </p>
                 )}

@@ -190,7 +190,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
           {editActions}
         </div>
         {block.body && (
-          <div className="text-xs md:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+          <div className="text-xs md:text-sm text-slate-700 leading-relaxed whitespace-pre-line text-justify">
             {block.body}
           </div>
         )}
@@ -272,7 +272,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
         <figcaption className="p-3 bg-white border-t border-gray-100 flex items-start justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-800">{block.caption || block.title}</p>
-            {block.body && <p className="text-[11px] text-slate-500 mt-0.5 whitespace-pre-line">{block.body}</p>}
+            {block.body && <p className="text-[11px] text-slate-500 mt-0.5 whitespace-pre-line text-justify">{block.body}</p>}
           </div>
           {editActions}
         </figcaption>
@@ -337,7 +337,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
 
           <h4 className="font-extrabold text-sm text-slate-900">{block.title}</h4>
           {block.body && (
-            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{block.body}</p>
+            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">{block.body}</p>
           )}
         </div>
 

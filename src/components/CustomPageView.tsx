@@ -323,7 +323,7 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                   )}
 
                   {block.body && (
-                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{block.body}</p>
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">{block.body}</p>
                   )}
 
                   {block.type === 'box-folder' && block.url && isBoxUrl(block.url) && (
