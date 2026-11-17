@@ -3,10 +3,14 @@ import {
   BookOpen, FileText, Download, ExternalLink, Sparkles, CheckCircle2, 
   ChevronRight, Compass, Search, Tag, Clock, User, X, Plus, FolderGit2, 
   Paperclip, FileSpreadsheet, FileCode, Archive, Share2, Bookmark, Check,
-  Lightbulb, Layers, Award
+  Lightbulb, Layers, Award, Edit2, Trash2, Save
 } from 'lucide-react';
 import type { User as UserType } from '../types';
+import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { getCloudData, setCloudData } from '../lib/cloudStore';
+import {
+  initialProfSubSections, initialProfLinks, ProfSubSection, ProfResourceLink
+} from '../data/professionalHubData';
 
 export interface GuideAttachment {
   name: string;
@@ -370,8 +374,16 @@ const initialPosts: MentorshipPost[] = [
   }
 ];
 
-export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }> = ({ currentUser }) => {
+export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null } & SubPageHeaderPassProps> = ({
+  currentUser,
+  headerOverride,
+  accentColor = '#9E1B32',
+  showSubheadings = true,
+  canEditHeader = false,
+  onSaveHeader,
+}) => {
   const isAdmin = currentUser?.role === 'Admin';
+  const canEdit = isAdmin || currentUser?.role === 'Researcher';
   const [posts, setPosts] = useState<MentorshipPost[]>(() => {
     const saved = localStorage.getItem('ersl_professional_posts');
     if (saved) {
@@ -383,9 +395,41 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
     return initialPosts;
   });
 
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [subSections, setSubSections] = useState<ProfSubSection[]>(() => {
+    try {
+      const saved = localStorage.getItem('ersl_prof_subsections');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return initialProfSubSections;
+  });
 
-  // Hydrate posts from cloud on mount
+  const [resourceLinks, setResourceLinks] = useState<ProfResourceLink[]>(() => {
+    try {
+      const saved = localStorage.getItem('ersl_prof_links');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return initialProfLinks;
+  });
+
+  const [activeSubSectionId, setActiveSubSectionId] = useState<string>('guides');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeLinkCategory, setActiveLinkCategory] = useState<string>('all');
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState<ProfResourceLink | null>(null);
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkCategory, setLinkCategory] = useState('');
+  const [linkDesc, setLinkDesc] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkBoxUrl, setLinkBoxUrl] = useState('');
+  const [linkTags, setLinkTags] = useState('');
+
+  // Hydrate posts and sub-section hub from cloud on mount
   useEffect(() => {
     getCloudData<MentorshipPost[]>('ersl_professional_posts').then(({ data }) => {
       if (Array.isArray(data) && data.length > 0) {
@@ -393,7 +437,103 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
         try { localStorage.setItem('ersl_professional_posts', JSON.stringify(data)); } catch {}
       }
     });
+    getCloudData<{ subSections?: ProfSubSection[]; links?: ProfResourceLink[] }>('ersl_professional_hub').then(({ data }) => {
+      if (!data) return;
+      if (Array.isArray(data.subSections) && data.subSections.length > 0) {
+        setSubSections(data.subSections);
+        try { localStorage.setItem('ersl_prof_subsections', JSON.stringify(data.subSections)); } catch {}
+      }
+      if (Array.isArray(data.links) && data.links.length > 0) {
+        setResourceLinks(data.links);
+        try { localStorage.setItem('ersl_prof_links', JSON.stringify(data.links)); } catch {}
+      }
+    });
   }, []);
+
+  const syncHubToCloud = (nextSubSections: ProfSubSection[], nextLinks: ProfResourceLink[]) => {
+    try {
+      localStorage.setItem('ersl_prof_subsections', JSON.stringify(nextSubSections));
+      localStorage.setItem('ersl_prof_links', JSON.stringify(nextLinks));
+    } catch {}
+    setCloudData('ersl_professional_hub', { subSections: nextSubSections, links: nextLinks }, {
+      updatedBy: currentUser?.name || 'Lab Member'
+    }).catch(() => {});
+  };
+
+  const handleAddSubSection = () => {
+    const label = prompt('New sub-section tab name (e.g., Datasets, Useful Links, Funding):')?.trim();
+    if (!label) return;
+    const newSub: ProfSubSection = {
+      id: `prof-sub-${Date.now()}`,
+      label,
+      icon: '📌',
+      kind: 'links',
+    };
+    const next = [...subSections, newSub];
+    setSubSections(next);
+    setActiveSubSectionId(newSub.id);
+    setActiveLinkCategory('all');
+    syncHubToCloud(next, resourceLinks);
+  };
+
+  const handleDeleteSubSection = (sub: ProfSubSection) => {
+    if (sub.id === 'guides') return;
+    if (!confirm(`Delete sub-section "${sub.label}"?`)) return;
+    const nextSubs = subSections.filter(s => s.id !== sub.id);
+    const nextLinks = resourceLinks.filter(l => l.subSectionId !== sub.id);
+    setSubSections(nextSubs);
+    setResourceLinks(nextLinks);
+    if (activeSubSectionId === sub.id) setActiveSubSectionId('guides');
+    syncHubToCloud(nextSubs, nextLinks);
+  };
+
+  const openLinkModal = (existing?: ProfResourceLink) => {
+    setEditingLink(existing || null);
+    setLinkTitle(existing?.title || '');
+    setLinkCategory(existing?.category || 'General');
+    setLinkDesc(existing?.description || '');
+    setLinkUrl(existing?.url || '');
+    setLinkBoxUrl(existing?.boxUrl || '');
+    setLinkTags((existing?.tags || []).join(', '));
+    setLinkModalOpen(true);
+  };
+
+  const handleSaveResourceLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkTitle.trim() || (!linkUrl.trim() && !linkBoxUrl.trim())) return;
+    const saved: ProfResourceLink = {
+      id: editingLink?.id || `pl-${Date.now()}`,
+      subSectionId: editingLink?.subSectionId || activeSubSectionId,
+      category: linkCategory.trim() || 'General',
+      title: linkTitle.trim(),
+      description: linkDesc.trim(),
+      url: (linkUrl.trim() || linkBoxUrl.trim()),
+      boxUrl: linkBoxUrl.trim() || undefined,
+      tags: linkTags.split(',').map(t => t.trim()).filter(Boolean),
+    };
+    const nextLinks = editingLink
+      ? resourceLinks.map(l => (l.id === editingLink.id ? saved : l))
+      : [saved, ...resourceLinks];
+    setResourceLinks(nextLinks);
+    syncHubToCloud(subSections, nextLinks);
+    setLinkModalOpen(false);
+    setEditingLink(null);
+  };
+
+  const handleDeleteResourceLink = (id: string) => {
+    if (!confirm('Delete this resource link?')) return;
+    const nextLinks = resourceLinks.filter(l => l.id !== id);
+    setResourceLinks(nextLinks);
+    syncHubToCloud(subSections, nextLinks);
+  };
+
+  const handleDeletePost = (id: string, title: string) => {
+    if (!confirm(`Delete mentorship guide "${title}"?`)) return;
+    const updated = posts.filter(p => p.id !== id);
+    setPosts(updated);
+    try { localStorage.setItem('ersl_professional_posts', JSON.stringify(updated)); } catch {}
+    setCloudData('ersl_professional_posts', updated, { updatedBy: currentUser?.name || 'Admin' }).catch(() => {});
+  };
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPost, setSelectedPost] = useState<MentorshipPost | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -581,84 +721,297 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-[#9E1B32] rounded-2xl p-6 md:p-8 text-white shadow-md relative overflow-hidden">
-        <div className="relative z-10 max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="bg-white/15 text-white border border-white/20 px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1">
-              <span>🔐 RESTRICTED LAB VAULT</span>
-            </span>
-            <span className="bg-emerald-400/20 text-emerald-200 border border-emerald-400/30 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-              MEMBER RESOURCES & WRITING BLOGS
-            </span>
-          </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1">
-            Professional Development & Scientific Writing Hub
-          </h2>
-          <p className="text-xs md:text-sm text-red-100 mt-2 leading-relaxed">
-            In-depth academic blog posts, journal manuscript blueprints, peer-review rebuttal formulas, fellowship grant frameworks, and downloadable templates for ERSL researchers.
-          </p>
+      {/* Crimson Sub-Page Header */}
+      <SubPageHeader
+        tabId="professional"
+        defaults={{
+          badge: 'PROFESSIONAL DEVELOPMENT HUB',
+          title: 'Mentorship Guides, Useful Links & Research Databases',
+          subtitle: 'Manuscript frameworks, peer-review response toolkits, grant templates, and curated ERSL links.',
+        }}
+        override={headerOverride}
+        accentColor={accentColor}
+        showSubtitle={showSubheadings}
+        canEdit={canEditHeader || isAdmin}
+        onSave={onSaveHeader}
+        actions={
+          isAdmin ? (
+            <>
+              {activeSubSectionId === 'guides' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  style={{ color: accentColor }}
+                  className="bg-white hover:bg-red-50 text-xs font-extrabold px-3.5 py-2 rounded-lg shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Post Guide</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openLinkModal()}
+                  style={{ color: accentColor }}
+                  className="bg-white hover:bg-red-50 text-xs font-extrabold px-3.5 py-2 rounded-lg shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Link / Database</span>
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
-          <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-white/15 text-xs text-red-100">
-            <div className="flex items-center space-x-1.5">
-              <BookOpen className="w-4 h-4 text-red-200" />
-              <span><strong>{posts.length}</strong> Complete Mentorship Guides</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <Download className="w-4 h-4 text-red-200" />
-              <span><strong>{posts.reduce((acc, p) => acc + p.attachments.length, 0)}</strong> Downloadable Template Packs</span>
-            </div>
-            {isAdmin && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="bg-white text-[#9E1B32] hover:bg-red-50 text-xs font-extrabold px-3.5 py-1.5 rounded-lg shadow-sm transition-all ml-auto flex items-center space-x-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Post New Guide / Material</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Category Filters */}
-      <div className="space-y-4">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input 
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search guides by title, manuscript sections, or keywords (e.g., LaTeX, Reviewer, FINESST, SWOT, Poster)..."
-            className="w-full text-xs pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#9E1B32] shadow-2xs font-medium"
-          />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+      {/* Sub-Section Tabs Bar */}
+      <div className="bg-white rounded-2xl border border-gray-200 px-5 py-3.5 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          {subSections.map(sub => {
+            const count = sub.id === 'guides'
+              ? posts.length
+              : resourceLinks.filter(l => l.subSectionId === sub.id).length;
+            const active = activeSubSectionId === sub.id;
+            return (
+              <div key={sub.id} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSubSectionId(sub.id);
+                    setActiveLinkCategory('all');
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    active
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border border-gray-200 hover:border-[#9E1B32] hover:text-[#9E1B32]'
+                  }`}
+                >
+                  <span>{sub.icon}</span>
+                  <span>{sub.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>
+                    {count}
+                  </span>
+                </button>
+                {isAdmin && sub.id !== 'guides' && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSubSection(sub)}
+                    title={`Delete sub-section "${sub.label}"`}
+                    className="ml-1 p-1 text-gray-400 hover:text-red-600 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleAddSubSection}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold border border-dashed border-gray-300 text-gray-600 hover:border-[#9E1B32] hover:text-[#9E1B32] cursor-pointer flex items-center gap-1"
             >
-              ✕
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Sub-Section</span>
             </button>
           )}
         </div>
+      </div>
 
-        {/* Category Pill Buttons */}
-        <div className="flex flex-wrap gap-2 pb-1 border-b border-gray-100">
-          {categories.map(cat => (
-            <button
-              key={cat.key}
-              onClick={() => setActiveCategory(cat.key)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeCategory === cat.key
-                  ? 'bg-[#9E1B32] text-white shadow-xs'
-                  : 'bg-white text-slate-700 border border-gray-200 hover:border-[#9E1B32] hover:text-[#9E1B32]'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder={activeSubSectionId === 'guides'
+            ? 'Search guides by title, manuscript sections, or keywords...'
+            : 'Filter links, databases, or tags in this sub-section...'}
+          className="w-full text-xs pl-10 pr-8 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[#9E1B32] shadow-2xs font-medium"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {activeSubSectionId !== 'guides' ? (() => {
+        const subLinks = resourceLinks.filter(l => l.subSectionId === activeSubSectionId);
+        const linkCats = Array.from(new Set(subLinks.map(l => l.category || 'General')));
+        const q = searchQuery.toLowerCase().trim();
+        const visibleLinks = subLinks.filter(l => {
+          const matchesCat = activeLinkCategory === 'all' || (l.category || 'General') === activeLinkCategory;
+          const matchesQ = !q ||
+            l.title.toLowerCase().includes(q) ||
+            l.description.toLowerCase().includes(q) ||
+            l.category.toLowerCase().includes(q) ||
+            (l.tags || []).some(t => t.toLowerCase().includes(q));
+          return matchesCat && matchesQ;
+        });
+
+        // Group visible links by category for category-wise display
+        const grouped: Record<string, ProfResourceLink[]> = {};
+        visibleLinks.forEach(item => {
+          const cat = item.category || 'General';
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(item);
+        });
+
+        return (
+          <div className="space-y-5">
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2 pb-1 border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setActiveLinkCategory('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeLinkCategory === 'all'
+                    ? 'bg-[#9E1B32] text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-gray-200 hover:border-[#9E1B32]'
+                }`}
+              >
+                All Categories ({subLinks.length})
+              </button>
+              {linkCats.map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveLinkCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeLinkCategory === cat
+                      ? 'bg-[#9E1B32] text-white shadow-xs'
+                      : 'bg-white text-slate-700 border border-gray-200 hover:border-[#9E1B32]'
+                  }`}
+                >
+                  {cat} ({subLinks.filter(l => (l.category || 'General') === cat).length})
+                </button>
+              ))}
+            </div>
+
+            {Object.keys(grouped).length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 p-6">
+                <Compass className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-gray-700">No items in this category yet.</p>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => openLinkModal()}
+                    className="mt-3 px-4 py-2 bg-[#9E1B32] text-white text-xs font-bold rounded-lg cursor-pointer"
+                  >
+                    + Add Link / Database
+                  </button>
+                )}
+              </div>
+            ) : (
+              Object.entries(grouped).map(([categoryName, items]) => (
+                <div key={categoryName} className="space-y-3">
+                  <div className="flex items-center justify-between border-l-4 border-[#9E1B32] pl-3">
+                    <h3 className="text-sm font-extrabold uppercase tracking-wider text-[#9E1B32]">
+                      {categoryName}
+                    </h3>
+                    <span className="text-[11px] font-semibold text-gray-400">
+                      {items.length} resource{items.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {items.map(item => (
+                      <div
+                        key={item.id}
+                        className="bg-white rounded-xl border border-gray-200 p-4 shadow-2xs hover:shadow-md hover:border-red-200 transition-all flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <h4 className="font-bold text-sm text-slate-900 leading-snug">{item.title}</h4>
+                            {isAdmin && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openLinkModal(item)}
+                                  className="p-1 text-gray-400 hover:text-blue-600 cursor-pointer"
+                                  title="Edit link"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteResourceLink(item.id)}
+                                  className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"
+                                  title="Delete link"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed mb-3">{item.description}</p>
+                        </div>
+
+                        <div className="space-y-2.5 pt-2 border-t border-gray-100">
+                          {item.tags && item.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.tags.map(t => (
+                                <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                  #{t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {item.url && (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Open Link</span>
+                              </a>
+                            )}
+                            {item.boxUrl && (
+                              <a
+                                href={item.boxUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center justify-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors"
+                              >
+                                <FolderGit2 className="w-3.5 h-3.5" />
+                                <span>UA Box</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })() : (
+      <>
+      {/* Category Pill Buttons */}
+      <div className="flex flex-wrap gap-2 pb-1 border-b border-gray-100">
+        {categories.map(cat => (
+          <button
+            key={cat.key}
+            type="button"
+            onClick={() => setActiveCategory(cat.key)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeCategory === cat.key
+                ? 'bg-[#9E1B32] text-white shadow-xs'
+                : 'bg-white text-slate-700 border border-gray-200 hover:border-[#9E1B32] hover:text-[#9E1B32]'
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
       </div>
 
       {/* Blog Posts Feed */}
@@ -689,6 +1042,15 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                   <span className="text-[11px] text-gray-500 font-medium">
                     {post.date}
                   </span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePost(post.id, post.title)}
+                      className="ml-2 text-[10px] text-red-600 hover:underline font-bold cursor-pointer inline-flex items-center gap-0.5"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center text-[11px] text-gray-500 font-semibold">
                   <User className="w-3.5 h-3.5 mr-1 text-[#9E1B32]" />
@@ -802,6 +1164,8 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
           ))
         )}
       </div>
+      </>
+      )}
 
       {/* FULL-SCREEN EXPANDED ARTICLE READING MODAL */}
       {selectedPost && (
@@ -1111,6 +1475,107 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                   className="px-5 py-2 bg-[#9E1B32] hover:bg-red-800 text-white rounded-lg font-bold cursor-pointer transition-colors shadow-xs"
                 >
                   Publish Mentorship Post
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT LINK & DATABASE MODAL */}
+      {linkModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-gray-100 overflow-hidden text-left">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-sm font-extrabold text-slate-900">
+                {editingLink ? 'Edit Resource / Database Link' : 'Add Resource / Database Link'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setLinkModalOpen(false); setEditingLink(null); }}
+                className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveResourceLink} className="p-5 space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Category *</label>
+                  <input
+                    required
+                    type="text"
+                    value={linkCategory}
+                    onChange={e => setLinkCategory(e.target.value)}
+                    placeholder="e.g., Hydrological Databases, Satellite Portals"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Title *</label>
+                  <input
+                    required
+                    type="text"
+                    value={linkTitle}
+                    onChange={e => setLinkTitle(e.target.value)}
+                    placeholder="e.g., NASA Earthdata Search"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={linkDesc}
+                  onChange={e => setLinkDesc(e.target.value)}
+                  placeholder="Brief note on how ERSL researchers use this resource..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Primary URL *</label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={e => setLinkUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-sky-800 mb-1">UA Box Folder / File Link (Optional)</label>
+                <input
+                  type="url"
+                  value={linkBoxUrl}
+                  onChange={e => setLinkBoxUrl(e.target.value)}
+                  placeholder="https://ua.box.com/s/..."
+                  className="w-full px-3 py-2 border border-sky-200 rounded-lg focus:outline-none focus:border-sky-500"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Tags (comma separated)</label>
+                <input
+                  type="text"
+                  value={linkTags}
+                  onChange={e => setLinkTags(e.target.value)}
+                  placeholder="MODIS, USGS, Python, Datasets"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setLinkModalOpen(false); setEditingLink(null); }}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 font-bold hover:bg-gray-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#9E1B32] text-white rounded-lg font-bold hover:bg-red-800 cursor-pointer"
+                >
+                  Save to Cloud
                 </button>
               </div>
             </form>

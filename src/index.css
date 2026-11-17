@@ -1,1 +1,113 @@
 @import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Smooth Apple-style Scroll-Up Reveal Transitions */
+@media (prefers-reduced-motion: no-preference) {
+  .ersl-scroll-item {
+    opacity: 0;
+    transform: translateY(28px) scale(0.988);
+    transition:
+      opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+    transition-delay: var(--ersl-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .ersl-scroll-item.ersl-in-view {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    will-change: auto;
+  }
+}
+
+/* Apple macOS Crystal / Liquid Glass Theme Layer */
+[data-theme="macos-glass"] {
+  background: #ffffff;
+}
+
+[data-theme="macos-glass"] .macos-glass-nav {
+  background-color: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: blur(28px) saturate(210%);
+  -webkit-backdrop-filter: blur(28px) saturate(210%);
+  border-color: rgba(226, 232, 240, 0.85) !important;
+  box-shadow:
+    0 12px 32px -10px rgba(15, 23, 42, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="macos-glass"] .macos-glass-nav-dark {
+  background-color: rgba(17, 17, 17, 0.78) !important;
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+[data-theme="macos-glass"] main :is(.bg-white, .bg-white\/90, .bg-white\/95, .bg-slate-50\/70) {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(226, 232, 240, 0.85) !important;
+  box-shadow:
+    0 8px 24px -8px rgba(15, 23, 42, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="macos-glass"] main :is(.bg-white, .bg-white\/90, .bg-slate-50\/70) :is(.bg-white, .bg-white\/95, .bg-slate-50\/70, .bg-slate-50) {
+  background-color: rgba(248, 250, 252, 0.78) !important;
+  border-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+[data-theme="macos-glass"] main :is(.bg-white, .bg-slate-50\/70):hover {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+[data-theme="macos-glass"] main :is(input, select, textarea) {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(203, 213, 225, 0.9) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="macos-glass"] footer {
+  background-color: #111111 !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-top: 1px solid #262626 !important;
+}
+
+/* Vertical Rolling Field & Project Photo Filmstrips */
+@keyframes ersl-roll-up {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes ersl-roll-down {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}
+
+.ersl-reel-track-up {
+  animation: ersl-roll-up 42s linear infinite;
+}
+
+.ersl-reel-track-down {
+  animation: ersl-roll-down 46s linear infinite;
+}
+
+.ersl-reel-container:hover .ersl-reel-track-up,
+.ersl-reel-container:hover .ersl-reel-track-down {
+  animation-play-state: paused;
+}
+
+.ersl-reel-mask {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+}

@@ -1,13 +1,23 @@
 import React, { useState } from 'react';
-import { User, LogIn, LogOut, Shield, FolderGit2, Menu, X, ChevronDown, UserCircle, BookOpen, Waves } from 'lucide-react';
+import { Search } from 'lucide-react';
+import {
+  LogIn, LogOut, Shield, FolderGit2, Menu, X, ChevronDown,
+  UserCircle, Sliders, Lock
+} from 'lucide-react';
+import { SiteConfig, TabConfig } from '../types';
+import { filterSiteSearchItems, SiteSearchItem } from '../lib/siteSearch';
 
 interface UAHeaderProps {
   currentUser: { name: string; email: string; role: string; avatarUrl?: string } | null;
+  siteConfig: SiteConfig;
   onLoginClick: () => void;
   onLogout: () => void;
   currentTab: string;
   onTabChange: (tab: string) => void;
   onAdminClick: () => void;
+  onOpenCustomizer?: () => void;
+  searchableItems?: SiteSearchItem[];
+  onNavigateSearch?: (item: SiteSearchItem) => void;
 }
 
 const getCleanInitials = (name?: string): string => {
@@ -23,23 +33,34 @@ const getCleanInitials = (name?: string): string => {
 
 export const UAHeader: React.FC<UAHeaderProps> = ({
   currentUser,
+  siteConfig,
   onLoginClick,
   onLogout,
   currentTab,
   onTabChange,
   onAdminClick,
+  onOpenCustomizer,
+  searchableItems = [],
+  onNavigateSearch,
 }) => {
+  const [siteSearch, setSiteSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
+  const searchMatches = siteSearch.trim().length > 1
+    ? filterSiteSearchItems(searchableItems, siteSearch, 10)
+    : [];
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoSrcIndex, setLogoSrcIndex] = useState(0);
 
-  const cleanBase = (import.meta.env.BASE_URL || './').endsWith('/') 
-    ? (import.meta.env.BASE_URL || './') 
+  const cleanBase = (import.meta.env.BASE_URL || './').endsWith('/')
+    ? (import.meta.env.BASE_URL || './')
     : (import.meta.env.BASE_URL || './') + '/';
 
   const logoCandidates = [
+    ...(siteConfig.logoUrl?.trim() ? [siteConfig.logoUrl.trim()] : []),
+    'https://alabama.box.com/shared/static/bl5k9qrcbymh4xgvlt03u8fdw81j8vlq.jpg',
     `${cleanBase}images/logo/logo.jpg`,
     `${cleanBase}images/logo/logo.png`,
     'images/logo/logo.jpg',
@@ -56,230 +77,470 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
     }
   };
 
-  // Navigation tabs list
-  const tabs = [
-    { id: 'people', label: 'People' },
-    { id: 'research', label: 'Research Areas' },
-    { id: 'publications', label: 'Publications' },
-    { id: 'field', label: 'Field Photos' },
-    ...(currentUser ? [
-      { id: 'professional', label: 'Professional Development' },
-      { id: 'teaching', label: 'Teaching Materials' },
-      { id: 'bulletins', label: 'Lab Bulletins' },
-      { id: 'workplan', label: 'Work Plan' },
-      { id: 'reservoir', label: 'Reservoir Project' }
-    ] : []),
-  ];
+  const isVertical = siteConfig.layoutMode === 'vertical-left' || siteConfig.layoutMode === 'vertical-right';
+  const isCompact = siteConfig.compactMode || siteConfig.layoutMode === 'horizontal-compact';
+  const isAdmin = currentUser?.role === 'Admin';
+
+  const visibleTabs: TabConfig[] = siteConfig.tabs.filter(t => {
+    if (t.visibility === 'hidden') return false;
+    if (t.visibility === 'members' && !currentUser) return false;
+    return true;
+  });
+
+  const primaryColor = siteConfig.primaryColor || '#9E1B32';
+  const headerBg = siteConfig.headerBgColor || '#ffffff';
+  const headerText = siteConfig.headerTextColor || '#0f172a';
+  const isDarkHeader = headerBg.toLowerCase().startsWith('#0') || headerBg.toLowerCase().startsWith('#1') || headerBg.toLowerCase().startsWith('#2') || headerBg.toLowerCase().startsWith('#7') || headerBg.toLowerCase().startsWith('#9');
+
+  const handleSelectSearchMatch = (item: SiteSearchItem) => {
+    onNavigateSearch?.(item);
+    setSiteSearch('');
+    setSearchFocused(false);
+    setMobileMenuOpen(false);
+  };
+
+  const renderSearchBox = (variant: 'horizontal' | 'sidebar' | 'mobile') => {
+    const accent = siteConfig.subheadingColor || primaryColor || '#9E1B32';
+    const isSidebar = variant === 'sidebar';
+    const isMobile = variant === 'mobile';
+    return (
+      <div className="relative">
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            if (searchMatches.length > 0) {
+              handleSelectSearchMatch(searchMatches[0]);
+            }
+          }}
+          className={`flex items-center rounded-lg overflow-hidden border border-gray-300/80 bg-white/95 backdrop-blur-md shadow-2xs ${
+            isSidebar || isMobile ? 'w-full' : ''
+          }`}
+        >
+          <input
+            type="text"
+            value={siteSearch}
+            onChange={e => setSiteSearch(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
+            placeholder={currentUser ? 'Search all pages, news, projects...' : 'Search This Site...'}
+            className={`${isSidebar || isMobile ? 'flex-1 min-w-0' : 'w-48 xl:w-64'} px-3 py-1.5 text-xs text-slate-800 bg-transparent focus:outline-none`}
+          />
+          {siteSearch && (
+            <button
+              type="button"
+              onMouseDown={() => setSiteSearch('')}
+              className="px-1.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            type="submit"
+            style={{ backgroundColor: primaryColor }}
+            className="px-2.5 py-2 text-white hover:opacity-90 cursor-pointer flex items-center justify-center shrink-0"
+            title="Search ERSL"
+          >
+            <Search className="w-3.5 h-3.5" />
+          </button>
+        </form>
+
+        {searchFocused && siteSearch.trim().length > 1 && (
+          <div
+            className={`${
+              isSidebar ? 'left-0 right-0 w-full' : isMobile ? 'left-0 right-0 w-full' : 'right-0 w-96'
+            } absolute mt-1.5 bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50 text-left max-h-80 overflow-y-auto`}
+          >
+            {searchMatches.length === 0 ? (
+              <div className="px-3.5 py-3 text-xs text-slate-500">
+                No matching items for &ldquo;{siteSearch}&rdquo;.
+              </div>
+            ) : (
+              searchMatches.map(match => (
+                <button
+                  key={match.id}
+                  type="button"
+                  onMouseDown={() => handleSelectSearchMatch(match)}
+                  className="w-full text-left px-3.5 py-2.5 hover:bg-red-50/60 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors"
+                >
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider block" style={{ color: accent }}>
+                    {match.tabLabel || match.tab}
+                  </span>
+                  <p className="text-xs font-bold text-slate-900 truncate">{match.title}</p>
+                  <p className="text-[11px] text-slate-500 truncate">{match.subtitle}</p>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderLogo = (sizeClass: string) => (
+    <div
+      className={`relative flex items-center justify-center ${sizeClass} rounded-full p-0.5 shadow-sm shrink-0`}
+      style={{ background: `linear-gradient(135deg, ${primaryColor}, #f59e0b)` }}
+    >
+      <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden p-0.5">
+        {logoFailed ? (
+          <div
+            className="w-full h-full rounded-full text-white flex flex-col items-center justify-center text-[10px] font-black leading-tight"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <span>{siteConfig.labShortName || 'ERSL'}</span>
+          </div>
+        ) : (
+          <img
+            src={logoCandidates[logoSrcIndex]}
+            onError={handleLogoError}
+            alt="ERSL Logo"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover rounded-full"
+            loading="eager"
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  // VERTICAL SIDEBAR RENDER (Desktop lg+) + Slim Mobile Top Bar
+  if (isVertical) {
+    return (
+      <>
+        {/* Mobile Top Bar (< lg) */}
+        <header
+          className={`lg:hidden w-full border-b sticky top-0 z-50 select-none ${
+            siteConfig.themeStyle !== 'classic'
+              ? (isDarkHeader ? 'macos-glass-nav-dark' : 'macos-glass-nav')
+              : 'border-gray-200'
+          }`}
+          style={siteConfig.themeStyle !== 'classic' ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
+        >
+          <div className="px-4 py-2.5 flex items-center justify-between">
+            <button onClick={() => onTabChange('home')} className="flex items-center gap-2.5 text-left cursor-pointer">
+              {renderLogo('w-10 h-10')}
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest block" style={{ color: siteConfig.subheadingColor || primaryColor }}>
+                  UA Geography · {siteConfig.labShortName} Home
+                </span>
+                <span className="text-sm font-black leading-tight block">{siteConfig.labFullName}</span>
+              </div>
+            </button>
+            <div className="flex items-center gap-2">
+              {!currentUser ? (
+                <button
+                  onClick={onLoginClick}
+                  className="text-white text-xs font-bold px-2.5 py-1.5 rounded-lg cursor-pointer"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Login
+                </button>
+              ) : (
+                <div
+                  className="w-7 h-7 rounded-full text-white flex items-center justify-center font-bold text-xs"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {getCleanInitials(currentUser.name || currentUser.email)}
+                </div>
+              )}
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-1.5 rounded-lg cursor-pointer">
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="border-t border-gray-200 bg-white text-slate-800 px-4 py-3 space-y-2 max-h-[75vh] overflow-y-auto">
+              <div className="pb-1">{renderSearchBox('mobile')}</div>
+              {visibleTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => { onTabChange(tab.id); setMobileMenuOpen(false); }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer ${
+                    currentTab === tab.id ? 'text-white' : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                  style={currentTab === tab.id ? { backgroundColor: primaryColor } : undefined}
+                >
+                  <span>{tab.icon || '•'}</span>
+                  <span>{tab.label}</span>
+                  {tab.visibility === 'members' && <Lock className="w-3 h-3 ml-auto opacity-75" />}
+                </button>
+              ))}
+              {isAdmin && onOpenCustomizer && (
+                <button
+                  onClick={() => { onOpenCustomizer(); setMobileMenuOpen(false); }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-2 cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5" /> Customize Site & Layout
+                </button>
+              )}
+              {currentUser && (
+                <button
+                  onClick={() => { onLogout(); setMobileMenuOpen(false); }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" /> Logout
+                </button>
+              )}
+            </div>
+          )}
+        </header>
+
+        {/* Desktop Vertical Sidebar (lg+) */}
+        <aside
+          className={`hidden lg:flex flex-col w-64 shrink-0 border-gray-200 select-none sticky top-0 h-screen overflow-y-auto ${
+            siteConfig.layoutMode === 'vertical-right' ? 'border-l' : 'border-r'
+          } ${
+            siteConfig.themeStyle !== 'classic'
+              ? (isDarkHeader ? 'macos-glass-nav-dark' : 'macos-glass-nav')
+              : ''
+          }`}
+          style={siteConfig.themeStyle !== 'classic' ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
+        >
+          {/* UA Brand Strip + Vertical ERSL Lockup */}
+          <div className="bg-[#1e1e1e]/95 text-gray-200 px-4 py-2 text-[10px] flex items-center justify-between border-b border-white/10">
+            <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="font-bold uppercase tracking-wider hover:text-white">
+              Univ. of Alabama
+            </a>
+            <a href="https://mybama.ua.edu/" target="_blank" rel="noreferrer" className="hover:text-white flex items-center gap-1">
+              <UserCircle className="w-3 h-3" style={{ color: primaryColor }} />
+              <span>myBama</span>
+            </a>
+          </div>
+
+          <button
+            onClick={() => onTabChange('home')}
+            title="Go to ERSL Home"
+            className="p-4 flex items-center gap-3 text-left border-b border-gray-200/30 cursor-pointer group"
+          >
+            {renderLogo('w-14 h-14')}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-xs font-black uppercase tracking-widest px-1.5 py-0.5 rounded text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {siteConfig.labShortName}
+                </span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider truncate" style={{ color: siteConfig.subheadingColor || primaryColor }}>
+                  UA Geography
+                </span>
+              </div>
+              <h1 className="font-black text-xs leading-snug mt-1 line-clamp-2 group-hover:opacity-80">
+                {siteConfig.labFullName}
+              </h1>
+            </div>
+          </button>
+
+          {/* Universal Full-Site Search for Logged-In Members & Admins */}
+          <div className="px-3 pt-3 pb-1 border-b border-gray-200/20">
+            {renderSearchBox('sidebar')}
+          </div>
+
+          {/* Vertical Navigation Tabs */}
+          <nav
+            className={`flex-1 px-3 py-3 flex flex-col gap-1 overflow-y-auto ${
+              siteConfig.tabPosition === 'center'
+                ? 'justify-center'
+                : siteConfig.tabPosition === 'end'
+                  ? 'justify-end'
+                  : 'justify-start'
+            }`}
+          >
+            {visibleTabs.map(tab => {
+              const active = currentTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onTabChange(tab.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-between transition-all cursor-pointer ${
+                    active
+                      ? 'text-white shadow-sm'
+                      : isDarkHeader
+                        ? 'text-slate-200 hover:bg-white/10'
+                        : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                  style={active ? { backgroundColor: primaryColor } : undefined}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="text-sm">{tab.icon || '•'}</span>
+                    <span className="truncate">{tab.label}</span>
+                  </span>
+                  {tab.visibility === 'members' && (
+                    <Lock className={`w-3 h-3 shrink-0 ${active ? 'text-white/80' : 'text-amber-500'}`} />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Bottom User / Admin / Customizer Controls */}
+          <div className="p-3 border-t border-gray-200/20 space-y-2">
+            {isAdmin && onOpenCustomizer && (
+              <button
+                onClick={onOpenCustomizer}
+                className="w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-gray-300/40 hover:bg-black/5 cursor-pointer transition-colors"
+              >
+                <Sliders className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                <span>Customize Site & Tabs</span>
+              </button>
+            )}
+
+            {currentUser ? (
+              <div className="space-y-1.5 bg-black/5 rounded-xl p-2.5">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-7 h-7 rounded-full text-white flex items-center justify-center font-bold text-xs shrink-0"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {getCleanInitials(currentUser.name || currentUser.email)}
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-xs font-bold truncate">{currentUser.name || currentUser.email}</p>
+                    <p className="text-[10px] opacity-70 capitalize">{currentUser.role}</p>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 pt-1">
+                  {isAdmin && (
+                    <button
+                      onClick={onAdminClick}
+                      className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-white text-slate-800 border border-gray-200 hover:bg-slate-50 cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <Shield className="w-3 h-3" style={{ color: primaryColor }} /> Admin
+                    </button>
+                  )}
+                  <button
+                    onClick={onLogout}
+                    className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <LogOut className="w-3 h-3" /> Logout
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onLoginClick}
+                className="w-full text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Member Login</span>
+              </button>
+            )}
+          </div>
+        </aside>
+      </>
+    );
+  }
+
+  // HORIZONTAL TOP BAR RENDER (UA Official SDML-inspired 2-Tier + Apple Glass)
+  const crimsonAccent = siteConfig.subheadingColor || primaryColor || '#9E1B32';
+  const isGlass = siteConfig.themeStyle !== 'classic';
 
   return (
     <header className="w-full select-none z-50">
-      {/* University of Alabama Brand Bar */}
-      <section className="bg-[#222222] text-[#e0e0e0] py-2 px-4 md:px-8 text-xs border-b border-[#333333]">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex flex-col">
-            <a 
-              href="https://www.ua.edu/" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="uppercase tracking-widest font-semibold hover:text-white transition-colors"
+      {/* Row 0: Classic Dark Institutional UA Top Strip */}
+      <section className="bg-[#1a1a1a]/95 backdrop-blur-md text-[#e5e7eb] py-1.5 px-4 md:px-8 border-b border-white/10">
+        <div className="max-w-7xl mx-auto flex justify-between items-center gap-4 text-[11px]">
+          <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="leading-tight hover:text-white transition-colors">
+            <span className="block font-bold tracking-wider uppercase text-[10px] md:text-[11px] text-white">
+              THE UNIVERSITY OF ALABAMA<span className="text-[9px] align-top">®</span>
+            </span>
+            <span className="block text-[10px] italic text-gray-300 font-serif">
+              Barefield College of Arts &amp; Sciences
+            </span>
+          </a>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://geography.ua.edu/"
+              target="_blank"
+              rel="noreferrer"
+              className="hidden sm:inline-flex items-center gap-1.5 text-gray-300 hover:text-white font-medium transition-colors"
             >
-              The University of Alabama
+              <span>🌐</span>
+              <span>Department of Geography and the Environment</span>
             </a>
-            <a 
-              href="https://catalog.ua.edu/undergraduate/arts-sciences/" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="text-xs font-serif italic text-gray-400 hover:text-white transition-colors"
+            <a
+              href="https://mybama.ua.edu/"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center text-gray-200 hover:text-white font-semibold transition-colors"
             >
-              Barefield College of Arts & Sciences
-            </a>
-          </div>
-          <div className="hidden md:flex items-center space-x-6">
-            <a 
-              href="https://catalog.ua.edu/undergraduate/arts-sciences/geography-and-the-environment/" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="flex items-center hover:text-white transition-colors"
-            >
-              <span className="mr-1">🌍</span> Department of Geography and the Environment
-            </a>
-            <a 
-              href="https://mybama.ua.edu/" 
-              target="_blank" 
-              rel="noreferrer" 
-              className="flex items-center hover:text-white transition-colors font-medium"
-            >
-              <UserCircle className="w-3.5 h-3.5 mr-1 text-[#9E1B32]" /> myBama Portal
+              <UserCircle className="w-3.5 h-3.5 mr-1" style={{ color: crimsonAccent }} /> myBama Portal
             </a>
           </div>
         </div>
       </section>
 
-      {/* Main Navigation Bar */}
-      <nav className="bg-white border-b border-gray-100 shadow-sm sticky top-0 bg-opacity-95 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex justify-between items-center">
-          {/* Creative Medallion Logo & Lab Lockup */}
-          <button 
-            onClick={() => onTabChange('home')} 
-            className="flex items-center space-x-3.5 text-left focus:outline-none cursor-pointer group py-0.5"
+      {/* Sticky Two-Tier Brand + Navigation Bar */}
+      <nav
+        className={`border-b shadow-xs sticky top-0 transition-all ${
+          isGlass
+            ? (isDarkHeader ? 'macos-glass-nav-dark' : 'macos-glass-nav')
+            : 'border-gray-200'
+        }`}
+        style={isGlass ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
+      >
+        {/* Row 1: Text Brand Lockup (clicks Home, no logo icon here) + Site Search + Member Login */}
+        <div className={`max-w-7xl mx-auto px-4 md:px-8 ${isCompact ? 'py-2' : 'py-2.5'} flex flex-wrap justify-between items-center gap-4`}>
+          <button
+            onClick={() => onTabChange('home')}
+            title="Go to ERSL Home"
+            className="text-left cursor-pointer group shrink-0 transition-opacity hover:opacity-85"
           >
-            {/* Medallion crest with animated aura glow */}
-            <div className="relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-tr from-[#9E1B32] via-red-600 to-amber-500 p-0.5 shadow-md shadow-red-950/15 group-hover:scale-105 group-hover:shadow-lg group-hover:ring-2 group-hover:ring-[#9E1B32]/30 transition-all shrink-0">
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden p-0.5">
-                {logoFailed ? (
-                  <div className="w-full h-full rounded-full bg-gradient-to-br from-[#9E1B32] to-[#7A1527] text-white flex flex-col items-center justify-center text-xs font-black tracking-tighter leading-tight shadow-sm">
-                    <span>ERSL</span>
-                    <span className="text-[8px] text-red-200 font-bold uppercase tracking-widest">UA</span>
-                  </div>
-                ) : (
-                  <img
-                    src={logoCandidates[logoSrcIndex]}
-                    onError={handleLogoError}
-                    alt="Environmental Remote Sensing Laboratory (ERSL) Logo"
-                    className="w-full h-full object-cover rounded-full filter contrast-105"
-                    loading="eager"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Typography lockup */}
-            <div className="flex flex-col justify-center">
-              <div className="flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-[#9E1B32]">
-                  The University of Alabama · ERSL
-                </span>
-              </div>
-              <h1 className={`font-black text-base sm:text-lg md:text-2xl tracking-tight transition-colors group-hover:text-[#9E1B32] ${currentTab === 'home' ? 'text-[#9E1B32]' : 'text-slate-900'}`}>
-                Environmental Remote Sensing Laboratory
-              </h1>
-              <span className="text-[10px] md:text-[11px] font-medium text-slate-500 tracking-wide hidden sm:inline-block">
-                Department of Geography & the Environment · Earth Observation & GeoAI
-              </span>
-            </div>
+            <h1 className="font-black text-xl md:text-[26px] tracking-tight leading-tight" style={{ color: primaryColor }}>
+              {siteConfig.labFullName}
+            </h1>
+            <p className="text-xs md:text-[13px] font-semibold text-slate-600 leading-tight mt-0.5">
+              {siteConfig.departmentName || 'Department of Geography & the Environment'}
+            </p>
           </button>
 
-          {/* Desktop Navigation Links */}
-          <div className="hidden lg:flex items-center space-x-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  onTabChange(tab.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`px-3 py-2 text-sm font-semibold rounded-md transition-all ${
-                  currentTab === tab.id
-                    ? 'text-[#9E1B32] border-b-2 border-[#9E1B32] rounded-b-none bg-red-50/30'
-                    : 'text-gray-700 hover:text-[#9E1B32] hover:bg-gray-50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Desktop Right: Site Search + Auth + Customizer */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
+            {renderSearchBox('horizontal')}
 
-            {/* Authenticated Cloud Box Workspace Link */}
-            {currentUser && (
+            {isAdmin && onOpenCustomizer && (
               <button
-                onClick={() => onTabChange('box')}
-                className={`px-3 py-2 text-sm font-semibold rounded-md transition-all flex items-center space-x-1.5 ${
-                  currentTab === 'box'
-                    ? 'text-blue-600 border-b-2 border-blue-600 rounded-b-none bg-blue-50/30'
-                    : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50/50'
-                }`}
+                onClick={onOpenCustomizer}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-gray-300/60 hover:bg-black/5 flex items-center gap-1 cursor-pointer"
+                title="Customize layout, colors & tabs"
               >
-                <FolderGit2 className="w-4 h-4 text-blue-500" />
-                <span>Box Workspace</span>
+                <Sliders className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                <span>Customize</span>
               </button>
             )}
-          </div>
 
-          {/* User Auth Buttons / Profile Panel */}
-          <div className="hidden lg:flex items-center space-x-4 border-l pl-4 border-gray-100">
             {currentUser ? (
               <div className="relative">
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center space-x-2 focus:outline-none py-1.5 px-3 rounded-full hover:bg-gray-50 border border-gray-200 transition-all cursor-pointer"
+                  className="flex items-center space-x-2 py-1 px-2.5 rounded-full border border-gray-200 bg-white text-slate-800 cursor-pointer"
                 >
-                  <div className="w-7 h-7 rounded-full bg-[#9E1B32] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                  <div className="w-6 h-6 rounded-full text-white flex items-center justify-center font-bold text-[10px]" style={{ backgroundColor: primaryColor }}>
                     {getCleanInitials(currentUser.name || currentUser.email)}
                   </div>
-                  <div className="text-left leading-none">
-                    <p className="text-xs font-bold text-gray-800">{currentUser.name || currentUser.email || 'Member'}</p>
-                    <p className="text-[10px] font-medium text-gray-400 capitalize">{(currentUser.role || 'Member').toLowerCase()}</p>
-                  </div>
+                  <span className="text-xs font-bold">{currentUser.name || 'Member'}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
                 </button>
 
                 {profileDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
-                    <div className="px-4 py-2 border-b border-gray-50">
-                      <p className="text-xs font-semibold text-gray-400">Signed in as</p>
-                      <p className="text-sm font-bold text-gray-800 truncate">{currentUser.email || 'Logged In'}</p>
-                      <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-[#9E1B32] border border-red-100">
-                        🛡️ {currentUser.role || 'Member'} Account
-                      </div>
+                  <div className="absolute right-0 mt-2 w-56 bg-white text-slate-800 rounded-xl shadow-xl border border-gray-100 py-1.5 z-50">
+                    <div className="px-3.5 py-2 border-b border-gray-100">
+                      <p className="text-xs font-bold truncate">{currentUser.email}</p>
+                      <span className="text-[10px] font-bold uppercase" style={{ color: primaryColor }}>{currentUser.role}</span>
                     </div>
-
-                    <button
-                      onClick={() => {
-                        onTabChange('box');
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-blue-50/50 hover:text-blue-600 transition-colors flex items-center space-x-2"
-                    >
-                      <FolderGit2 className="w-4 h-4 text-blue-500" />
-                      <span>Box Cloud Workspace</span>
+                    <button onClick={() => { onTabChange('box'); setProfileDropdownOpen(false); }} className="w-full text-left px-3.5 py-2 text-xs font-semibold hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+                      <FolderGit2 className="w-3.5 h-3.5 text-blue-600" /> Box Workspace
                     </button>
-
-                    <button
-                      onClick={() => {
-                        onTabChange('professional');
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-red-50/50 hover:text-[#9E1B32] transition-colors flex items-center space-x-2"
-                    >
-                      <BookOpen className="w-4 h-4 text-[#9E1B32]" />
-                      <span>Professional Development Vault</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        onTabChange('reservoir');
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-cyan-50/50 hover:text-cyan-700 transition-colors flex items-center space-x-2"
-                    >
-                      <Waves className="w-4 h-4 text-cyan-600" />
-                      <span>Reservoir Project</span>
-                    </button>
-
-                    {currentUser.role === 'Admin' && (
-                      <button
-                        onClick={() => {
-                          onAdminClick();
-                          setProfileDropdownOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-red-50/50 hover:text-[#9E1B32] transition-colors flex items-center space-x-2"
-                      >
-                        <Shield className="w-4 h-4 text-[#9E1B32]" />
-                        <span>Admin Settings Dashboard</span>
+                    {isAdmin && (
+                      <button onClick={() => { onAdminClick(); setProfileDropdownOpen(false); }} className="w-full text-left px-3.5 py-2 text-xs font-semibold hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+                        <Shield className="w-3.5 h-3.5" style={{ color: primaryColor }} /> Admin Dashboard
                       </button>
                     )}
-
-                    <div className="border-t border-gray-100 my-1"></div>
-
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setProfileDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50/30 transition-colors flex items-center space-x-2"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Logout</span>
+                    <button onClick={() => { onLogout(); setProfileDropdownOpen(false); }} className="w-full text-left px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer">
+                      <LogOut className="w-3.5 h-3.5" /> Logout
                     </button>
                   </div>
                 )}
@@ -287,7 +548,8 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
             ) : (
               <button
                 onClick={onLoginClick}
-                className="flex items-center space-x-2 bg-[#9E1B32] hover:bg-red-800 text-white text-sm font-bold py-2 px-4 rounded-md transition-all shadow-sm shadow-red-100 cursor-pointer"
+                className="flex items-center space-x-1.5 text-white text-[13px] xl:text-sm font-bold py-2 px-4 rounded-xl cursor-pointer shadow-xs whitespace-nowrap"
+                style={{ backgroundColor: primaryColor }}
               >
                 <LogIn className="w-4 h-4" />
                 <span>Member Login</span>
@@ -295,103 +557,71 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
             )}
           </div>
 
-          {/* Mobile Menu Buttons */}
-          <div className="flex lg:hidden items-center space-x-4">
-            {currentUser && (
-              <div className="w-8 h-8 rounded-full bg-[#9E1B32] text-white flex items-center justify-center font-bold text-xs">
-                {getCleanInitials(currentUser.name || currentUser.email)}
-              </div>
+          {/* Mobile Burger */}
+          <div className="flex lg:hidden items-center gap-2">
+            {!currentUser && (
+              <button onClick={onLoginClick} className="text-white text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: primaryColor }}>
+                Login
+              </button>
             )}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="text-gray-600 p-1 hover:text-[#9E1B32] focus:outline-none"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-1.5 cursor-pointer">
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Navigation Dropdown */}
+        {/* Row 2: Dedicated Left-Aligned Navigation Strip matching Brand start alignment */}
+        <div className={`hidden lg:block border-t ${isGlass ? 'border-white/50 bg-white/10' : 'border-gray-200/70 bg-white/40'}`}>
+          <div className="max-w-7xl mx-auto px-4 md:px-8">
+            <div className="flex items-center justify-start gap-2 -ml-3.5">
+              {visibleTabs.map(tab => {
+                const active = currentTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                    className={`px-3.5 py-2 text-sm font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border-b-2 ${
+                      active
+                        ? 'bg-slate-200/75 text-[#9E1B32]'
+                        : isDarkHeader
+                          ? 'border-transparent text-slate-200 hover:bg-white/10'
+                          : 'border-transparent text-slate-700 hover:text-[#9E1B32] hover:bg-white/75'
+                    }`}
+                    style={active ? { borderBottomColor: primaryColor, color: primaryColor } : undefined}
+                  >
+                    <span>{tab.label}</span>
+                    {tab.visibility === 'members' && <Lock className="w-3 h-3 opacity-75" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-100 bg-white py-4 px-6 space-y-2 shadow-inner">
-            {tabs.map((tab) => (
+          <div className="lg:hidden border-t border-gray-200 bg-white text-slate-800 py-3 px-4 space-y-2 max-h-[75vh] overflow-y-auto">
+            <div className="pb-1">{renderSearchBox('mobile')}</div>
+            {visibleTabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => {
-                  onTabChange(tab.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full text-left py-2.5 px-3 text-sm font-semibold rounded-md flex items-center ${
-                  currentTab === tab.id
-                    ? 'text-[#9E1B32] bg-red-50'
-                    : 'text-gray-700 hover:bg-gray-50'
+                onClick={() => { onTabChange(tab.id); setMobileMenuOpen(false); }}
+                className={`w-full text-left py-2 px-3 text-xs font-bold rounded-lg flex items-center justify-between cursor-pointer ${
+                  currentTab === tab.id ? 'text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
+                style={currentTab === tab.id ? { backgroundColor: primaryColor } : undefined}
               >
-                {tab.label}
+                <span>{tab.icon} {tab.label}</span>
+                {tab.visibility === 'members' && <Lock className="w-3 h-3" />}
               </button>
             ))}
-
-            {currentUser && (
-              <button
-                onClick={() => {
-                  onTabChange('box');
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full text-left py-2.5 px-3 text-sm font-semibold rounded-md flex items-center space-x-2 ${
-                  currentTab === 'box'
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-blue-500 hover:bg-blue-50/50'
-                }`}
-              >
-                <FolderGit2 className="w-4 h-4" />
-                <span>Box Collaborative space</span>
+            {isAdmin && onOpenCustomizer && (
+              <button onClick={() => { onOpenCustomizer(); setMobileMenuOpen(false); }} className="w-full text-left py-2 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer">
+                ⚙️ Customize Site
               </button>
             )}
-
-            <div className="border-t border-gray-100 my-3"></div>
-
-            {currentUser ? (
-              <div className="space-y-1">
-                <div className="px-3 py-1.5">
-                  <p className="text-xs font-bold text-gray-800">{currentUser.name || currentUser.email || 'Member'}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{currentUser.email || ''}</p>
-                  <p className="text-[10px] font-bold text-[#9E1B32] uppercase mt-1">Role: {currentUser.role || 'Member'}</p>
-                </div>
-
-                {currentUser.role === 'Admin' && (
-                  <button
-                    onClick={() => {
-                      onAdminClick();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full text-left py-2 px-3 text-sm font-semibold text-gray-700 rounded-md hover:bg-gray-50 flex items-center space-x-2"
-                  >
-                    <Shield className="w-4 h-4 text-[#9E1B32]" />
-                    <span>Admin Settings Dashboard</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => {
-                    onLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left py-2 px-3 text-sm font-semibold text-red-600 rounded-md hover:bg-red-50 flex items-center space-x-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  onLoginClick();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full bg-[#9E1B32] hover:bg-red-800 text-white text-center font-bold py-2 px-4 rounded-md flex items-center justify-center space-x-2 shadow-sm"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Member Login</span>
+            {currentUser && (
+              <button onClick={() => { onLogout(); setMobileMenuOpen(false); }} className="w-full text-left py-2 px-3 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg cursor-pointer">
+                Logout
               </button>
             )}
           </div>

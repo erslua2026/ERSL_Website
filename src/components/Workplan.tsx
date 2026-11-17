@@ -9,6 +9,7 @@ import { supabase, Profile } from '../lib/supabase';
 import { getCloudData, setCloudData } from '../lib/cloudStore';
 import { initialPeople } from '../data/initialData';
 import type { User } from '../types';
+import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 
 type Status = 'not_started' | 'in_progress' | 'completed' | 'discuss_with_liu';
 
@@ -124,7 +125,14 @@ const getFileCategory = (att: CommentAttachment): {
   return { isImage, isPdf, isBox, badge, badgeColor };
 };
 
-export const Workplan: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> = ({
+  currentUser,
+  headerOverride,
+  accentColor = '#9E1B32',
+  showSubheadings = true,
+  canEditHeader = false,
+  onSaveHeader,
+}) => {
   const isAdmin = currentUser?.role === 'Admin';
   const [tasks, setTasks] = useState<Task[]>([]);
   const [people, setPeople] = useState<Profile[]>([]);
@@ -553,18 +561,23 @@ export const Workplan: React.FC<{ currentUser: User }> = ({ currentUser }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300 text-left select-none">
       {/* Top Banner */}
-      <div className="bg-[#9E1B32] rounded-2xl p-6 md:p-8 text-white shadow-md">
-        <span className="bg-white/10 px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest">PRIVATE · LAB WORKSPACE</span>
-        <h2 className="text-2xl md:text-3xl font-extrabold mt-2 tracking-tight">Work Plan & Progress Calendar</h2>
-        <p className="text-xs md:text-sm text-red-100 mt-1 max-w-xl">
-          {isAdmin 
+      <SubPageHeader
+        tabId="workplan"
+        defaults={{
+          badge: 'PRIVATE · LAB WORKSPACE',
+          title: 'Work Plan & Progress Calendar',
+          subtitle: isAdmin
             ? "Dr. Liu / Admin View: Monitor lab-wide milestones, review each researcher's progress metrics, assign tasks, and share figures/documents."
-            : `Personal Workspace: Track your research milestones, view feedback from Dr. Liu, and attach papers, plots, and datasets.`
-          }
-        </p>
-
+            : 'Personal Workspace: Track your research milestones, view feedback from Dr. Liu, and attach papers, plots, and datasets.',
+        }}
+        override={headerOverride}
+        accentColor={accentColor}
+        showSubtitle={showSubheadings}
+        canEdit={canEditHeader || isAdmin}
+        onSave={onSaveHeader}
+      >
         {/* View Switcher: List vs Calendar */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="bg-black/20 p-1 rounded-xl inline-flex items-center space-x-1">
             <button
               type="button"
@@ -591,7 +604,7 @@ export const Workplan: React.FC<{ currentUser: User }> = ({ currentUser }) => {
           {/* Admin Owner Filter */}
           {isAdmin && (
             <div className="bg-white/10 backdrop-blur-xs px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs">
-              <span className="text-red-200 font-semibold">Filter Member:</span>
+              <span className="text-red-100 font-semibold">Filter Member:</span>
               <select
                 value={filterOwner}
                 onChange={e => setFilterOwner(e.target.value)}
@@ -605,7 +618,7 @@ export const Workplan: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             </div>
           )}
         </div>
-      </div>
+      </SubPageHeader>
 
       {/* ADMIN ONLY: Clear Executive Summary of Each Team Member's Progress */}
       {isAdmin && memberStats.length > 0 && (

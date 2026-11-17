@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Edit, Plus, Info, Sparkles, Search, Loader2, Check } from 'lucide-react';
-import { Publication, DataLayer, ResearchTheme, Instrument, Person } from '../types';
+import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint } from '../types';
+import { isBoxSharePageNotDirectFile } from '../lib/boxUtils';
+import { BoxImageCategory, uploadImageWithBoxFallback } from '../lib/boxSync';
+import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
+import { BoxUploadButton } from './BoxUploadButton';
 
 interface EditModalProps {
-  type: 'publication' | 'data-layer' | 'research-theme' | 'instrument' | 'person' | 'software' | 'teaching';
+  type: 'publication' | 'data-layer' | 'research-theme' | 'project' | 'instrument' | 'person' | 'software' | 'teaching';
   item: any; // null if adding new
+  themes?: ResearchTheme[];
+  defaultPersonGroup?: 'member' | 'collaborator' | 'former';
+  initialPersonGroupOverride?: 'member' | 'collaborator' | 'former';
   onSave: (savedItem: any) => void;
   onClose: () => void;
 }
@@ -12,6 +19,9 @@ interface EditModalProps {
 export const EditModal: React.FC<EditModalProps> = ({
   type,
   item,
+  themes = [],
+  defaultPersonGroup = 'member',
+  initialPersonGroupOverride,
   onSave,
   onClose,
 }) => {
@@ -73,10 +83,10 @@ export const EditModal: React.FC<EditModalProps> = ({
         .replace(/[+]/g, ' ')
         .trim() || doiQuery;
 
-      const openAlexUrl = cleanDoi 
+      const openAlexUrl = cleanDoi
         ? `https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}`
         : `https://api.openalex.org/works?search=${encodeURIComponent(cleanSearch)}&per_page=1`;
-      
+
       try {
         const oaRes = await fetch(openAlexUrl);
         if (oaRes.ok) {
@@ -108,7 +118,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             return;
           }
         }
-      } catch {}
+      } catch { }
 
       // Fallback 2: Query CrossRef bibliographic search
       try {
@@ -142,7 +152,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             return;
           }
         }
-      } catch {}
+      } catch { }
 
       setDoiFetchMsg({ type: 'error', text: '⚠️ Could not automatically resolve publication metadata. You can enter the title, authors, and venue manually below.' });
     } catch (err: any) {
@@ -154,7 +164,28 @@ export const EditModal: React.FC<EditModalProps> = ({
 
   useEffect(() => {
     if (item) {
-      setFormData({ ...item });
+      if (type === 'person') {
+        const nextGroup = initialPersonGroupOverride || item.group || 'member';
+        const todayYmd = getLocalTodayYmd();
+        const existingStints: FormerStint[] =
+          Array.isArray(item.formerStints) && item.formerStints.length > 0
+            ? item.formerStints
+            : nextGroup === 'former'
+              ? [{ role: item.role || 'MS', years: item.formerYears || '', topic: item.formerTopic || item.researchFocus || '' }]
+              : [];
+        setFormData({
+          ...item,
+          group: nextGroup,
+          // If converting back from Former -> Team, clear a past graduation date so auto-graduation won't immediately re-trigger
+          expectedGraduationDate:
+            nextGroup === 'member' && item.expectedGraduationDate && item.expectedGraduationDate <= todayYmd
+              ? ''
+              : item.expectedGraduationDate,
+          formerStints: existingStints,
+        });
+      } else {
+        setFormData({ ...item });
+      }
     } else {
       // Default blank values for adding new items
       if (type === 'publication') {
@@ -197,7 +228,12 @@ export const EditModal: React.FC<EditModalProps> = ({
           scholar: '',
           linkedin: '',
           image: '',
-          group: 'member'
+          group: defaultPersonGroup,
+          currentAffiliation: '',
+          formerStints:
+            defaultPersonGroup === 'former'
+              ? [{ role: 'MS', years: String(new Date().getFullYear()), topic: '' }]
+              : [],
         });
       } else if (type === 'software') {
         setFormData({
@@ -214,39 +250,121 @@ export const EditModal: React.FC<EditModalProps> = ({
           link: '',
           updatedAt: new Date().toISOString().slice(0, 10)
         });
+      } else if (type === 'project') {
+        setFormData({
+          title: '',
+          sponsor: '',
+          status: 'Active',
+          period: '',
+          summary: '',
+          image: '',
+          themeIds: themes.length > 0 ? [themes[0].id] : [],
+          subPage: {
+            tabVisibility: { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
+            objectives: [],
+            resources: [],
+            events: [],
+            datasets: []
+          }
+        });
       }
     }
-  }, [item, type]);
+  }, [item, type, themes]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Image size exceeds 2MB limit. Please upload a smaller compressed image.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev: any) => ({ ...prev, image: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    const categoryMap: Record<string, BoxImageCategory> = {
+      person: 'People',
+      'research-theme': 'Research',
+      instrument: 'Instruments',
+      project: 'Research',
+    };
+    try {
+      const result = await uploadImageWithBoxFallback(file, categoryMap[type] || 'General');
+      setFormData((prev: any) => ({ ...prev, image: result.url }));
+    } catch (err: any) {
+      alert(err?.message || 'Image upload failed.');
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // For research theme, convert keywords string to array
     if (type === 'research-theme' && typeof formData.keywords === 'string') {
       formData.keywords = formData.keywords
         .split(',')
         .map((k: string) => k.trim())
         .filter((k: string) => k !== '');
+    }
+
+    if (type === 'project') {
+      const selectedThemes: string[] = Array.isArray(formData.themeIds) ? formData.themeIds : [];
+      if (themes.length > 0 && selectedThemes.length === 0) {
+        alert('Please connect this project to at least one Research Theme.');
+        return;
+      }
+    }
+
+    if (type === 'person' && formData.group === 'former') {
+      const cleanStints: FormerStint[] = (Array.isArray(formData.formerStints) ? formData.formerStints : [])
+        .map((s: FormerStint) => ({
+          role: (s.role || '').trim(),
+          years: (s.years || '').trim(),
+          topic: (s.topic || '').trim() || undefined,
+        }))
+        .filter((s: FormerStint) => s.role || s.years || s.topic);
+
+      const primary = cleanStints[0];
+      const nextPerson: Person = {
+        ...formData,
+        id: formData.id || `${type}-${Date.now()}`,
+        group: 'former',
+        formerStints: cleanStints,
+        role: primary?.role || formData.role || 'Former Member',
+        formerYears: primary?.years || formData.formerYears || undefined,
+        formerTopic: primary?.topic || formData.formerTopic || undefined,
+        currentAffiliation: (formData.currentAffiliation || '').trim() || undefined,
+        researchFocus:
+          cleanStints
+            .map(s => s.topic)
+            .filter(Boolean)
+            .join('; ') ||
+          formData.researchFocus ||
+          '',
+        bio: formData.bio || '',
+      };
+      onSave(nextPerson);
+      return;
+    }
+
+    if (type === 'person' && formData.group !== 'former') {
+      const candidate: Person = {
+        ...formData,
+        id: formData.id || `${type}-${Date.now()}`,
+        group: formData.group || 'member',
+        expectedGraduationDate: (formData.expectedGraduationDate || '').trim() || undefined,
+        graduationDegree: (formData.graduationDegree || '').trim() || undefined,
+        thesisTopic: (formData.thesisTopic || '').trim() || undefined,
+        currentAffiliation: (formData.currentAffiliation || '').trim() || undefined,
+      };
+      const todayYmd = getLocalTodayYmd();
+      if (
+        candidate.group === 'member' &&
+        candidate.expectedGraduationDate &&
+        todayYmd >= candidate.expectedGraduationDate
+      ) {
+        onSave(graduatePersonToFormer(candidate, candidate.expectedGraduationDate));
+        return;
+      }
+      onSave(candidate);
+      return;
     }
 
     onSave({
@@ -262,6 +380,7 @@ export const EditModal: React.FC<EditModalProps> = ({
       case 'publication': return `${action} Publication`;
       case 'data-layer': return `${action} Data Layer`;
       case 'research-theme': return `${action} Research Theme`;
+      case 'project': return `${action} Research Project`;
       case 'instrument': return `${action} Research Instrument`;
       case 'person': return `${action} Team Member Profile`;
       case 'software': return `${action} Software Tool / Model`;
@@ -273,14 +392,14 @@ export const EditModal: React.FC<EditModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
-        
+
         {/* Modal Header */}
         <div className="bg-[#9E1B32] text-white p-4 flex justify-between items-center">
           <h3 className="text-sm font-bold flex items-center space-x-1.5">
             <Edit className="w-4 h-4" />
             <span>{getTitle()}</span>
           </h3>
-          <button 
+          <button
             onClick={onClose}
             className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded transition-colors"
           >
@@ -290,7 +409,7 @@ export const EditModal: React.FC<EditModalProps> = ({
 
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto bg-slate-50 text-xs">
-          
+
           {/* Publication Form Fields */}
           {type === 'publication' && (
             <>
@@ -321,11 +440,10 @@ export const EditModal: React.FC<EditModalProps> = ({
                   </button>
                 </div>
                 {doiFetchMsg && (
-                  <p className={`text-[11px] font-semibold ${
-                    doiFetchMsg.type === 'success' ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded' :
+                  <p className={`text-[11px] font-semibold ${doiFetchMsg.type === 'success' ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded' :
                     doiFetchMsg.type === 'error' ? 'text-red-700 bg-red-100/60 border border-red-200 p-2 rounded' :
-                    'text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded'
-                  }`}>
+                      'text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded'
+                    }`}>
                     {doiFetchMsg.text}
                   </p>
                 )}
@@ -397,7 +515,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">DOI or URL Link (Optional)</label>
+                <label className="block font-bold text-gray-700">DOI, URL Link, or Uploaded PDF (Optional)</label>
                 <input
                   type="url"
                   name="link"
@@ -405,6 +523,12 @@ export const EditModal: React.FC<EditModalProps> = ({
                   value={formData.link || ''}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="publications"
+                  label="Upload Paper PDF / Document to Box"
+                  accept=".pdf,.doc,.docx,.txt,.zip"
+                  onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
             </>
@@ -453,14 +577,19 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Access Link (Optional)</label>
+                <label className="block font-bold text-gray-700">Access Link or Upload Dataset File (Optional)</label>
                 <input
                   type="url"
                   name="link"
-                  placeholder="e.g., https://dataverse.harvard.edu/..."
+                  placeholder="e.g., https://dataverse.harvard.edu/... or UA Box link"
                   value={formData.link || ''}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="datasets"
+                  label="Upload Dataset / File to UA Box"
+                  onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
             </>
@@ -500,8 +629,8 @@ export const EditModal: React.FC<EditModalProps> = ({
                   name="keywords"
                   placeholder="e.g., Remote Sensing, Hydrology, Deep Learning"
                   value={
-                    Array.isArray(formData.keywords) 
-                      ? formData.keywords.join(', ') 
+                    Array.isArray(formData.keywords)
+                      ? formData.keywords.join(', ')
                       : formData.keywords || ''
                   }
                   onChange={handleChange}
@@ -515,10 +644,10 @@ export const EditModal: React.FC<EditModalProps> = ({
                 <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
                   {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
                     <div className="flex items-center space-x-4 w-full">
-                      <img 
-                        src={formData.image} 
-                        alt="Preview" 
-                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0" 
+                      <img
+                        src={formData.image}
+                        alt="Preview"
+                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0"
                       />
                       <div className="flex-1 text-left">
                         <p className="text-xs font-bold text-gray-700 truncate">Theme Photo Selected</p>
@@ -528,7 +657,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setFormData((prev: any) => ({ ...prev, image: '' }))}
-                          className="text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline"
+                          className="relative z-20 text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline"
                         >
                           Clear Photo Selection
                         </button>
@@ -551,15 +680,20 @@ export const EditModal: React.FC<EditModalProps> = ({
                   />
                 </div>
 
-                <div className="pt-1">
+                <div className="pt-1 space-y-1.5">
                   <input
                     type="text"
                     name="image"
-                    placeholder="Or paste custom image URL instead..."
+                    placeholder="Or paste UA Box Direct Link (https://alabama.box.com/shared/static/...) or image URL..."
                     value={(formData.image && !formData.image.startsWith('data:')) ? formData.image : ''}
                     onChange={handleChange}
                     className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
                   />
+                  {isBoxSharePageNotDirectFile(formData.image) && (
+                    <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 leading-snug">
+                      This is a Box <code>/s/</code> share webpage link, not a direct image file URL. In UA Box, open <strong>Share → Link Settings</strong> and copy the <strong>Direct Link</strong> (<code>https://alabama.box.com/shared/static/...</code>).
+                    </p>
+                  )}
                 </div>
               </div>
             </>
@@ -622,10 +756,10 @@ export const EditModal: React.FC<EditModalProps> = ({
                 <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
                   {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
                     <div className="flex items-center space-x-4 w-full">
-                      <img 
-                        src={formData.image} 
-                        alt="Preview" 
-                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0" 
+                      <img
+                        src={formData.image}
+                        alt="Preview"
+                        className="w-16 h-16 rounded object-cover border border-gray-200 shadow-xs shrink-0"
                       />
                       <div className="flex-1 text-left">
                         <p className="text-xs font-bold text-gray-700 truncate">Equipment Photo Selected</p>
@@ -672,12 +806,12 @@ export const EditModal: React.FC<EditModalProps> = ({
             </>
           )}
 
-          {/* Team Member / Person Form Fields */}
+          {/* Team Member / Person / Former Member Form Fields */}
           {type === 'person' && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block font-bold text-gray-700">Full Name</label>
+                  <label className="block font-bold text-gray-700">Full Name *</label>
                   <input
                     type="text"
                     name="name"
@@ -688,59 +822,287 @@ export const EditModal: React.FC<EditModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block font-bold text-gray-700">Academic Role</label>
-                  <input
-                    type="text"
-                    name="role"
-                    placeholder="e.g., Assistant Professor"
-                    value={formData.role || ''}
-                    onChange={handleChange}
+                  <label className="block font-bold text-gray-700">Listed Under</label>
+                  <select
+                    name="group"
+                    value={formData.group || 'member'}
+                    onChange={e => {
+                      const nextGroup = e.target.value;
+                      setFormData((prev: any) => {
+                        const needsStint =
+                          nextGroup === 'former' &&
+                          (!Array.isArray(prev.formerStints) || prev.formerStints.length === 0);
+                        return {
+                          ...prev,
+                          group: nextGroup,
+                          formerStints: needsStint
+                            ? [
+                              {
+                                role: prev.role || 'MS',
+                                years: prev.formerYears || '',
+                                topic: prev.formerTopic || prev.researchFocus || '',
+                              },
+                            ]
+                            : prev.formerStints,
+                        };
+                      });
+                    }}
                     className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                    required
-                  />
+                  >
+                    <option value="member">Team (Lab Member)</option>
+                    <option value="collaborator">Collaborator</option>
+                    <option value="former">Former Member / Alumni</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Listed Under</label>
-                <select
-                  name="group"
-                  value={formData.group || 'member'}
-                  onChange={handleChange}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                >
-                  <option value="member">People (Lab Member)</option>
-                  <option value="collaborator">Collaborator</option>
-                </select>
-              </div>
+              {formData.group === 'former' ? (
+                <>
+                  <div className="space-y-2.5 bg-slate-50 border border-gray-200 rounded-xl p-3.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="font-extrabold text-slate-800 text-xs">
+                        Role(s), Years &amp; Topic Worked at ERSL
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            formerStints: [
+                              ...(Array.isArray(prev.formerStints) ? prev.formerStints : []),
+                              { role: 'MS', years: '', topic: '' },
+                            ],
+                          }))
+                        }
+                        className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white cursor-pointer flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" /> Add Role / Degree
+                      </button>
+                    </div>
+
+                    <datalist id="ersl-former-role-suggestions">
+                      <option value="MS" />
+                      <option value="Ph.D." />
+                      <option value="Research Scientist" />
+                      <option value="Postdoctoral Researcher" />
+                      <option value="Research Assistant" />
+                      <option value="Visiting Scholar" />
+                      <option value="Undergraduate Researcher" />
+                    </datalist>
+
+                    {(Array.isArray(formData.formerStints) && formData.formerStints.length > 0
+                      ? formData.formerStints
+                      : [{ role: 'MS', years: '', topic: '' }]
+                    ).map((stint: FormerStint, idx: number) => (
+                      <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                            ERSL Entry #{idx + 1}
+                          </span>
+                          {(formData.formerStints?.length || 0) > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  formerStints: prev.formerStints.filter((_: any, i: number) => i !== idx),
+                                }))
+                              }
+                              className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                              Role / Degree at ERSL *
+                            </label>
+                            <input
+                              type="text"
+                              list="ersl-former-role-suggestions"
+                              placeholder="e.g., MS, Ph.D., Research Scientist"
+                              value={stint.role || ''}
+                              required
+                              onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => {
+                                  const next = [...(prev.formerStints || [])];
+                                  next[idx] = { ...next[idx], role: val };
+                                  return { ...prev, formerStints: next };
+                                });
+                              }}
+                              className="w-full p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                              Years / Completion Year *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., 2025 or 2025-2026"
+                              value={stint.years || ''}
+                              required
+                              onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => {
+                                  const next = [...(prev.formerStints || [])];
+                                  next[idx] = { ...next[idx], years: val };
+                                  return { ...prev, formerStints: next };
+                                });
+                              }}
+                              className="w-full p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            Research Topic / Thesis Title (Optional)
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="e.g., Enhancement of Low-Fidelity Flood Inundation Mapping Through Surrogate Modeling"
+                            value={stint.topic || ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setFormData((prev: any) => {
+                                const next = [...(prev.formerStints || [])];
+                                next[idx] = { ...next[idx], topic: val };
+                                return { ...prev, formerStints: next };
+                              });
+                            }}
+                            className="w-full p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-bold text-gray-700">Current Affiliation / Position (Optional)</label>
+                    <input
+                      type="text"
+                      name="currentAffiliation"
+                      placeholder="e.g., Research Physical Scientist at NOAA OWP / Assistant Professor at ..."
+                      value={formData.currentAffiliation || ''}
+                      onChange={handleChange}
+                      className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <label className="block font-bold text-gray-700">Academic Role *</label>
+                    <input
+                      type="text"
+                      name="role"
+                      placeholder="e.g., Assistant Professor"
+                      value={formData.role || ''}
+                      onChange={handleChange}
+                      className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-bold text-gray-700">Research Focus Areas *</label>
+                    <input
+                      type="text"
+                      name="researchFocus"
+                      placeholder="e.g., UAV mapping, satellite SAR hydrology"
+                      value={formData.researchFocus || ''}
+                      onChange={handleChange}
+                      className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-bold text-gray-700">Biography / Research Background *</label>
+                    <textarea
+                      name="bio"
+                      value={formData.bio || ''}
+                      onChange={handleChange}
+                      rows={4}
+                      className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                      required
+                    />
+                  </div>
+
+                  {(formData.group || 'member') === 'member' && (
+                    <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-2.5">
+                      <div>
+                        <span className="font-extrabold text-xs text-slate-900 block">
+                          Auto-Move to Former Members Upon Graduation (Optional)
+                        </span>
+                        <span className="text-[11px] text-slate-600 leading-snug block mt-0.5">
+                          Set a graduation/completion date below and this member will automatically move to <strong>Former Members</strong> on that date with their degree, research topic, and current affiliation.
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                            Graduation / Transition Date
+                          </label>
+                          <input
+                            type="date"
+                            name="expectedGraduationDate"
+                            value={formData.expectedGraduationDate || ''}
+                            onChange={handleChange}
+                            className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                            Degree / Role to Record
+                          </label>
+                          <input
+                            type="text"
+                            name="graduationDegree"
+                            list="ersl-former-role-suggestions"
+                            placeholder={inferAlumniRoleFromRoleText(formData.role) || 'e.g., MS, Ph.D., Research Scientist'}
+                            value={formData.graduationDegree || ''}
+                            onChange={handleChange}
+                            className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                          Thesis / Research Topic on Graduation (defaults to Research Focus if blank)
+                        </label>
+                        <input
+                          type="text"
+                          name="thesisTopic"
+                          placeholder="e.g., Satellite and Deep Learning Estimation of River Suspended Sediment"
+                          value={formData.thesisTopic || ''}
+                          onChange={handleChange}
+                          className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                          Next / Current Affiliation (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          name="currentAffiliation"
+                          placeholder="e.g., Postdoctoral Fellow at ... / NOAA OWP"
+                          value={formData.currentAffiliation || ''}
+                          onChange={handleChange}
+                          className="w-full p-2 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#9E1B32]"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Research Focus Areas</label>
-                <input
-                  type="text"
-                  name="researchFocus"
-                  placeholder="e.g., UAV mapping, satellite SAR hydrology"
-                  value={formData.researchFocus || ''}
-                  onChange={handleChange}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Biography / Research Background</label>
-                <textarea
-                  name="bio"
-                  value={formData.bio || ''}
-                  onChange={handleChange}
-                  rows={4}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">University Email</label>
+                <label className="block font-bold text-gray-700">Email Address (Optional)</label>
                 <input
                   type="email"
                   name="email"
@@ -748,7 +1110,6 @@ export const EditModal: React.FC<EditModalProps> = ({
                   value={formData.email || ''}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                  required
                 />
               </div>
 
@@ -780,10 +1141,10 @@ export const EditModal: React.FC<EditModalProps> = ({
                 <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center space-y-3 relative group hover:border-[#9E1B32] transition-colors">
                   {formData.image && (formData.image.startsWith('data:') || formData.image.startsWith('http') || formData.image.includes('.')) ? (
                     <div className="flex items-center space-x-4 w-full">
-                      <img 
-                        src={formData.image} 
-                        alt="Preview" 
-                        className="w-16 h-16 rounded-full object-cover border border-gray-200 shadow-xs shrink-0" 
+                      <img
+                        src={formData.image}
+                        alt="Preview"
+                        className="w-16 h-16 rounded-full object-cover border border-gray-200 shadow-xs shrink-0"
                       />
                       <div className="flex-1 text-left">
                         <p className="text-xs font-bold text-gray-700 truncate">Portrait Photo Selected</p>
@@ -793,7 +1154,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setFormData((prev: any) => ({ ...prev, image: '' }))}
-                          className="text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline"
+                          className="relative z-20 text-red-600 hover:text-red-800 text-[10px] font-bold uppercase mt-1 tracking-wider block hover:underline cursor-pointer"
                         >
                           Clear Portrait Selection
                         </button>
@@ -874,7 +1235,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">GitHub Repository / Sandbox Link</label>
+                <label className="block font-bold text-gray-700">GitHub Repository, Sandbox Link, or Package Upload</label>
                 <input
                   type="url"
                   name="link"
@@ -882,6 +1243,11 @@ export const EditModal: React.FC<EditModalProps> = ({
                   value={formData.link || ''}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="software"
+                  label="Upload Code / Guide File to UA Box"
+                  onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
             </>
@@ -929,7 +1295,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Download Link / Box Resource URL</label>
+                <label className="block font-bold text-gray-700">Download Link, UA Box URL, or Upload Course File</label>
                 <input
                   type="url"
                   name="link"
@@ -938,6 +1304,127 @@ export const EditModal: React.FC<EditModalProps> = ({
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
+                <BoxUploadButton
+                  destination="teaching"
+                  label="Upload Syllabus / Manual to UA Box"
+                  onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Research Project Form Fields */}
+          {type === 'project' && (
+            <>
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Project Title *</label>
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="e.g., GeoAI High-Resolution Flood Inundation Mapping"
+                  value={formData.title || ''}
+                  onChange={handleChange}
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Sponsor / Agency *</label>
+                  <input
+                    type="text"
+                    name="sponsor"
+                    placeholder="NOAA / NASA / NSF"
+                    value={formData.sponsor || ''}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Status</label>
+                  <select
+                    name="status"
+                    value={formData.status || 'Active'}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Period</label>
+                  <input
+                    type="text"
+                    name="period"
+                    placeholder="2024 - 2027"
+                    value={formData.period || ''}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  />
+                </div>
+              </div>
+
+              {themes.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-gray-700">
+                    Connected Research Themes * <span className="text-[10px] font-normal text-gray-500">(select at least one)</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-slate-50 p-2.5 rounded-lg border border-gray-200">
+                    {themes.map(t => {
+                      const currentIds: string[] = Array.isArray(formData.themeIds) ? formData.themeIds : [];
+                      const checked = currentIds.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex items-center gap-2 text-[11px] font-semibold p-1.5 rounded border cursor-pointer transition-colors ${checked ? 'bg-red-50 border-[#9E1B32] text-[#9E1B32]' : 'bg-white border-gray-200 text-gray-700'
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? currentIds.filter(id => id !== t.id)
+                                : [...currentIds, t.id];
+                              setFormData((prev: any) => ({ ...prev, themeIds: next }));
+                            }}
+                          />
+                          <span className="truncate">{t.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Project Summary *</label>
+                <textarea
+                  name="summary"
+                  rows={3}
+                  value={formData.summary || ''}
+                  onChange={handleChange}
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Banner Photo URL (or UA Box Direct Link)</label>
+                <input
+                  type="url"
+                  name="image"
+                  placeholder="https://ua.box.com/shared/static/..."
+                  value={formData.image || ''}
+                  onChange={handleChange}
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                />
+                <p className="text-[10px] text-gray-500">
+                  Tip: Click a project card after saving to edit its sub-webpage (Overview, Useful Resources, Events, Datasets & Public/Members visibility).
+                </p>
               </div>
             </>
           )}

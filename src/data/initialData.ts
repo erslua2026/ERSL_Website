@@ -3,31 +3,38 @@ import { ResearchTheme, Project, Publication, Software, DataLayer, Instrument, P
 export const initialThemes: ResearchTheme[] = [
   {
     id: "water-quality",
-    title: "Water Quality Monitoring of Rivers and Lakes",
-    description: "Our research focuses on monitoring and assessing inland surface water quality and ecological status using multi-spectral remote sensing. By analyzing optical properties and spectral signatures, we track vital indicators such as chlorophyll-a, turbidity, and suspended sediment concentrations. This work is critical for addressing toxic algal blooms, evaluating trophic states, and supporting cost-effective, timely monitoring of aquatic ecosystems facing environmental, climatic, and anthropogenic pressures.",
-    image: "images/research/water-quality.jpg",
-    keywords: ["Optical Remote Sensing", "Eutrophication", "Algal Blooms", "Suspended Sediment"]
+    title: "Water Quality Remote Sensing",
+    description: "Monitoring and assessing inland, coastal, and estuarine water quality using multi-spectral and hyperspectral remote sensing to quantify chlorophyll-a, turbidity, suspended sediment, salinity, and harmful algal blooms.",
+    image: "https://alabama.box.com/shared/static/ys8ovh6ya40h0ut2fl6br3i9b671dn01.png",
+    keywords: ["Water Quality", "Chlorophyll-a", "Turbidity", "Suspended Sediment", "Sentinel-2", "Sentinel-3 OLCI"]
+  },
+  {
+    id: "flood-mapping",
+    title: "Flood Mapping",
+    description: "Integrating Synthetic Aperture Radar (SAR), optical imagery, high-resolution DEMs, and hydrologically guided deep learning models for rapid reach-scale flood inundation extent and water depth estimation.",
+    image: "https://alabama.box.com/shared/static/q4sdyxc0fcn1ohc5k8ycqi5nvpfrmy0m.jpg",
+    keywords: ["Flood", "Inundation", "SAR", "Flood Depth", "Sentinel-1"]
+  },
+  {
+    id: "geoai",
+    title: "GeoAI",
+    description: "Developing spatially transferable Machine Learning, Deep Learning, and foundation vision models (such as SAM2) on cloud platforms to automate feature extraction, super-resolution, and hydrologic prediction.",
+    image: "",
+    keywords: ["GeoAI", "Machine Learning", "Deep Learning", "SAM2", "Ensemble"]
   },
   {
     id: "river-morphology",
-    title: "River Morphological Analysis",
-    description: "We utilize multi-sensor remote sensing data, including Synthetic Aperture Radar (SAR), LiDAR, and high-resolution UAV mapping, to investigate complex river dynamics. Our methodologies allow for the automated extraction of river channel boundaries, reach segmentation, and the tracking of bank erosion and depositional patterns over time. This research provides essential insights into fluvial geomorphology, flood forecasting, and the impacts of manmade structures on river systems.",
-    image: "river-morphology.png",
-    keywords: ["Fluvial Geomorphology", "SAR & LiDAR", "Channel Delineation", "UAV Mapping"]
+    title: "River Morphology",
+    description: "Combining UAV LiDAR, airborne bathymetry, ADCP acoustic surveys, and multi-sensor satellite data to extract river channel centerlines, cross-sectional widths, bankfull discharge, and fluvial erosion dynamics.",
+    image: "",
+    keywords: ["River", "Morphology", "Bathymetry", "Channel", "LiDAR", "UAV"]
   },
   {
-    id: "lake-morphology",
-    title: "Lake Morphology Analysis",
-    description: "Lakes and reservoirs are highly sensitive to climatic shifts and human water demands. Our lab models the spatial and temporal dynamics of lake systems by mapping shoreline fluctuations, estimating bathymetry, and tracking volumetric changes. By combining satellite earth observation with physical hydrology models, we evaluate the resilience of these water bodies to drought and analyze long-term shifts in surface water availability.",
-    image: "lake-morphology.jpg",
-    keywords: ["Bathymetry", "Shoreline Dynamics", "Volumetric Modeling", "Surface Water Tracking"]
-  },
-  {
-    id: "geospatial-ai",
-    title: "Artificial Intelligence for River and Lake Systems",
-    description: "To handle the massive volume of modern Earth Observation data, we integrate advanced Machine Learning and Geospatial Artificial Intelligence (GeoAI) into our analytical pipelines. Our lab develops spatially transferable algorithms to automate the detection of water bodies, classify riparian land cover, and predict water quality parameters. By bridging cloud-based computing with AI, we achieve rapid, large-scale environmental analysis.",
-    image: "ai-aquatic-sensing.jpg",
-    keywords: ["Machine Learning", "Geospatial AI", "Automated Extraction", "Predictive Modeling"]
+    id: "water-quantity",
+    title: "Water Quantity Remote Sensing",
+    description: "Quantifying reservoir storage, lake water levels, river discharge, and snowmelt runoff by fusing NASA SWOT wide-swath altimetry, radar altimetry missions, and optical water-surface extent time series.",
+    image: "",
+    keywords: ["SWOT", "Altimetry", "Reservoir", "Water Level", "Storage", "Discharge", "Snow"]
   }
 ];
 
@@ -37,70 +44,218 @@ export const initialProjects: Project[] = [
     agency: "Water Research Foundation (WRF)",
     title: "Satellite and drone remote sensing models and tools for water quality monitoring and ecological assessment of freshwater resources",
     details: "PI: Hongxing Liu, co-PI: Yuehan Lu",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quality", "geoai"],
+    subPage: {
+      summary: "Developing integrated satellite and UAV multispectral/hyperspectral remote sensing algorithms and operational tools for freshwater ecological health and water quality assessment.",
+      objectives: [
+        "Calibrate bio-optical and machine-learning models for chlorophyll-a, turbidity, and DOM across freshwater systems.",
+        "Bridge UAV high-resolution surveys with Sentinel-2/Landsat satellite archives."
+      ],
+      piInfo: "PI: Dr. Hongxing Liu | Co-PI: Dr. Yuehan Lu",
+      timeline: "Active Research Grant",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [
+        { id: "r-p1-1", title: "WRF Project Documentation & Protocols", description: "Field sampling SOPs and spectral calibration guide.", boxUrl: "https://ua.box.com", category: "Box Document" }
+      ],
+      events: [
+        { id: "e-p1-1", title: "Freshwater Spectral Calibration Workshop", description: "Annual stakeholder & team progress review.", date: "2026-09-10", location: "Tuscaloosa, AL" }
+      ],
+      datasets: [
+        { id: "d-p1-1", title: "WRF UAV & In-Situ Water Quality Matchups", description: "Synchronized YSI sonde and Sentera 6X matchups stored in UA Box.", boxUrl: "https://ua.box.com", availability: "Members Only" }
+      ]
+    }
   },
   {
     id: "proj-2",
     agency: "NASA",
     title: "Water Quality and Storage Monitoring Services for the Great Lakes Region of Eastern and Southern Africa by Integrating Multi-sensor Satellite Observations, Machine-learning Models and Cloud Computing Platform",
     details: "NASA SERVIR program (PI: Hongxing Liu)",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quality", "water-quantity", "geoai"],
+    subPage: {
+      summary: "Delivering cloud-based water quality and volumetric storage monitoring services for the Great Lakes Region of Eastern and Southern Africa under NASA SERVIR.",
+      objectives: [
+        "Deploy transferable GeoAI water quality retrieval pipelines on Google Earth Engine.",
+        "Track multi-decadal lake water level and storage variations using multi-mission altimetry."
+      ],
+      piInfo: "PI: Dr. Hongxing Liu (NASA SERVIR Program)",
+      timeline: "Active NASA SERVIR Project",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "public" },
+      resources: [
+        { id: "r-p2-1", title: "NASA SERVIR Monitoring Portal Guide", description: "Cloud workflow documentation and GEE repository.", url: "https://servirglobal.net/", category: "Portal" }
+      ],
+      events: [],
+      datasets: [
+        { id: "d-p2-1", title: "African Great Lakes Optical & Altimetry Archive", description: "Box-linked regional chlorophyll-a and surface water storage records.", boxUrl: "https://ua.box.com", availability: "Public" }
+      ]
+    }
   },
   {
     id: "proj-3",
     agency: "NASA",
     title: "River Flow Velocity, Discharge, and Channel Morphologic Data Acquisition and SWOT-enabled Sedimentation Investigation",
     details: "NASA SWOT program (PI: Hongxing Liu, co-PI: Sagy Cohen)",
-    link: "#"
+    link: "#",
+    themeIds: ["river-morphology", "water-quantity"],
+    subPage: {
+      summary: "Coordinated field ADCP velocity/discharge acquisition and SWOT-enabled river morphology and sedimentation modeling.",
+      objectives: [
+        "Acquire in-situ ADCP river discharge and bathymetric transects synchronized with NASA SWOT passes.",
+        "Quantify reach-scale channel morphology and suspended sediment flux."
+      ],
+      piInfo: "PI: Dr. Hongxing Liu | Co-PI: Dr. Sagy Cohen",
+      timeline: "NASA SWOT Science Team",
+      tabVisibility: { overview: "public", resources: "public", events: "members", datasets: "members" },
+      resources: [],
+      events: [
+        { id: "e-p3-1", title: "Black Warrior River SWOT Pass Calibration", description: "Synchronized ADCP + RS5 + UAV LiDAR campaign.", date: "2026-07-14", location: "Black Warrior River Basin" }
+      ],
+      datasets: [
+        { id: "d-p3-1", title: "SWOT Pass ADCP & Bathymetry Field Logs", description: "Raw and processed SonTek M9 ADCP transects in UA Box.", boxUrl: "https://ua.box.com", availability: "Members Only" }
+      ]
+    }
   },
   {
     id: "proj-4",
     agency: "CIROH",
     title: "Advancing Water Quality Monitoring and Prediction Capability of USGS NGWOS Program with Satellite and Drone Remote Sensing Technologies",
     details: "USGS (PI: Hongxing Liu, co-PIs: Sagy Cohen, Yuehan Lu)",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quality", "geoai"],
+    subPage: {
+      summary: "Enhancing USGS Next Generation Water Observing System (NGWOS) water quality monitoring and prediction through multi-scale satellite, drone, and GeoAI modeling.",
+      objectives: [
+        "Integrate USGS in-situ NGWOS sensor streams with satellite reflectance and UAV flights.",
+        "Build transferable deep learning predictors for riverine turbidity and nutrients."
+      ],
+      piInfo: "PI: Dr. Hongxing Liu | Co-PIs: Dr. Sagy Cohen, Dr. Yuehan Lu",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   },
   {
     id: "proj-5",
     agency: "CIROH",
     title: "Channel roughness, morphology, bankfull discharge, and hydraulic modeling",
     details: "CIROH NOAA (PI: Sagy Cohen, co-PI: Hongxing Liu)",
-    link: "#"
+    link: "#",
+    themeIds: ["river-morphology", "water-quantity"],
+    subPage: {
+      summary: "Characterizing river channel roughness, cross-sectional morphology, and bankfull discharge parameters to improve continental hydraulic modeling.",
+      objectives: [
+        "Derive reach-scale hydraulic geometry from LiDAR, SAR, and optical DEM fusion."
+      ],
+      piInfo: "PI: Dr. Sagy Cohen | Co-PI: Dr. Hongxing Liu",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   },
   {
     id: "proj-6",
     agency: "CIROH",
     title: "ML-based Flexible Flood Inundation Mapping and Intercomparison Framework",
     details: "NOAA (PI: Sagy Cohen, co-PI: Hongxing Liu and others)",
-    link: "#"
+    link: "#",
+    themeIds: ["flood-mapping", "geoai"],
+    subPage: {
+      summary: "Building a machine-learning-based flexible flood inundation extent and water depth mapping and benchmarking framework across NOAA CIROH testbeds.",
+      objectives: [
+        "Develop super-resolution SAR + optical flood boundary detection models.",
+        "Benchmark ML flood inundation and depth products (RS-FloodXDepth) against hydrodynamic models."
+      ],
+      piInfo: "PI: Dr. Sagy Cohen | Co-PI: Dr. Hongxing Liu",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "public" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   },
   {
     id: "proj-7",
     agency: "CIROH",
     title: "Novel Geospatial Architecture of Channel Morphological and Hydraulic Attributes within the OWP Hydrofabrics",
     details: "NOAA (PI: Belize Lane, co-PI: Sagy Cohen, Hongxing Liu and others)",
-    link: "#"
+    link: "#",
+    themeIds: ["river-morphology"],
+    subPage: {
+      summary: "Designing a geospatial attribute architecture linking river morphology and hydraulic geometry directly into the NOAA Office of Water Prediction (OWP) Hydrofabric.",
+      objectives: [
+        "Standardize channel cross-section, slope, and hydraulic attributes across CONUS hydrofabrics."
+      ],
+      piInfo: "PI: Dr. Belize Lane | Co-PIs: Dr. Sagy Cohen, Dr. Hongxing Liu",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   },
   {
     id: "proj-8",
     agency: "CIROH",
     title: "Near-Real-Time Monitoring of Key Reservoir Variables by Integrating Wide-Swath SWOT Altimetry and Deep Learning Techniques",
     details: "CIROH",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quantity", "geoai"],
+    subPage: {
+      summary: "Near-real-time reservoir water surface area, elevation, and storage monitoring across CONUS reservoirs using SWOT altimetry, SAR/optical segmentation, and deep learning.",
+      objectives: [
+        "Automate multi-sensor reservoir boundary segmentation using SAM2/SAM2-HQ and SAR super-resolution.",
+        "Fuse SWOT water surface elevation with optical/SAR area time series for continuous reservoir storage."
+      ],
+      piInfo: "ERSL Reservoir Remote Sensing Team (CIROH)",
+      tabVisibility: { overview: "public", resources: "public", events: "members", datasets: "members" },
+      resources: [
+        { id: "r-p8-1", title: "Reservoir Workflow SOP & SAM2 Pipeline", description: "Internal processing checklist and QA/QC verification steps.", boxUrl: "https://ua.box.com", category: "Box SOP" }
+      ],
+      events: [],
+      datasets: [
+        { id: "d-p8-1", title: "CONUS Reservoir Water Mask & SWOT Time Series", description: "Processed Sentinel-1/2/Landsat reservoir shapefiles in UA Box.", boxUrl: "https://ua.box.com", availability: "Members Only" }
+      ]
+    }
   },
   {
     id: "proj-9",
     agency: "CIROH",
     title: "Develop a Generic Georeferenced Reservoir Representation for Large-Scale Hydrologic Models",
     details: "PI: Ximing Cai",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quantity"],
+    subPage: {
+      summary: "Developing a generic georeferenced reservoir representation module to improve operational large-scale hydrologic routing and storage simulations.",
+      objectives: [
+        "Provide satellite-derived area-elevation-storage curves for continental hydrologic modeling."
+      ],
+      piInfo: "PI: Dr. Ximing Cai (ERSL Collaborator)",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   },
   {
     id: "proj-10",
     agency: "CIROH",
     title: "Modeling River Sediment Concentration and Load in the NextGEN framework: Integrating Spaceborne Remote Sensing Technologies and Deep-learning Techniques",
     details: "CIROH",
-    link: "#"
+    link: "#",
+    themeIds: ["water-quality", "geoai", "river-morphology"],
+    subPage: {
+      summary: "Integrating spaceborne multi-spectral remote sensing and deep learning models into NOAA NextGEN to estimate river suspended sediment concentration and flux.",
+      objectives: [
+        "Train deep learning sediment concentration estimators across diverse US river basins.",
+        "Couple satellite-derived sediment concentrations with NextGEN streamflow for load modeling."
+      ],
+      piInfo: "ERSL Sediment & GeoAI Group (CIROH)",
+      tabVisibility: { overview: "public", resources: "public", events: "public", datasets: "members" },
+      resources: [],
+      events: [],
+      datasets: []
+    }
   }
 ];
 

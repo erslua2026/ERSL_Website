@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { syncSectionToBox } from './boxSync';
 
 /**
  * Universal Cloud Storage Layer for ERSL Portal
@@ -40,6 +41,12 @@ export async function getCloudData<T = any>(key: string): Promise<{ data: T | nu
   return { data: null };
 }
 
+let lastCloudError: string | null = null;
+
+export function getLastCloudError(): string | null {
+  return lastCloudError;
+}
+
 /**
  * Save a shared document to Supabase.
  * Returns boolean indicating whether the cloud save succeeded.
@@ -49,24 +56,36 @@ export async function setCloudData<T = any>(
   payload: T,
   options?: { activeRound?: number | null; updatedBy?: string }
 ): Promise<boolean> {
-  if (!supabase) return false;
+  if (!supabase) {
+    lastCloudError = 'Supabase client is not configured.';
+    return false;
+  }
   try {
-    const { error } = await supabase
-      .from('reservoir_matrix')
-      .upsert({
-        id: key,
-        rounds: payload,
-        active_round: options?.activeRound ?? 3,
-        updated_at: new Date().toISOString(),
-        updated_by: options?.updatedBy || 'Lab User'
-      });
+    const [{ error }] = await Promise.all([
+      supabase
+        .from('reservoir_matrix')
+        .upsert(
+          {
+            id: key,
+            rounds: payload,
+            active_round: options?.activeRound ?? 3,
+            updated_at: new Date().toISOString(),
+            updated_by: options?.updatedBy || 'Lab User',
+          },
+          { onConflict: 'id' }
+        ),
+      syncSectionToBox(key, payload, options?.updatedBy || 'Lab User'),
+    ]);
 
     if (error) {
+      lastCloudError = error.message;
       console.warn(`[CloudStore] Save error for ${key}:`, error.message);
       return false;
     }
+    lastCloudError = null;
     return true;
-  } catch (err) {
+  } catch (err: any) {
+    lastCloudError = err?.message || 'Network error while saving to Supabase';
     console.warn(`[CloudStore] Network exception saving ${key}:`, err);
     return false;
   }

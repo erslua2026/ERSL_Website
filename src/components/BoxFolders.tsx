@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ExternalLink, Plus, Trash2, Lock, Globe } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { User } from '../types';
+import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 
 interface BoxFolder {
   id: string;
@@ -28,7 +29,14 @@ const toEmbedUrl = (url: string): string => {
   }
 };
 
-export const BoxFolders: React.FC<{ currentUser: User | null }> = ({ currentUser }) => {
+export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPassProps> = ({
+  currentUser,
+  headerOverride,
+  accentColor = '#9E1B32',
+  showSubheadings = true,
+  canEditHeader = false,
+  onSaveHeader,
+}) => {
   const isAdmin = currentUser?.role === 'Admin';
   const [folders, setFolders] = useState<BoxFolder[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -104,11 +112,19 @@ export const BoxFolders: React.FC<{ currentUser: User | null }> = ({ currentUser
 
   return (
     <div className="space-y-6 text-left">
-      <div className="bg-[#9E1B32] rounded-2xl p-6 md:p-8 text-white shadow-md">
-        <span className="bg-white/10 px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest">BOX WORKSPACE</span>
-        <h2 className="text-2xl md:text-3xl font-extrabold mt-2 tracking-tight">Lab Box Folders</h2>
-        <p className="text-xs md:text-sm text-red-100 mt-1 max-w-xl">Shared lab folders from Box, opened right inside the website.</p>
-      </div>
+      <SubPageHeader
+        tabId="box"
+        defaults={{
+          badge: 'BOX WORKSPACE',
+          title: 'Lab Box Folders',
+          subtitle: 'Shared lab folders from Box, opened right inside the website.',
+        }}
+        override={headerOverride}
+        accentColor={accentColor}
+        showSubtitle={showSubheadings}
+        canEdit={canEditHeader || isAdmin}
+        onSave={onSaveHeader}
+      />
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded p-2">{error}</p>}
 
       {isAdmin && (

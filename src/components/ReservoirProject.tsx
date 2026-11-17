@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User } from '../types';
+import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { initialPeople } from '../data/initialData';
 import { ADMIN_EMAILS, supabase } from '../lib/supabase';
 import { 
@@ -478,7 +479,14 @@ const CONGRATULATION_TEMPLATES = [
   })
 ];
 
-export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+export const ReservoirProject: React.FC<{ currentUser: User } & SubPageHeaderPassProps> = ({
+  currentUser,
+  headerOverride,
+  accentColor = '#9E1B32',
+  showSubheadings = true,
+  canEditHeader = false,
+  onSaveHeader,
+}) => {
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
   const userName = (currentUser?.name || '').toLowerCase().trim();
   const isEmailAdmin = ADMIN_EMAILS.some(e => e.toLowerCase().trim() === userEmail);
@@ -1773,45 +1781,26 @@ export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser 
       {/* =========================================================================
           TOP BANNER: ERSL RESERVOIR DATA ALLOCATION & DELINEATION PROTOCOL
           ========================================================================= */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 rounded-2xl shadow-xl border border-slate-800 p-6 sm:p-8 text-white">
-        
-        {/* Ambient background decoration */}
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 rounded-full bg-[#9E1B32]/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-96 h-96 rounded-full bg-cyan-600/10 blur-3xl pointer-events-none" />
+      <SubPageHeader
+        tabId="reservoir"
+        defaults={{
+          badge: 'ERSL GEOAI & HYDROLOGY LAB · SWOT & SAR',
+          title: 'National Reservoir Delineation Protocol Table',
+          subtitle:
+            "Official ERSL sprint allocation matrix tracking round-by-round basin delivery, team member allocation counts, collection dates, and Dr. Dan Tian's QA/QC quality verification.",
+        }}
+        override={headerOverride}
+        accentColor={accentColor}
+        showSubtitle={showSubheadings}
+        canEdit={canEditHeader || isAdmin}
+        onSave={onSaveHeader}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-white/25 bg-black/20 text-white">
+              <Radio className={`w-3 h-3 ${realtimeActive ? 'text-emerald-300 animate-pulse' : 'text-white/70'}`} />
+              <span>{cloudSyncStatus === 'synced' ? 'Cloud Synced' : realtimeActive ? 'Live Realtime' : 'Local Storage'}</span>
+            </span>
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-[#9E1B32] text-white shadow-sm">
-                <Waves className="w-3.5 h-3.5" />
-                ERSL GeoAI & Hydrology Lab
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
-                SWOT & SAR Water Segmentation
-              </span>
-
-              {/* Cloud Sync Status Pill */}
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                cloudSyncStatus === 'synced'
-                  ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                  : 'bg-indigo-950 text-indigo-300 border-indigo-700'
-              }`}>
-                <Radio className={`w-3 h-3 ${realtimeActive ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
-                <span>{cloudSyncStatus === 'synced' ? 'Cloud Synced' : realtimeActive ? 'Live Realtime' : 'Local Storage'}</span>
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
-              National Reservoir Delineation Protocol Table
-            </h1>
-            <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Official ERSL sprint allocation matrix tracking round-by-round basin delivery, team member allocation counts, collection dates, and Dr. Dan Tian's QA/QC quality verification.
-            </p>
-          </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Mode Toggle Switch */}
             <button
               type="button"
               onClick={() => {
@@ -1820,21 +1809,21 @@ export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser 
                 localStorage.setItem('ersl_reservoir_admin_mode', String(next));
                 showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
               }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${
-                isAdmin 
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500 shadow-md ring-2 ring-emerald-400/30' 
-                  : 'bg-indigo-700 hover:bg-indigo-600 text-white border-indigo-500 shadow-sm'
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${
+                isAdmin
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
+                  : 'bg-white/15 hover:bg-white/25 text-white border-white/25'
               }`}
               title="Click to toggle between Admin Full Editing Mode and Member Progress Mode"
             >
               {isAdmin ? (
                 <>
-                  <ShieldCheck className="w-4 h-4 text-emerald-200" />
+                  <ShieldCheck className="w-4 h-4 text-emerald-100" />
                   <span>Admin Mode: Full Edit</span>
                 </>
               ) : (
                 <>
-                  <UserCheck className="w-4 h-4 text-indigo-200" />
+                  <UserCheck className="w-4 h-4 text-white" />
                   <span>Member Mode: Progress Only</span>
                 </>
               )}
@@ -1842,7 +1831,7 @@ export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser 
 
             <button
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all border border-slate-700 shadow-sm cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all border border-white/20 shadow-sm cursor-pointer"
               title="Download allocation matrix as CSV"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
@@ -1853,7 +1842,7 @@ export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser 
               type="button"
               onClick={() => fetchCloudData(true)}
               disabled={isCloudFetching}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all border border-slate-700 shadow-sm cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all border border-white/20 shadow-sm cursor-pointer disabled:opacity-50"
               title="Sync latest updates directly from Supabase cloud database"
             >
               <RotateCcw className={`w-4 h-4 text-cyan-400 ${isCloudFetching ? 'animate-spin' : ''}`} />
@@ -1863,17 +1852,20 @@ export const ReservoirProject: React.FC<{ currentUser: User }> = ({ currentUser 
             {isAdmin && (
               <button
                 onClick={handleOpenAddRound}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#9E1B32] hover:bg-red-800 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                style={{ color: accentColor }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 text-xs font-extrabold transition-all shadow-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                + Add Round
+                Add Round
               </button>
             )}
           </div>
-        </div>
+        }
+      />
 
+      <div className="bg-slate-950 rounded-2xl shadow-xl border border-slate-800 p-5 text-white">
         {/* Milestone Summary Metrics (Clickable Tabs) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mt-8 pt-6 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
           
           {/* Card 1: Total Samples Done (Delineated Total from Table Footer) */}
           <div 

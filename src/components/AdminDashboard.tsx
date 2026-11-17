@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, FileText, RefreshCw, Cloud, Database, Shield } from 'lucide-react';
+import { Users, FileText, RefreshCw, Cloud, Database, Shield, Sliders } from 'lucide-react';
 import { User, Role, AuditLog } from '../types';
 import { MemberManager } from './MemberManager';
 
@@ -11,6 +11,7 @@ interface AdminDashboardProps {
   onDeleteUser: (userId: string) => void;
   auditLogs: AuditLog[];
   onClearLogs: () => void;
+  onOpenCustomizer?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -21,6 +22,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteUser,
   auditLogs,
   onClearLogs,
+  onOpenCustomizer,
 }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'box' | 'logs'>('users');
   const [syncLoading, setSyncLoading] = useState(false);
@@ -48,14 +50,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={triggerSync}
-            disabled={syncLoading}
-            className="flex items-center space-x-2 bg-white hover:bg-red-50 text-[#9E1B32] text-xs font-bold py-2 px-4 rounded-lg shadow-md transition-all cursor-pointer shrink-0"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
-            <span>Sync System Cache</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onOpenCustomizer && (
+              <button
+                type="button"
+                onClick={onOpenCustomizer}
+                className="flex items-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-md transition-all cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Site Designer (Colors, Layout & Tabs)</span>
+              </button>
+            )}
+            <button
+              onClick={triggerSync}
+              disabled={syncLoading}
+              className="flex items-center space-x-2 bg-white hover:bg-red-50 text-[#9E1B32] text-xs font-bold py-2 px-4 rounded-lg shadow-md transition-all cursor-pointer shrink-0"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
+              <span>Sync System Cache</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -119,15 +133,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-xs text-gray-600 space-y-2">
-                <h4 className="font-bold text-gray-800 flex items-center space-x-1">
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-xs text-gray-700 space-y-2.5">
+                <h4 className="font-bold text-gray-900 flex items-center space-x-1">
                   <Shield className="w-4 h-4 text-blue-600" />
-                  <span>How to add a Box Folder:</span>
+                  <span>Connecting UA Box Storage + Supabase Cloud Sync (Zero GitHub Uploads):</span>
                 </h4>
-                <ol className="list-decimal pl-4 space-y-1 text-[11px] leading-relaxed">
-                  <li>In UA Box, open your shared folder → click **Share → Copy Link**.</li>
-                  <li>Go to the **Box Workspace** tab in the top navigation bar.</li>
-                  <li>Click **Add Folder**, paste the link, and choose whether it is **Members Only** or **Public**.</li>
+                <ol className="list-decimal pl-4 space-y-1.5 text-[11px] leading-relaxed">
+                  <li><strong>Heavy Files & Datasets (UA Box):</strong> Store images, PDFs, GeoTIFFs, and datasets in UA Box (`ua.box.com`) instead of GitHub or the database.</li>
+                  <li><strong>Folder Embeds:</strong> Share a Box folder (<code>https://ua.box.com/s/...</code>) and paste it into any tab, sub-tab, Project Sub-Webpage, or Box Explorer — the site automatically converts it to an interactive Box embed.</li>
+                  <li><strong>Images & Direct Downloads:</strong> In UA Box Shared Link Settings, enable <strong>Allow Direct Link</strong> to get a <code>https://ua.box.com/shared/static/...</code> URL for News photos, Research banners, and direct dataset downloads.</li>
+                  <li><strong>All New Tabs & Sub-Pages (Supabase Cloud):</strong> Every tab, sub-tab, layout change, color scheme, custom page, and project sub-webpage automatically syncs via `cloudStore.ts` (`reservoir_matrix`) across all browsers.</li>
                 </ol>
               </div>
             </div>

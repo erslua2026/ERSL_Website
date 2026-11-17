@@ -14,15 +14,103 @@ export interface ResearchTheme {
   title: string;
   description: string;
   keywords: string[];
-  image: string; // fallback to URL or stock name
+  image: string; // fallback to URL, Box direct link, or local filename
+}
+
+export type SubTabVisibility = 'public' | 'collaborators' | 'members' | 'admin';
+export type ProjectSubTabKey = 'overview' | 'resources' | 'events' | 'datasets';
+
+export type ProjectContentBlockType =
+  | 'paragraph'
+  | 'objectives'
+  | 'link'
+  | 'dataset'
+  | 'software'
+  | 'meeting-note'
+  | 'event'
+  | 'box-folder'
+  | 'image';
+
+export interface ProjectContentBlock {
+  id: string;
+  type: ProjectContentBlockType;
+  title: string;
+  body?: string;
+  url?: string;
+  boxUrl?: string;
+  category?: string;
+  date?: string;
+  location?: string;
+  availability?: string;
+  attendees?: string;
+  language?: string;
+  version?: string;
+  caption?: string;
+  highlight?: boolean;
+}
+
+export interface ProjectCustomSubTab {
+  id: string;
+  label: string;
+  kind?: 'overview' | 'information' | 'resources' | 'events' | 'datasets' | 'software' | 'meeting-notes' | 'custom';
+  visibility: SubTabVisibility;
+  description?: string;
+  blocks: ProjectContentBlock[];
+}
+
+export interface ProjectCollaborator {
+  id: string;
+  personId?: string;
+  name: string;
+  affiliation?: string;
+  role?: string;
+  email?: string;
+  url?: string;
+}
+
+export interface ProjectResourceItem {
+  id: string;
+  title: string;
+  description: string;
+  url?: string;
+  boxUrl?: string;
+  category?: string;
+  date?: string;
+  location?: string;
+  availability?: string;
+}
+
+export interface ProjectSubPageData {
+  summary: string;
+  objectives: string[];
+  piInfo?: string;
+  timeline?: string;
+  bannerImage?: string;
+  boxFolderUrl?: string;
+  headerBgColor?: string;
+  tabVisibility: Record<string, SubTabVisibility>;
+  resources: ProjectResourceItem[];
+  events: ProjectResourceItem[];
+  datasets: ProjectResourceItem[];
+  fieldPhotos?: { id: string; url: string; caption?: string }[];
+  customSubTabs?: ProjectCustomSubTab[];
+  collaborators?: ProjectCollaborator[];
+  collaboratorAccessCode?: string;
 }
 
 export interface Project {
   id: string;
   title: string;
   agency: string;
+  sponsor?: string;
+  status?: string;
+  period?: string;
   details: string;
+  summary?: string;
+  image?: string;
   link?: string;
+  themeIds: string[]; // Must connect to at least one ResearchTheme
+  subPage?: ProjectSubPageData;
 }
 
 export interface Publication {
@@ -43,6 +131,8 @@ export interface Software {
   description: string;
   link?: string;
   language: 'Python' | 'R' | 'JavaScript' | 'Other';
+  version?: string;
+  boxUrl?: string;
 }
 
 export interface DataLayer {
@@ -51,6 +141,8 @@ export interface DataLayer {
   description: string;
   availability: string;
   link?: string;
+  boxUrl?: string;
+  source?: string;
 }
 
 export interface Instrument {
@@ -60,6 +152,12 @@ export interface Instrument {
   category: string;
   image: string;
   manualLink?: string;
+}
+
+export interface FormerStint {
+  role: string;
+  years: string;
+  topic?: string;
 }
 
 export interface Person {
@@ -72,7 +170,14 @@ export interface Person {
   scholar?: string;
   linkedin?: string;
   image: string;
-  group?: 'member' | 'collaborator'; // defaults to 'member'
+  group?: 'member' | 'collaborator' | 'former'; // defaults to 'member'
+  expectedGraduationDate?: string; // YYYY-MM-DD; auto-moves member -> former once reached
+  graduationDegree?: string; // e.g., Ph.D., MS, Research Scientist
+  thesisTopic?: string; // topic/thesis to record when graduated
+  formerYears?: string;
+  formerTopic?: string;
+  currentAffiliation?: string;
+  formerStints?: FormerStint[];
 }
 
 export interface BoxFile {
@@ -105,3 +210,112 @@ export interface TeachingMaterial {
   updatedAt: string;
 }
 
+export interface BulletinItem {
+  id: string;
+  title: string;
+  content: string;
+  priority: 'normal' | 'high';
+  folder?: string;
+  sender: string;
+  date: string;
+  image?: string;
+  link?: string;
+}
+
+export type LayoutMode = 'vertical-left' | 'vertical-right' | 'horizontal-top' | 'horizontal-compact';
+export type TabPosition = 'start' | 'center' | 'end';
+export type TabVisibility = 'public' | 'members' | 'hidden';
+
+export interface TabConfig {
+  id: string;
+  label: string;
+  icon?: string;
+  visibility: TabVisibility;
+  isCustom?: boolean;
+}
+
+export interface CustomBlock {
+  id: string;
+  type: 'text' | 'link' | 'box-folder' | 'image' | 'dataset';
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+}
+
+export interface CustomSubTab {
+  id: string;
+  label: string;
+  visibility: SubTabVisibility;
+  blocks: CustomBlock[];
+}
+
+export interface CustomPageData {
+  tabId: string;
+  title: string;
+  subtitle?: string;
+  boxFolderUrl?: string;
+  subTabLayout?: 'horizontal' | 'vertical';
+  subTabs: CustomSubTab[];
+}
+
+export interface HomeSlideConfig {
+  id: string;
+  file?: string;
+  image: string;
+  title: string;
+  desc: string;
+}
+
+export interface HomeMissionConfig {
+  badge: string;
+  heading: string;
+  description: string;
+  logoUrl?: string;
+  cardTitle: string;
+  cardDesc: string;
+  stat1Value: string;
+  stat1Label: string;
+  stat2Value: string;
+  stat2Label: string;
+}
+
+export interface PageHeaderConfig {
+  badge: string;
+  title: string;
+  subtitle: string;
+  bgColor?: string;
+  gradientEnd?: string;
+}
+
+export interface SiteConfig {
+  labShortName: string;
+  labFullName: string;
+  labTagline: string;
+  departmentName?: string;
+  logoUrl?: string;
+  newsEyebrow?: string;
+  newsHeading?: string;
+  footerTitle?: string;
+  footerDescription?: string;
+  footerStorageTitle?: string;
+  footerStorageText?: string;
+  footerLocation?: string;
+  primaryColor: string;
+  subheadingColor: string;
+  headerBgColor: string;
+  headerTextColor: string;
+  pageBgColor: string;
+  layoutMode: LayoutMode;
+  tabPosition: TabPosition;
+  compactMode: boolean;
+  showSubheadings: boolean;
+  swapHomeColors: boolean;
+  themeStyle?: 'macos-glass' | 'classic';
+  memberLayoutMode?: LayoutMode;
+  configVersion?: number;
+  tabs: TabConfig[];
+  homeSlides: HomeSlideConfig[];
+  homeMission: HomeMissionConfig;
+  pageHeaders?: Record<string, PageHeaderConfig>;
+}

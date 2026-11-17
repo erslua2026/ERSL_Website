@@ -1,0 +1,31 @@
+name: Backup Website Code to UA Box (On Edits Only)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'public/data/scholar_*.json'
+  workflow_dispatch:
+
+concurrency:
+  group: box-backup
+  cancel-in-progress: true
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Upload repository snapshot to UA Box
+        env:
+          BOX_CLIENT_ID: ${{ secrets.BOX_CLIENT_ID }}
+          BOX_CLIENT_SECRET: ${{ secrets.BOX_CLIENT_SECRET }}
+          BOX_ENTERPRISE_ID: ${{ secrets.BOX_ENTERPRISE_ID }}
+          BOX_ROOT_FOLDER_ID: ${{ secrets.BOX_ROOT_FOLDER_ID }}
+        run: node scripts/backup_repo_to_box.mjs
+
