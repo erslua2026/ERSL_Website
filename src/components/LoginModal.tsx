@@ -36,7 +36,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
           const portalUrl =
             typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
               ? `${window.location.origin}${window.location.pathname}`
-              : 'https://erslua2026.github.io/ERSL_Website/';
+              : 'https://ersl.pages.dev/';
           await fetch('https://formspree.io/f/xbjnqpyz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
