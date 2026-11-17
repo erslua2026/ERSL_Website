@@ -55,12 +55,15 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
-    const file = Array.from(e.dataTransfer.files || []).find(f => f.type.startsWith('image/'));
+    const files = Array.from(e.dataTransfer.files as ArrayLike<File>);
+    const file = files.find(f => f.type.startsWith('image/'));
     if (file) processFile(file);
   };
 
   const handlePasteEvent = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = Array.from(e.clipboardData?.items || []);
+    const items = e.clipboardData
+      ? Array.from(e.clipboardData.items as ArrayLike<DataTransferItem>)
+      : [];
     const imgItem = items.find(it => it.type.startsWith('image/'));
     if (imgItem) {
       e.preventDefault();
