@@ -95,8 +95,8 @@ export const SubPageHeader: React.FC<SubPageHeaderProps> = ({
       className="rounded-2xl p-6 md:p-8 shadow-md text-left text-white transition-all"
       style={bannerStyle}
     >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-start md:items-center justify-between gap-4">
+        <div className="flex-1 min-w-[260px]">
           <span className="inline-block bg-white/15 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest text-white">
             {isEditing ? draft.badge || 'BADGE' : current.badge}
           </span>
@@ -111,7 +111,7 @@ export const SubPageHeader: React.FC<SubPageHeaderProps> = ({
         </div>
 
         {(actions || (canEdit && onSave)) && (
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 max-w-full">
             {actions}
             {canEdit && onSave && !isEditing && (
               <button
