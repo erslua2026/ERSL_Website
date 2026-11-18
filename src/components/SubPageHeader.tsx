@@ -96,7 +96,7 @@ export const SubPageHeader: React.FC<SubPageHeaderProps> = ({
       style={bannerStyle}
     >
       <div className="flex flex-wrap items-start md:items-center justify-between gap-4">
-        <div className="flex-1 min-w-[260px]">
+        <div className="flex-1 min-w-0 sm:min-w-[240px]">
           <span className="inline-block bg-white/15 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest text-white">
             {isEditing ? draft.badge || 'BADGE' : current.badge}
           </span>
