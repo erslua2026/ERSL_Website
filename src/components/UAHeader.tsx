@@ -217,17 +217,17 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
           }`}
           style={siteConfig.themeStyle !== 'classic' ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
         >
-          <div className="px-4 py-2.5 flex items-center justify-between">
-            <button onClick={() => onTabChange('home')} className="flex items-center gap-2.5 text-left cursor-pointer">
+          <div className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
+            <button onClick={() => onTabChange('home')} className="flex items-center gap-2.5 text-left cursor-pointer min-w-0 flex-1">
               {renderLogo('w-10 h-10')}
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest block" style={{ color: siteConfig.subheadingColor || primaryColor }}>
-                  UA Geography · {siteConfig.labShortName} Home
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-black uppercase tracking-wider block truncate" style={{ color: siteConfig.subheadingColor || primaryColor }}>
+                  UA Geography · {siteConfig.labShortName}
                 </span>
-                <span className="text-sm font-black leading-tight block">{siteConfig.labFullName}</span>
+                <span className="text-xs sm:text-sm font-black leading-tight block truncate">{siteConfig.labFullName}</span>
               </div>
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {!currentUser ? (
                 <button
                   onClick={onLoginClick}
@@ -483,16 +483,16 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
         style={isGlass ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
       >
         {/* Row 1: Text Brand Lockup (clicks Home, no logo icon here) + Site Search + Member Login */}
-        <div className={`max-w-7xl mx-auto px-4 md:px-8 ${isCompact ? 'py-2.5' : 'py-3'} flex flex-wrap justify-between items-center gap-4`}>
+        <div className={`max-w-7xl mx-auto px-4 md:px-8 ${isCompact ? 'py-2.5' : 'py-3'} flex items-center justify-between gap-3`}>
           <button
             onClick={() => onTabChange('home')}
             title="Go to ERSL Home"
-            className="text-left cursor-pointer group shrink-0 transition-opacity hover:opacity-85"
+            className="text-left cursor-pointer group min-w-0 flex-1 transition-opacity hover:opacity-85"
           >
-            <h1 className="font-black text-2xl md:text-[28px] tracking-tight leading-tight" style={{ color: primaryColor }}>
+            <h1 className="font-black text-base sm:text-xl md:text-2xl lg:text-[28px] tracking-tight leading-tight break-words" style={{ color: primaryColor }}>
               {siteConfig.labFullName}
             </h1>
-            <p className="text-xs md:text-sm font-bold text-slate-700 leading-tight mt-1">
+            <p className="text-[11px] sm:text-xs md:text-sm font-bold text-slate-700 leading-tight mt-0.5 sm:mt-1 truncate">
               {siteConfig.departmentName || 'Department of Geography & the Environment'}
             </p>
           </button>
@@ -573,7 +573,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
         {/* Row 2: Dedicated Left-Aligned Navigation Strip matching Brand start alignment */}
         <div className={`hidden lg:block border-t ${isGlass ? 'border-white/50 bg-white/10' : 'border-gray-200/70 bg-white/40'}`}>
           <div className="max-w-7xl mx-auto px-4 md:px-8">
-            <div className="flex items-center justify-start gap-2 -ml-3.5">
+            <div className="flex flex-wrap items-center justify-start gap-x-1 gap-y-0.5 -ml-3.5">
               {visibleTabs.map(tab => {
                 const active = currentTab === tab.id;
                 return (

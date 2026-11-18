@@ -522,8 +522,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
       </div>
 
       {/* Vertical Left Sidebar (Sub-Tabs + Member Share Link + Edit Controls) + Main Project Content Area */}
-      <div className="flex flex-col md:flex-row gap-5 items-start">
-        <aside className="w-full md:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3.5 space-y-4">
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        <aside className="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3.5 space-y-4">
           {/* Vertical Sub-Page Navigation (Protected tabs hidden from public) */}
           <div className="space-y-1">
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-2 block mb-1.5">

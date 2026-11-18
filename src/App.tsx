@@ -1597,23 +1597,23 @@ export default function App() {
   return (
     <div
       data-theme={isGlassTheme ? 'macos-glass' : 'classic'}
-      className="min-h-screen flex flex-col text-slate-800 font-sans selection:bg-red-200 selection:text-red-900"
+      className="min-h-screen flex flex-col text-slate-800 font-sans selection:bg-red-200 selection:text-red-900 overflow-x-hidden"
       style={isGlassTheme ? undefined : { backgroundColor: siteConfig.pageBgColor || '#f8fafc' }}
     >
 
       {/* Top Banner indicating Admin / Editor rights */}
       {currentUser && currentUser.role !== 'Viewer' && (
-        <div className="bg-[#1e293b] text-white px-4 py-1.5 text-xs flex flex-wrap justify-between items-center gap-2 z-40 border-b border-slate-700 select-none">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-ping"></span>
-            <span className="font-bold uppercase tracking-wider text-[11px]">
+        <div className="bg-[#1e293b] text-white px-3 sm:px-4 py-1.5 text-xs flex flex-wrap justify-between items-center gap-2 z-40 border-b border-slate-700 select-none">
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-ping shrink-0"></span>
+            <span className="font-bold uppercase tracking-wider text-[11px] truncate">
               {currentUser.role === 'Admin' ? '🛠️ UA Admin Mode' : '✍️ ERSL Researcher Mode'}
             </span>
             <span className="text-slate-500 hidden sm:inline">|</span>
-            <span className="text-slate-300 font-medium hidden sm:inline">{currentUser.name} ({currentUser.email})</span>
+            <span className="text-slate-300 font-medium hidden sm:inline truncate">{currentUser.name} ({currentUser.email})</span>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setEditMode(prev => !prev)}
@@ -1720,9 +1720,9 @@ export default function App() {
       /* Configurable Navigation + Content Shell (Horizontal Top for Public, Vertical Left/Right for Members) */
       <div
         className={`flex-1 flex min-w-0 ${effectiveLayoutMode === 'vertical-left'
-          ? 'flex-col md:flex-row'
+          ? 'flex-col lg:flex-row'
           : effectiveLayoutMode === 'vertical-right'
-            ? 'flex-col md:flex-row-reverse'
+            ? 'flex-col lg:flex-row-reverse'
             : 'flex-col'
           }`}
       >
@@ -1791,16 +1791,18 @@ export default function App() {
                   <div className={`${siteConfig.compactMode ? 'space-y-4' : 'space-y-5'} animate-in fade-in duration-300`}>
 
                     {/* UA SDML-Style 2-Column Editorial Aims & Mission (Full-Height Logo Left + Content Right) */}
-                    <section className="bg-white p-3 md:p-4 rounded-2xl shadow-xs border border-gray-100 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center text-left relative">
+                    <section className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-100 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center text-left relative">
                       {isAdmin && editMode && editingHomeSection !== 'mission' && (
-                        <button
-                          type="button"
-                          onClick={() => openHomeSectionEditor('mission')}
-                          className="absolute top-3 right-3 z-10 px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                          <span>Edit Aims & Mission</span>
-                        </button>
+                        <div className="lg:col-span-12 flex justify-end lg:mb-0 -mb-2">
+                          <button
+                            type="button"
+                            onClick={() => openHomeSectionEditor('mission')}
+                            className="sm:absolute sm:top-3 sm:right-3 z-10 px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit Aims & Mission</span>
+                          </button>
+                        </div>
                       )}
 
                       <div className="lg:col-span-4 flex items-center justify-center lg:justify-start">
@@ -1808,7 +1810,7 @@ export default function App() {
                           src={(editingHomeSection === 'mission' ? homeEditDraft?.logoUrl : siteConfig.logoUrl) || 'https://alabama.box.com/shared/static/bl5k9qrcbymh4xgvlt03u8fdw81j8vlq.jpg'}
                           alt="Environmental Remote Sensing Laboratory Logo"
                           referrerPolicy="no-referrer"
-                          className="w-60 sm:w-72 lg:w-full max-h-80 h-auto object-contain rounded-xl"
+                          className="w-44 sm:w-64 lg:w-full max-h-72 h-auto object-contain rounded-xl"
                           onError={(e) => {
                             const img = e.currentTarget as HTMLImageElement;
                             if (!img.dataset.fallbackUsed) {
@@ -1819,7 +1821,7 @@ export default function App() {
                         />
                       </div>
 
-                      <div className="lg:col-span-8 space-y-2.5">
+                      <div className="lg:col-span-8 space-y-2.5 min-w-0 sm:pr-28">
                         {editingHomeSection === 'mission' && homeEditDraft ? (
                           <form onSubmit={saveHomeSectionEditor} className="space-y-3 bg-slate-50/80 p-4 rounded-xl border border-slate-200">
                             <div className="flex items-center justify-between">
