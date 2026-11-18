@@ -164,6 +164,8 @@ export interface InstrumentResourceItem {
   description?: string;
 }
 
+export type InstrumentStatus = 'field-ready' | 'under-repair' | 'calibration' | 'offline';
+
 export interface Instrument {
   id: string;
   name: string;
@@ -172,6 +174,8 @@ export interface Instrument {
   category: string;
   image: string;
   manualLink?: string;
+  status?: InstrumentStatus;
+  statusNote?: string;
   resources?: InstrumentResourceItem[];
 }
 

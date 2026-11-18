@@ -45,6 +45,103 @@ export function sanitizeExternalUrl(
   }
 }
 
+export function isSafeDataDocumentUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return /^data:(image\/(png|jpe?g|webp|gif)|application\/(pdf|json|zip|x-zip-compressed|msword|octet-stream|vnd\.[A-Za-z0-9.+-]+)|text\/(plain|csv|markdown|x-python));base64,[A-Za-z0-9+/=]+$/i.test(
+    trimmed
+  );
+}
+
+/**
+ * Returns true if the URL is either a safe external/relative URL OR a safe uploaded data document/image.
+ */
+export function isResolvableResourceUrl(url?: string): boolean {
+  return Boolean(sanitizeExternalUrl(url, { allowMailto: true }) || isSafeDataDocumentUrl(url));
+}
+
+export function getUploadedFileLabel(url?: string): string {
+  if (!url || !url.startsWith('data:')) return '';
+  const mime = url.slice(5, url.indexOf(';')).toLowerCase();
+  if (mime === 'application/pdf') return 'Uploaded Local PDF Document';
+  if (mime.startsWith('image/')) return 'Uploaded / Pasted Image';
+  if (mime.includes('spreadsheet') || mime.includes('excel') || mime === 'text/csv') return 'Uploaded Local Spreadsheet / Data';
+  if (mime.includes('word') || mime.includes('document')) return 'Uploaded Local Word Document';
+  if (mime.includes('zip')) return 'Uploaded Local Archive (.zip)';
+  return 'Uploaded Local File';
+}
+
+/**
+ * Safely opens an external HTTP(S) link OR converts a locally uploaded data: document/image
+ * into an object Blob URL so Chrome never blocks top-frame data: navigation.
+ */
+export function openOrDownloadResource(url?: string, fallbackFilename = 'ersl-file'): void {
+  if (!url || typeof url !== 'string') return;
+  const trimmed = url.trim();
+  if (!trimmed) return;
+
+  if (isSafeDataDocumentUrl(trimmed)) {
+    try {
+      const commaIdx = trimmed.indexOf(',');
+      const meta = trimmed.slice(5, commaIdx);
+      const mime = meta.split(';')[0] || 'application/octet-stream';
+      const b64 = trimmed.slice(commaIdx + 1);
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const extMap: Record<string, string> = {
+        'application/pdf': 'pdf',
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+        'text/plain': 'txt',
+        'text/csv': 'csv',
+        'application/json': 'json',
+        'application/zip': 'zip',
+      };
+      const ext = extMap[mime.toLowerCase()];
+      const safeName = fallbackFilename.includes('.')
+        ? fallbackFilename
+        : ext
+          ? `${fallbackFilename}.${ext}`
+          : fallbackFilename;
+
+      const isPreviewable = mime === 'application/pdf' || mime.startsWith('image/') || mime === 'text/plain';
+      if (isPreviewable) {
+        const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        if (!win) {
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = safeName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      } else {
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = safeName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      // ignore malformed base64
+    }
+    return;
+  }
+
+  const safe = sanitizeExternalUrl(trimmed, { allowMailto: true });
+  if (safe) {
+    window.open(safe, '_blank', 'noopener,noreferrer');
+  }
+}
+
 export function isBoxUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return false;
   try {

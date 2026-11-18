@@ -119,17 +119,19 @@ export const BulletinModal: React.FC<BulletinModalProps> = ({
               label="Bulletin Photo (Optional — Upload, Paste Clipboard, or URL)"
             />
             <div className="space-y-1">
-              <label className="font-bold text-gray-700">Box / Reference Document Link (Optional)</label>
+              <label className="font-bold text-gray-700">Document / Attachment File or URL (Optional)</label>
               <input
                 type="text"
-                value={link}
+                value={link.startsWith('data:') ? '' : link}
                 onChange={(e) => setLink(e.target.value)}
-                placeholder="https://ua.box.com/s/..."
+                placeholder="https://... or upload a local file/screenshot below"
                 className="w-full p-2 bg-slate-50 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
               />
               <BoxUploadButton
                 destination="bulletins"
-                label="Upload Document / File to Box"
+                label="Upload Local Document / File"
+                currentValue={link}
+                onClear={() => setLink('')}
                 onUploaded={(url) => setLink(url)}
               />
             </div>

@@ -32,7 +32,7 @@ import { ThemeSubPage } from './components/ThemeSubPage';
 import { InstrumentSubPage } from './components/InstrumentSubPage';
 import { CustomPageView } from './components/CustomPageView';
 import { SiteCustomizerModal } from './components/SiteCustomizerModal';
-import { resolveAssetUrl, sanitizeExternalUrl } from './lib/boxUtils';
+import { isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl } from './lib/boxUtils';
 import { LoginModal } from './components/LoginModal';
 import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Workplan } from './components/Workplan';
@@ -2319,16 +2319,27 @@ export default function App() {
                                       >
                                         <span>Explore tab →</span>
                                       </button>
-                                    ) : (
+                                    ) : isSafeDataDocumentUrl(n.link) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openOrDownloadResource(n.link, n.title)}
+                                        style={{ color: subheadingAccent }}
+                                        className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
+                                      >
+                                        <span>Open Attachment →</span>
+                                      </button>
+                                    ) : sanitizeExternalUrl(n.link) ? (
                                       <a
-                                        href={n.link}
+                                        href={sanitizeExternalUrl(n.link)}
                                         target="_blank"
-                                        rel="noreferrer"
+                                        rel="noopener noreferrer"
                                         style={{ color: subheadingAccent }}
                                         className="text-xs font-bold hover:underline flex items-center gap-1"
                                       >
                                         <span>Read more →</span>
                                       </a>
+                                    ) : (
+                                      <span className="text-[10px] text-gray-400 italic">Lab update</span>
                                     )
                                   ) : (
                                     <span className="text-[10px] text-gray-400 italic">Lab update</span>
@@ -3071,15 +3082,26 @@ export default function App() {
                                 </p>
 
                                 {pub.link && (
-                                  <a
-                                    href={pub.link}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-2 hover:underline"
-                                  >
-                                    <span>DOI Access URL</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
+                                  isSafeDataDocumentUrl(pub.link) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openOrDownloadResource(pub.link, pub.title)}
+                                      className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-2 hover:underline cursor-pointer"
+                                    >
+                                      <span>Open Attached Paper / File</span>
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : sanitizeExternalUrl(pub.link) ? (
+                                    <a
+                                      href={sanitizeExternalUrl(pub.link)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-2 hover:underline"
+                                    >
+                                      <span>DOI / Full Text Access</span>
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                  ) : null
                                 )}
                               </div>
 
@@ -3229,16 +3251,28 @@ export default function App() {
                           <div className="border-t border-gray-100 pt-3 mt-4 flex justify-between items-center">
                             <span className="text-[10px] font-bold text-gray-400">LICENSE: MIT OPEN SOURCE</span>
                             {soft.link && (
-                              <a
-                                href={soft.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{ backgroundColor: '#0f172a' }}
-                                className="hover:opacity-90 text-white text-[11px] font-bold py-1.5 px-3.5 rounded-lg flex items-center space-x-1 shadow-xs transition-all cursor-pointer"
-                              >
-                                <span>Open Repository / Box</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </a>
+                              isSafeDataDocumentUrl(soft.link) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openOrDownloadResource(soft.link, soft.title)}
+                                  style={{ backgroundColor: '#0f172a' }}
+                                  className="hover:opacity-90 text-white text-[11px] font-bold py-1.5 px-3.5 rounded-lg flex items-center space-x-1 shadow-xs transition-all cursor-pointer"
+                                >
+                                  <span>Download Attached File</span>
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              ) : sanitizeExternalUrl(soft.link) ? (
+                                <a
+                                  href={sanitizeExternalUrl(soft.link)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ backgroundColor: '#0f172a' }}
+                                  className="hover:opacity-90 text-white text-[11px] font-bold py-1.5 px-3.5 rounded-lg flex items-center space-x-1 shadow-xs transition-all cursor-pointer"
+                                >
+                                  <span>Open Repository / Link</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </a>
+                              ) : null
                             )}
                           </div>
                         </div>
@@ -3321,15 +3355,26 @@ export default function App() {
                             {/* Actions and access buttons */}
                             <div className="flex items-center space-x-3 self-end md:self-center shrink-0">
                               {data.link && (
-                                <a
-                                  href={data.link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="bg-[#9E1B32] hover:bg-red-800 text-white text-[10px] font-bold py-1.5 px-4 rounded shadow-sm flex items-center space-x-1.5 cursor-pointer"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  <span>Fetch Dataset</span>
-                                </a>
+                                isSafeDataDocumentUrl(data.link) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openOrDownloadResource(data.link, data.name)}
+                                    className="bg-[#9E1B32] hover:bg-red-800 text-white text-[10px] font-bold py-1.5 px-4 rounded shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Download Dataset File</span>
+                                  </button>
+                                ) : sanitizeExternalUrl(data.link) ? (
+                                  <a
+                                    href={sanitizeExternalUrl(data.link)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-[#9E1B32] hover:bg-red-800 text-white text-[10px] font-bold py-1.5 px-4 rounded shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Fetch Dataset</span>
+                                  </a>
+                                ) : null
                               )}
 
                               {editMode && (
@@ -3491,16 +3536,28 @@ export default function App() {
                                 {/* Quick Operating Manual Download Link */}
                                 {inst.manualLink && (
                                   <div className="mt-3.5 pt-3 border-t border-dashed border-gray-100" onClick={e => e.stopPropagation()}>
-                                    <a
-                                      href={inst.manualLink}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-[#9E1B32] hover:text-red-800 font-extrabold text-[10px] uppercase flex items-center space-x-1 tracking-wider"
-                                    >
-                                      <span>📖</span>
-                                      <span>Download Operating Manual (PDF)</span>
-                                      <span>&rarr;</span>
-                                    </a>
+                                    {isSafeDataDocumentUrl(inst.manualLink) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openOrDownloadResource(inst.manualLink, `${inst.name}-Manual`)}
+                                        className="text-[#9E1B32] hover:text-red-800 font-extrabold text-[10px] uppercase flex items-center space-x-1 tracking-wider cursor-pointer"
+                                      >
+                                        <span>📖</span>
+                                        <span>Open Operating Manual (Uploaded File)</span>
+                                        <span>&rarr;</span>
+                                      </button>
+                                    ) : sanitizeExternalUrl(inst.manualLink) ? (
+                                      <a
+                                        href={sanitizeExternalUrl(inst.manualLink)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[#9E1B32] hover:text-red-800 font-extrabold text-[10px] uppercase flex items-center space-x-1 tracking-wider"
+                                      >
+                                        <span>📖</span>
+                                        <span>Download Operating Manual (PDF)</span>
+                                        <span>&rarr;</span>
+                                      </a>
+                                    ) : null}
                                   </div>
                                 )}
                               </div>
@@ -3985,15 +4042,26 @@ export default function App() {
                           <div className="border-t border-gray-50 pt-4 mt-6 flex justify-between items-center">
                             <span className="text-[9px] font-bold text-[#9E1B32] uppercase tracking-wider">🔒 RESTRICTED INTERNAL</span>
                             {material.link && (
-                              <a
-                                href={material.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="bg-slate-900 hover:bg-[#9E1B32] text-white text-[10px] font-bold py-1.5 px-3.5 rounded flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
-                              >
-                                <span>Access Material (Box)</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </a>
+                              isSafeDataDocumentUrl(material.link) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openOrDownloadResource(material.link, material.title)}
+                                  className="bg-slate-900 hover:bg-[#9E1B32] text-white text-[10px] font-bold py-1.5 px-3.5 rounded flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
+                                >
+                                  <span>Download / Open Material</span>
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              ) : sanitizeExternalUrl(material.link) ? (
+                                <a
+                                  href={sanitizeExternalUrl(material.link)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="bg-slate-900 hover:bg-[#9E1B32] text-white text-[10px] font-bold py-1.5 px-3.5 rounded flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
+                                >
+                                  <span>Access Material</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </a>
+                              ) : null
                             )}
                           </div>
                         </div>
@@ -4165,7 +4233,17 @@ export default function App() {
 
                                   <div className="border-t border-gray-100 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-400 font-bold">
                                     <span>POSTED BY: {b.sender}</span>
-                                    {b.link && sanitizeExternalUrl(b.link) ? (
+                                    {b.link && isSafeDataDocumentUrl(b.link) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openOrDownloadResource(b.link, b.title)}
+                                        style={{ color: subheadingAccent }}
+                                        className="hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        <span>Open Attached File</span>
+                                      </button>
+                                    ) : b.link && sanitizeExternalUrl(b.link) ? (
                                       <a
                                         href={sanitizeExternalUrl(b.link)}
                                         target="_blank"

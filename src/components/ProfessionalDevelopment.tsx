@@ -3,13 +3,15 @@ import {
   BookOpen, FileText, Download, ExternalLink, Sparkles, CheckCircle2, 
   ChevronRight, Compass, Search, Tag, Clock, User, X, Plus, FolderGit2, 
   Paperclip, FileSpreadsheet, FileCode, Archive, Share2, Bookmark, Check,
-  Lightbulb, Layers, Award, Edit2, Trash2, Save
+  Lightbulb, Layers, Award, Edit2, Trash2, Save, ClipboardPaste
 } from 'lucide-react';
 import type { User as UserType } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { getCloudData, setCloudData } from '../lib/cloudStore';
 import { supabase } from '../lib/supabase';
-import { sanitizeExternalUrl } from '../lib/boxUtils';
+import { isSafeDataDocumentUrl, openOrDownloadResource, sanitizeExternalUrl } from '../lib/boxUtils';
+import { uploadDocumentWithBoxFallback } from '../lib/boxSync';
+import { BoxUploadButton } from './BoxUploadButton';
 import {
   initialProfSubSections, initialProfLinks, ProfSubSection, ProfResourceLink
 } from '../data/professionalHubData';
@@ -649,12 +651,11 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
   }, [posts, activeCategory, searchQuery]);
 
   const handleDownload = (att: GuideAttachment) => {
-    const safeUrl = att.url ? sanitizeExternalUrl(att.url) : '';
     if (att.url) {
-      if (safeUrl) window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      openOrDownloadResource(att.url, att.name);
       return;
     }
-    // Simulate generation and download of formatted pack
+    // Fallback template generation for pre-seeded items without external file links
     const element = document.createElement('a');
     const dummyContent = `=================================================================\n${att.name}\nUniversity of Alabama - Environmental Remote Sensing Laboratory (ERSL)\n=================================================================\n\nDescription: ${att.description}\nCategory: Professional Development & Academic Writing Resource\nLaboratory: ERSL (Dr. Hongxing Liu)\n\nThis certified ERSL lab document is ready for research and manuscript preparation.\nFor full source repositories and Overleaf templates, refer to the lab UA Box workspace.\n`;
     const file = new Blob([dummyContent], { type: 'text/plain;charset=utf-8' });
@@ -668,10 +669,7 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
     setTimeout(() => setDownloadSuccessMessage(null), 4000);
   };
 
-  const handleAddAttachmentFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const attachLocalOrBoxFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     let type: GuideAttachment['type'] = 'other';
     if (ext === 'pdf') type = 'pdf';
@@ -681,19 +679,55 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
     else if (ext === 'xls' || ext === 'xlsx') type = 'xlsx';
     else if (ext === 'zip' || ext === 'tar' || ext === 'gz') type = 'zip';
 
-    const sizeFormatted = file.size < 1024 * 1024 
-      ? `${(file.size / 1024).toFixed(1)} KB` 
+    const sizeFormatted = file.size < 1024 * 1024
+      ? `${(file.size / 1024).toFixed(1)} KB`
       : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
-    const newAtt: GuideAttachment = {
-      name: file.name,
-      type,
-      size: sizeFormatted,
-      description: `Uploaded material (${file.name})`
-    };
+    try {
+      const res = await uploadDocumentWithBoxFallback(file, 'general');
+      const newAtt: GuideAttachment = {
+        name: file.name,
+        type,
+        size: sizeFormatted,
+        description: res.uploadedToBox
+          ? `Uploaded to UA Box (${file.name})`
+          : `Attached local file (${file.name})`,
+        url: res.url,
+      };
+      setNewAttachments(prev => [...prev, newAtt]);
+    } catch (err: any) {
+      alert(err?.message || `Could not attach "${file.name}". Try a file under 3.5MB or paste a link.`);
+    }
+  };
 
-    setNewAttachments(prev => [...prev, newAtt]);
+  const handleAddAttachmentFromFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (e.target) e.target.value = '';
+    if (!file) return;
+    await attachLocalOrBoxFile(file);
+  };
+
+  const handlePasteAttachmentButton = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        alert('Click inside the Attachments box and press Ctrl+V (Cmd+V on Mac) to paste a copied image.');
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find(t => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          const ext = imgType.split('/')[1] || 'png';
+          const file = new File([blob], `clipboard_${Date.now()}.${ext}`, { type: imgType });
+          await attachLocalOrBoxFile(file);
+          return;
+        }
+      }
+      alert('No image found in clipboard. Copy an image/screenshot first, then try again.');
+    } catch {
+      alert('Click inside the Attachments panel and press Ctrl+V (Cmd+V on Mac) to paste your image.');
+    }
   };
 
   const handleAddBoxLink = () => {
@@ -1047,16 +1081,27 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                             </div>
                           )}
                           <div className="flex flex-wrap gap-2">
-                            {item.url && sanitizeExternalUrl(item.url) && (
-                              <a
-                                href={sanitizeExternalUrl(item.url)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>Open Link</span>
-                              </a>
+                            {item.url && (
+                              isSafeDataDocumentUrl(item.url) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openOrDownloadResource(item.url, item.title)}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors cursor-pointer"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download File</span>
+                                </button>
+                              ) : sanitizeExternalUrl(item.url) ? (
+                                <a
+                                  href={sanitizeExternalUrl(item.url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Link</span>
+                                </a>
+                              ) : null
                             )}
                             {item.boxUrl && sanitizeExternalUrl(item.boxUrl) && (
                               <a
@@ -1480,14 +1525,36 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                 />
               </div>
 
-              {/* Attachments Section */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
+              {/* Attachments Section (Local Upload, Drag & Drop, Clipboard Paste, or Box Link) */}
+              <div
+                tabIndex={0}
+                onPaste={async (e) => {
+                  const items = e.clipboardData ? Array.from(e.clipboardData.items as ArrayLike<DataTransferItem>) : [];
+                  const fileItem = items.find(it => it.kind === 'file');
+                  if (fileItem) {
+                    const blob = fileItem.getAsFile();
+                    if (blob) {
+                      e.preventDefault();
+                      const ext = blob.type.split('/')[1] || 'png';
+                      const file = new File([blob], `pasted_${Date.now()}.${ext}`, { type: blob.type || 'application/octet-stream' });
+                      await attachLocalOrBoxFile(file);
+                    }
+                  }
+                }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) await attachLocalOrBoxFile(file);
+                }}
+                className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3 focus:outline-none focus:ring-2 focus:ring-[#9E1B32]/30"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-extrabold text-slate-800 text-[11px] flex items-center gap-1.5">
                     <Paperclip className="w-3.5 h-3.5 text-[#9E1B32]" />
-                    <span>Attach Files & Materials ({newAttachments.length})</span>
+                    <span>Attach Files, Images, or Box Links ({newAttachments.length})</span>
                   </span>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <input 
                       type="file" 
                       ref={fileInputRef} 
@@ -1497,9 +1564,17 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="bg-white border border-gray-300 hover:bg-slate-50 text-slate-700 text-[10px] font-bold px-2 py-1 rounded cursor-pointer transition-colors"
+                      className="bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer transition-colors"
                     >
-                      + Choose File
+                      + Upload Local File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePasteAttachmentButton}
+                      className="bg-white border border-gray-300 hover:bg-slate-100 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded cursor-pointer inline-flex items-center gap-1 transition-colors"
+                    >
+                      <ClipboardPaste className="w-3 h-3 text-[#9E1B32]" />
+                      <span>Paste Image (Ctrl+V)</span>
                     </button>
                   </div>
                 </div>
@@ -1619,19 +1694,26 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Primary URL *</label>
+                <label className="block font-bold text-gray-700 mb-1">Primary URL or Uploaded File *</label>
                 <input
-                  type="url"
-                  value={linkUrl}
+                  type="text"
+                  value={linkUrl.startsWith('data:') ? '' : linkUrl}
                   onChange={e => setLinkUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="https://... or upload a local file / screenshot below"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="general"
+                  label="Upload Local Document / Image"
+                  currentValue={linkUrl}
+                  onClear={() => setLinkUrl('')}
+                  onUploaded={(url) => setLinkUrl(url)}
                 />
               </div>
               <div>
                 <label className="block font-bold text-sky-800 mb-1">UA Box Folder / File Link (Optional)</label>
                 <input
-                  type="url"
+                  type="text"
                   value={linkBoxUrl}
                   onChange={e => setLinkBoxUrl(e.target.value)}
                   placeholder="https://ua.box.com/s/..."

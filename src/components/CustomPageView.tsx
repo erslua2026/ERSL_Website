@@ -4,8 +4,16 @@ import {
   Database, FileText, Image as ImageIcon, X, Save
 } from 'lucide-react';
 import { CustomBlock, CustomPageData, CustomSubTab, SubTabVisibility, User } from '../types';
-import { isBoxUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import {
+  isBoxUrl,
+  isSafeDataDocumentUrl,
+  openOrDownloadResource,
+  resolveAssetUrl,
+  sanitizeExternalUrl,
+  toBoxEmbedUrl,
+} from '../lib/boxUtils';
 import { ImageUploadField } from './ImageUploadField';
+import { BoxUploadButton } from './BoxUploadButton';
 
 interface CustomPageViewProps {
   page: CustomPageData;
@@ -319,28 +327,40 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                   </div>
 
                   {block.type === 'image' && block.url && (
-                    <img src={block.url} alt={block.title} className="w-full max-h-72 object-cover rounded-lg border border-gray-100" />
+                    <img src={resolveAssetUrl(block.url)} alt={block.title} className="w-full max-h-72 object-contain bg-slate-50 rounded-lg border border-gray-100" />
                   )}
 
                   {block.body && (
                     <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">{block.body}</p>
                   )}
 
-                  {block.type === 'box-folder' && block.url && isBoxUrl(block.url) && (
+                  {block.type === 'box-folder' && block.url && isBoxUrl(block.url) && toBoxEmbedUrl(block.url) && (
                     <iframe title={block.title} src={toBoxEmbedUrl(block.url)} className="w-full h-[460px] rounded-lg border border-gray-200" allowFullScreen />
                   )}
 
                   {block.url && block.type !== 'image' && (
-                    <a
-                      href={block.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold hover:underline"
-                      style={{ color: primaryColor }}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Open {block.type === 'box-folder' ? 'in UA Box' : 'Resource'}</span>
-                    </a>
+                    isSafeDataDocumentUrl(block.url) ? (
+                      <button
+                        type="button"
+                        onClick={() => openOrDownloadResource(block.url, block.title)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold hover:underline cursor-pointer"
+                        style={{ color: primaryColor }}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open / Download Attached File</span>
+                      </button>
+                    ) : sanitizeExternalUrl(block.url) ? (
+                      <a
+                        href={sanitizeExternalUrl(block.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold hover:underline"
+                        style={{ color: primaryColor }}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open {block.type === 'box-folder' ? 'in UA Box' : 'Resource'}</span>
+                      </a>
+                    ) : null
                   )}
                 </div>
               ))}
@@ -394,8 +414,8 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                   <option value="text">Text / Note Section</option>
                   <option value="box-folder">Embedded UA Box Folder</option>
                   <option value="dataset">Dataset Link (Box / Repository)</option>
-                  <option value="link">Useful Link / Tool</option>
-                  <option value="image">Image (Box Direct Link / URL)</option>
+                  <option value="link">Useful Link / Document / Tool</option>
+                  <option value="image">Photo / Image (Upload, Paste Clipboard, or URL)</option>
                 </select>
               </div>
               <div>
@@ -420,15 +440,29 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">URL / Box Link</label>
-                    <input value={bUrl} onChange={e => setBUrl(e.target.value)} placeholder="https://ua.box.com/s/..." className="w-full p-2 border border-gray-300 rounded-lg" />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">External URL / Box Link (Optional)</label>
+                      <input
+                        value={bUrl.startsWith('data:') ? '' : bUrl}
+                        onChange={e => setBUrl(e.target.value)}
+                        placeholder="https://... or upload a file below"
+                        className="w-full p-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">Tag / Badge (Optional)</label>
+                      <input value={bTag} onChange={e => setBTag(e.target.value)} placeholder="e.g. Public, Box, Guide" className="w-full p-2 border border-gray-300 rounded-lg" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">Tag / Badge (Optional)</label>
-                    <input value={bTag} onChange={e => setBTag(e.target.value)} placeholder="e.g. Public, Box, Guide" className="w-full p-2 border border-gray-300 rounded-lg" />
-                  </div>
+                  <BoxUploadButton
+                    destination={bType === 'dataset' ? 'datasets' : 'general'}
+                    label="Upload Local Document / File / Image"
+                    currentValue={bUrl}
+                    onClear={() => setBUrl('')}
+                    onUploaded={(uploadedUrl) => setBUrl(uploadedUrl)}
+                  />
                 </div>
               )}
               <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">

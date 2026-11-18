@@ -113,16 +113,58 @@ export async function syncSectionToBox<T>(
   }
 }
 
+const compressImageFileToDataUrl = (file: File, maxDim = 1600, quality = 0.84): Promise<string> =>
+  new Promise((resolve, reject) => {
+    if (file.type === 'image/gif') {
+      readFileAsDataUrl(file).then(resolve).catch(reject);
+      return;
+    }
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w / h > 1) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, w, h);
+        // Preserve PNG transparency if small/PNG, else compress cleanly as JPEG
+        const mime = file.type === 'image/png' && file.size < 400_000 ? 'image/png' : 'image/jpeg';
+        resolve(canvas.toDataURL(mime, quality));
+        return;
+      }
+      readFileAsDataUrl(file).then(resolve).catch(reject);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objUrl);
+      readFileAsDataUrl(file).then(resolve).catch(reject);
+    };
+    img.src = objUrl;
+  });
+
 /**
  * Upload a local image directly into UA Box `01_Website_Images/<category>` and return
- * the Box Direct Link. Falls back cleanly to a local <2MB data URL while waiting for OIT approval.
+ * the Box Direct Link. Falls back cleanly (with automatic compression) to a local data URL
+ * so local upload and clipboard paste always succeed even without Box OIT authorization.
  */
 export async function uploadImageWithBoxFallback(
   file: File,
   category: BoxImageCategory
 ): Promise<{ url: string; uploadedToBox: boolean; note?: string }> {
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('Image size exceeds 5MB limit. Please choose a smaller compressed image.');
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('Image size exceeds 15MB limit. Please choose a smaller image.');
   }
 
   try {
@@ -134,42 +176,75 @@ export async function uploadImageWithBoxFallback(
     // Fall back cleanly below while waiting for UA OIT Box authorization
   }
 
-  if (file.size > 2 * 1024 * 1024) {
+  const dataUrl = await compressImageFileToDataUrl(file);
+  if (dataUrl.length > 3.5 * 1024 * 1024) {
+    throw new Error('Compressed image still exceeds 2.5MB cloud limit. Please use a slightly smaller image.');
+  }
+
+  return {
+    url: dataUrl,
+    uploadedToBox: false,
+    note: 'Saved locally & synced via portal cloud (direct UA Box upload activates once OIT approves the Box app).',
+  };
+}
+
+/**
+ * Upload any document, PDF, dataset, spreadsheet, archive, or pasted image:
+ * tries UA Box first and automatically falls back to compressed/local base64 storage (<= 3.5MB)
+ * so uploads NEVER get blocked while waiting for UA OIT Box authorization.
+ */
+export async function uploadDocumentWithBoxFallback(
+  file: File,
+  destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>
+): Promise<{ url: string; shareUrl: string; fileName: string; uploadedToBox: boolean }> {
+  try {
+    if (file.size <= 25 * 1024 * 1024) {
+      const res = await invokeBoxUpload(file, destination);
+      if (res) {
+        return {
+          url: res.shareUrl || res.directUrl,
+          shareUrl: res.shareUrl || res.directUrl,
+          fileName: res.fileName,
+          uploadedToBox: true,
+        };
+      }
+    }
+  } catch {
+    // Fall back seamlessly to local/Supabase portal storage below
+  }
+
+  if (file.type.startsWith('image/')) {
+    const dataUrl = await compressImageFileToDataUrl(file);
+    return {
+      url: dataUrl,
+      shareUrl: dataUrl,
+      fileName: file.name,
+      uploadedToBox: false,
+    };
+  }
+
+  const MAX_LOCAL_DOC_BYTES = 3.5 * 1024 * 1024;
+  if (file.size > MAX_LOCAL_DOC_BYTES) {
     throw new Error(
-      'Image exceeds 2MB local fallback limit (UA Box direct upload is awaiting OIT authorization). Please use a smaller file or paste a Box Direct Link.'
+      'Files over 3.5MB require UA Box direct link (pending UA OIT authorization). Upload files <= 3.5MB directly from your computer or paste a Box/Drive link.'
     );
   }
 
   const dataUrl = await readFileAsDataUrl(file);
   return {
     url: dataUrl,
+    shareUrl: dataUrl,
+    fileName: file.name,
     uploadedToBox: false,
-    note: 'Saved locally (direct UA Box upload activates once OIT approves the Box app).',
   };
 }
 
 /**
- * Upload any document, PDF, dataset, archive, or guide directly to the matching subfolder in UA Box
- * (`02_Datasets_Public`, `03_Datasets_Members`, `04_Projects`, `05_Softwares_And_Guides`, etc.).
+ * Backward-compatible wrapper that supports Box upload with automatic local fallback.
  */
 export async function uploadDocumentToBox(
   file: File,
   destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>
-): Promise<{ url: string; shareUrl: string; fileName: string }> {
-  if (file.size > 25 * 1024 * 1024) {
-    throw new Error(
-      'Files over 25MB should be uploaded directly in alabama.box.com inside your ERSL folder, then paste its Shared/Direct link here.'
-    );
-  }
-
-  const res = await invokeBoxUpload(file, destination);
-  if (!res) {
-    throw new Error('UA Box upload is unavailable until Supabase + OIT Box authorization are active.');
-  }
-
-  return {
-    url: res.shareUrl || res.directUrl,
-    shareUrl: res.shareUrl,
-    fileName: res.fileName,
-  };
+): Promise<{ url: string; shareUrl: string; fileName: string; uploadedToBox: boolean }> {
+  return uploadDocumentWithBoxFallback(file, destination);
 }

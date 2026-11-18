@@ -12,8 +12,9 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { Instrument, InstrumentResourceItem, User } from '../types';
-import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import { Instrument, InstrumentResourceItem, InstrumentStatus, User } from '../types';
+import { getInstrumentStatusMeta, INSTRUMENT_STATUS_OPTIONS } from '../lib/instrumentUtils';
+import { isResolvableResourceUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
 import { ImageUploadField } from './ImageUploadField';
 import { BoxUploadButton } from './BoxUploadButton';
 
@@ -74,6 +75,8 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
   const [editingOverview, setEditingOverview] = useState(false);
   const [draftName, setDraftName] = useState(instrument.name);
   const [draftCategory, setDraftCategory] = useState(instrument.category);
+  const [draftStatus, setDraftStatus] = useState<InstrumentStatus>(instrument.status || 'field-ready');
+  const [draftStatusNote, setDraftStatusNote] = useState(instrument.statusNote || '');
   const [draftSummary, setDraftSummary] = useState(instrument.description);
   const [draftDetailed, setDraftDetailed] = useState(
     instrument.detailedDescription || instrument.description
@@ -153,7 +156,14 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
 
   const handleSaveResource = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resTitle.trim() || !resUrl.trim()) return;
+    if (!resTitle.trim() || !resUrl.trim()) {
+      alert('Please upload a file, paste a clipboard image, or enter a resource URL.');
+      return;
+    }
+    if (!isResolvableResourceUrl(resUrl)) {
+      alert('Please provide a valid http(s) URL or upload a valid document/image file.');
+      return;
+    }
     const newItem: InstrumentResourceItem = {
       id: resourceModal.existing?.id || `inst-res-${Date.now()}`,
       title: resTitle.trim(),
@@ -430,7 +440,17 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
 
                     <div className="pt-2 border-t border-gray-200/70">
                       {canAccessUrl ? (
-                        sanitizeExternalUrl(item.url) ? (
+                        isSafeDataDocumentUrl(item.url) ? (
+                          <button
+                            type="button"
+                            onClick={() => openOrDownloadResource(item.url, item.title)}
+                            className="inline-flex items-center gap-1.5 text-xs font-extrabold hover:underline cursor-pointer"
+                            style={{ color: primaryColor }}
+                          >
+                            <span>Open / Download {item.category}</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        ) : sanitizeExternalUrl(item.url) ? (
                           <a
                             href={sanitizeExternalUrl(item.url)}
                             target="_blank"
@@ -606,21 +626,20 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="font-bold text-gray-700">Document / Tutorial URL or UA Box File</label>
-                  <BoxUploadButton
-                    destination="general"
-                    onUploaded={(url) => setResUrl(url)}
-                    label="Upload to UA Box"
-                  />
-                </div>
+                <label className="font-bold text-gray-700 block mb-1">Document / Tutorial File or URL *</label>
                 <input
-                  type="url"
-                  value={resUrl}
+                  type="text"
+                  value={resUrl.startsWith('data:') ? '' : resUrl}
                   onChange={e => setResUrl(e.target.value)}
-                  required
-                  placeholder="https://... or upload PDF via UA Box"
+                  placeholder="https://... or upload PDF / guide / photo below"
                   className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="general"
+                  currentValue={resUrl}
+                  onClear={() => setResUrl('')}
+                  onUploaded={(url) => setResUrl(url)}
+                  label="Upload Manual / PDF / Photo"
                 />
               </div>
 

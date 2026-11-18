@@ -3,6 +3,7 @@ import { X, Save, Edit, Plus, Info, Sparkles, Search, Loader2, Check } from 'luc
 import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint, ProjectInvestigator } from '../types';
 import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
 import { formatInvestigatorsSummary, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
+import { INSTRUMENT_STATUS_OPTIONS } from '../lib/instrumentUtils';
 import { BoxUploadButton } from './BoxUploadButton';
 import { ImageUploadField } from './ImageUploadField';
 
@@ -228,6 +229,8 @@ export const EditModal: React.FC<EditModalProps> = ({
           name: '',
           description: '',
           category: 'Field Sensors',
+          status: 'field-ready',
+          statusNote: '',
           image: 'gps'
         });
       } else if (type === 'person') {
@@ -544,19 +547,21 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">DOI, URL Link, or Uploaded PDF (Optional)</label>
+                <label className="block font-bold text-gray-700">DOI / External URL or Upload Local PDF / File (Optional)</label>
                 <input
-                  type="url"
+                  type="text"
                   name="link"
-                  placeholder="e.g., https://doi.org/10.1016/..."
-                  value={formData.link || ''}
+                  placeholder="https://doi.org/... or upload a PDF/file below"
+                  value={typeof formData.link === 'string' && formData.link.startsWith('data:') ? '' : (formData.link || '')}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
                   destination="publications"
-                  label="Upload Paper PDF / Document to Box"
-                  accept=".pdf,.doc,.docx,.txt,.zip"
+                  label="Upload Paper PDF / Document / Image"
+                  accept=".pdf,.doc,.docx,.txt,.zip,image/*"
+                  currentValue={formData.link}
+                  onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}
                   onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
@@ -606,18 +611,20 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Access Link or Upload Dataset File (Optional)</label>
+                <label className="block font-bold text-gray-700">Access Link or Upload Dataset / File (Optional)</label>
                 <input
-                  type="url"
+                  type="text"
                   name="link"
-                  placeholder="e.g., https://dataverse.harvard.edu/... or UA Box link"
-                  value={formData.link || ''}
+                  placeholder="https://... or upload a CSV / GeoJSON / ZIP / PDF below"
+                  value={typeof formData.link === 'string' && formData.link.startsWith('data:') ? '' : (formData.link || '')}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
                   destination="datasets"
-                  label="Upload Dataset / File to UA Box"
+                  label="Upload Local Dataset / File"
+                  currentValue={formData.link}
+                  onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}
                   onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
@@ -704,18 +711,47 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Instrument Category</label>
-                <input
-                  type="text"
-                  name="category"
-                  placeholder="e.g., Hydrologic Field Sensors"
-                  value={formData.category || ''}
-                  onChange={handleChange}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Instrument Category</label>
+                  <input
+                    type="text"
+                    name="category"
+                    placeholder="e.g., Hydrologic Field Sensors"
+                    value={formData.category || ''}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Operational Status</label>
+                  <select
+                    name="status"
+                    value={formData.status || 'field-ready'}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  >
+                    {INSTRUMENT_STATUS_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {(formData.status && formData.status !== 'field-ready') && (
+                <div className="space-y-1">
+                  <label className="block font-bold text-amber-800">Repair / Status Note (Optional)</label>
+                  <input
+                    type="text"
+                    name="statusNote"
+                    placeholder="e.g., Gimbal sent to manufacturer for service / ETA Dec 2026"
+                    value={formData.statusNote || ''}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-amber-50/50 border border-amber-200 rounded focus:outline-none focus:border-[#9E1B32]"
+                  />
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="block font-bold text-gray-700">Card Summary &amp; Specifications</label>
@@ -742,14 +778,22 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Operating Manual / SOP Link (Optional)</label>
+                <label className="block font-bold text-gray-700">Operating Manual / SOP File or Link (Optional)</label>
                 <input
-                  type="url"
+                  type="text"
                   name="manualLink"
-                  placeholder="e.g., https://ua.box.com/s/manual-pdf"
-                  value={formData.manualLink || ''}
+                  placeholder="https://... or upload PDF/manual/photo below"
+                  value={typeof formData.manualLink === 'string' && formData.manualLink.startsWith('data:') ? '' : (formData.manualLink || '')}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                />
+                <BoxUploadButton
+                  destination="general"
+                  label="Upload Operating Manual (PDF / Doc / Photo)"
+                  accept=".pdf,.doc,.docx,.txt,.zip,image/*"
+                  currentValue={formData.manualLink}
+                  onClear={() => setFormData((prev: any) => ({ ...prev, manualLink: '' }))}
+                  onUploaded={(url) => setFormData((prev: any) => ({ ...prev, manualLink: url }))}
                 />
               </div>
 
@@ -1146,18 +1190,20 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">GitHub Repository, Sandbox Link, or Package Upload</label>
+                <label className="block font-bold text-gray-700">GitHub Repository, Link, or Local Package / Guide Upload</label>
                 <input
-                  type="url"
+                  type="text"
                   name="link"
-                  placeholder="e.g., https://github.com/ua-ersl/..."
-                  value={formData.link || ''}
+                  placeholder="https://github.com/... or upload script/ZIP/PDF below"
+                  value={typeof formData.link === 'string' && formData.link.startsWith('data:') ? '' : (formData.link || '')}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
                   destination="software"
-                  label="Upload Code / Guide File to UA Box"
+                  label="Upload Code / ZIP / Guide File"
+                  currentValue={formData.link}
+                  onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}
                   onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>
@@ -1206,18 +1252,20 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Download Link, UA Box URL, or Upload Course File</label>
+                <label className="block font-bold text-gray-700">Course File Upload or Link (PDF / Slides / Box)</label>
                 <input
-                  type="url"
+                  type="text"
                   name="link"
-                  placeholder="e.g., https://ua.box.com/s/..."
-                  value={formData.link || ''}
+                  placeholder="https://... or upload syllabus/slides/PDF below"
+                  value={typeof formData.link === 'string' && formData.link.startsWith('data:') ? '' : (formData.link || '')}
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
                   destination="teaching"
-                  label="Upload Syllabus / Manual to UA Box"
+                  label="Upload Syllabus / Slides / Manual"
+                  currentValue={formData.link}
+                  onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}
                   onUploaded={(url) => setFormData((prev: any) => ({ ...prev, link: url }))}
                 />
               </div>

@@ -18,7 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ProjectContentBlock, ProjectContentBlockType } from '../types';
-import { isBoxUrl, resolveAssetUrl, sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { isBoxUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
 
 export interface BlockTypeMeta {
   type: ProjectContentBlockType;
@@ -355,7 +355,16 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
               {isShowingEmbed ? 'Hide Box Preview' : 'Preview Box Folder'}
             </button>
           )}
-          {boxLink && sanitizeExternalUrl(boxLink) && (
+          {boxLink && isSafeDataDocumentUrl(boxLink) ? (
+            <button
+              type="button"
+              onClick={() => openOrDownloadResource(boxLink, block.title)}
+              className="text-xs font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+            >
+              <FolderGit2 className="w-3.5 h-3.5" />
+              <span>Open / Download Attached File</span>
+            </button>
+          ) : boxLink && sanitizeExternalUrl(boxLink) ? (
             <a
               href={sanitizeExternalUrl(boxLink)}
               target="_blank"
@@ -365,24 +374,36 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
               <FolderGit2 className="w-3.5 h-3.5" />
               <span>Open in UA Box</span>
             </a>
-          )}
-          {block.url && block.url !== boxLink && sanitizeExternalUrl(block.url) && (
-            <a
-              href={sanitizeExternalUrl(block.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
-              style={{ backgroundColor: primaryColor }}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>
-                {block.type === 'software'
-                  ? 'Open Repository / Tool'
-                  : block.type === 'dataset'
-                    ? 'Access Dataset'
-                    : 'Visit Link'}
-              </span>
-            </a>
+          ) : null}
+          {block.url && block.url !== boxLink && (
+            isSafeDataDocumentUrl(block.url) ? (
+              <button
+                type="button"
+                onClick={() => openOrDownloadResource(block.url, block.title)}
+                className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open / Download Uploaded File</span>
+              </button>
+            ) : sanitizeExternalUrl(block.url) ? (
+              <a
+                href={sanitizeExternalUrl(block.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>
+                  {block.type === 'software'
+                    ? 'Open Repository / Tool'
+                    : block.type === 'dataset'
+                      ? 'Access Dataset'
+                      : 'Visit Link'}
+                </span>
+              </a>
+            ) : null
           )}
         </div>
       )}

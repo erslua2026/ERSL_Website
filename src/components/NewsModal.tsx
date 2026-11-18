@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Sparkles, Link as LinkIcon } from 'lucide-react';
 import { NewsItem, NewsCategory } from '../data/news';
+import { BoxUploadButton } from './BoxUploadButton';
 import { ImageUploadField } from './ImageUploadField';
 
 interface NewsModalProps {
@@ -203,19 +204,26 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
             />
           </div>
 
-          {/* Optional Link URL */}
+          {/* Optional Target Link or Uploaded Attachment */}
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-1">Target Link (Optional)</label>
+            <label className="block text-xs font-extrabold text-slate-700 mb-1">Target Link or Attached Document (Optional)</label>
             <div className="relative">
               <input
                 type="text"
-                value={link}
+                value={link.startsWith('data:') ? '' : link}
                 onChange={e => setLink(e.target.value)}
-                placeholder="e.g. https://doi.org/... or #publications or #field"
+                placeholder="https://doi.org/... or #publications or upload file below"
                 className="w-full text-xs p-2.5 pl-8 rounded-lg border border-slate-300 focus:outline-none focus:border-[#9E1B32]"
               />
               <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
             </div>
+            <BoxUploadButton
+              destination="general"
+              label="Attach PDF / Poster / Document"
+              currentValue={link}
+              onClear={() => setLink('')}
+              onUploaded={url => setLink(url)}
+            />
           </div>
 
           {/* Buttons */}

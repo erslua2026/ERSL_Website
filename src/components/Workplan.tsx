@@ -10,6 +10,7 @@ import { getCloudData, setCloudData } from '../lib/cloudStore';
 import { initialPeople } from '../data/initialData';
 import type { User } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
+import { openOrDownloadResource, sanitizeExternalUrl } from '../lib/boxUtils';
 
 type Status = 'not_started' | 'in_progress' | 'completed' | 'discuss_with_liu';
 
@@ -1485,15 +1486,14 @@ const CommentBox: React.FC<{
                             </div>
                           </div>
                           <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-center">
-                            <a
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-white hover:bg-red-50 text-[#9E1B32] border border-red-200 px-2 py-1 rounded-md text-[11px] font-bold inline-flex items-center gap-1 transition-colors"
+                            <button
+                              type="button"
+                              onClick={() => openOrDownloadResource(att.url, att.name)}
+                              className="bg-white hover:bg-red-50 text-[#9E1B32] border border-red-200 px-2 py-1 rounded-md text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <ExternalLink className="w-3 h-3" />
                               <span>View</span>
-                            </a>
+                            </button>
                             <a
                               href={att.url}
                               download={att.name}
@@ -1508,12 +1508,14 @@ const CommentBox: React.FC<{
                     }
 
                     if (isBox) {
+                      const safeBox = sanitizeExternalUrl(att.url);
+                      if (!safeBox) return null;
                       return (
                         <div key={attIdx}>
                           <a
-                            href={att.url}
+                            href={safeBox}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center space-x-2 bg-blue-50 hover:bg-blue-100/70 border border-blue-200 text-blue-900 px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-xs"
                           >
                             <FolderGit2 className="w-4 h-4 text-blue-600 shrink-0" />

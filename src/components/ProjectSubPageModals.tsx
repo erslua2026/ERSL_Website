@@ -639,11 +639,18 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           {type !== 'image' && (
             <>
               <div>
-                <label className="font-bold text-gray-700 block mb-1">UA Box Folder / File Link (Optional)</label>
-                <input value={boxUrl} onChange={e => setBoxUrl(e.target.value)} placeholder="https://alabama.box.com/s/..." className="w-full p-2 border border-gray-300 rounded-lg" />
+                <label className="font-bold text-gray-700 block mb-1">Attachment File or UA Box Folder/File Link (Optional)</label>
+                <input
+                  value={boxUrl.startsWith('data:') ? '' : boxUrl}
+                  onChange={e => setBoxUrl(e.target.value)}
+                  placeholder="https://alabama.box.com/s/... or upload a local file below"
+                  className="w-full p-2 border border-gray-300 rounded-lg"
+                />
                 <BoxUploadButton
                   destination={type === 'dataset' ? 'datasets' : type === 'software' ? 'software' : 'projects'}
-                  label="Upload File / Archive to UA Box"
+                  label="Upload Local Document / Archive / Image"
+                  currentValue={boxUrl}
+                  onClear={() => setBoxUrl('')}
                   onUploaded={uploadedUrl => setBoxUrl(uploadedUrl)}
                 />
               </div>
