@@ -1691,7 +1691,6 @@ export default function App() {
                 onBack={exitStandaloneProject}
                 onUpdateProject={handleUpdateProject}
                 onLoginClick={() => setShowSSOPopup(true)}
-                onLogout={handleLogout}
               />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-10 text-center max-w-lg mx-auto space-y-4">
@@ -2381,7 +2380,7 @@ export default function App() {
                                 )}
 
                                 <div>
-                                  <div className="h-44 relative overflow-hidden bg-slate-800">
+                                  <div className="h-48 relative overflow-hidden bg-slate-900 flex items-center justify-center p-1.5">
                                     {theme.image ? (
                                       <img
                                         src={
@@ -2391,7 +2390,7 @@ export default function App() {
                                         }
                                         onError={() => setFailedImages(prev => ({ ...prev, [`theme-${theme.id}`]: true }))}
                                         alt={theme.title}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                                         referrerPolicy="no-referrer"
                                       />
                                     ) : (
@@ -2462,7 +2461,6 @@ export default function App() {
                         }}
                         onUpdateProject={handleUpdateProject}
                         onLoginClick={() => setShowSSOPopup(true)}
-                        onLogout={handleLogout}
                       />
                     );
                   }
@@ -3516,11 +3514,11 @@ export default function App() {
                               <h3 className="text-lg font-extrabold text-slate-800 border-b-2 border-[#9E1B32] inline-block pb-1">{title}</h3>
                               <div className="grid grid-cols-1 gap-8 text-left">
                                 {group.map((person) => (
-                                  <div key={person.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row overflow-hidden group hover:shadow-md transition-shadow relative h-[480px] md:h-[280px]">
+                                  <div key={person.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row overflow-hidden group hover:shadow-md transition-shadow relative min-h-[260px]">
 
                                     {/* Admin actions */}
                                     {editMode && (
-                                      <div className="absolute top-4 right-4 flex space-x-1.5 z-10">
+                                      <div className="absolute top-3 right-3 flex space-x-1.5 z-10">
                                         {key === 'member' && (
                                           <button
                                             type="button"
@@ -3558,27 +3556,27 @@ export default function App() {
                                       </div>
                                     )}
 
-                                    {/* Left: Image Column (fixed width/height on both mobile and desktop to ensure no squishing/warping) */}
-                                    <div className="w-full md:w-[220px] lg:w-[240px] bg-slate-50 relative shrink-0 h-[200px] md:h-full">
+                                    {/* Left: Uncropped Portrait Column (full face cleanly visible on mobile & desktop) */}
+                                    <div className="w-full md:w-[220px] lg:w-[240px] bg-slate-50/90 relative shrink-0 flex items-center justify-center p-3">
                                       {person.image && !failedImages[`person-${person.id}`] ? (
                                         <img
-                                          src={resolveImagePath(person.image, 'people')}
+                                          src={resolveAssetUrl(resolveImagePath(person.image, 'people'))}
                                           onError={() => {
                                             setFailedImages(prev => ({ ...prev, [`person-${person.id}`]: true }));
                                           }}
                                           alt={person.name}
-                                          className="absolute inset-3 w-[calc(100%-24px)] h-[calc(100%-24px)] object-cover object-top rounded-xl shadow-xs select-none animate-in fade-in duration-300"
+                                          className="w-auto max-w-full max-h-64 md:max-h-[250px] h-auto object-contain rounded-xl shadow-xs select-none animate-in fade-in duration-300"
                                           referrerPolicy="no-referrer"
                                         />
                                       ) : (
-                                        <div className="absolute inset-3 bg-red-50 flex flex-col items-center justify-center rounded-xl font-bold text-[#9E1B32] select-none animate-in zoom-in-75">
+                                        <div className="w-full h-48 md:h-full min-h-[190px] bg-red-50 flex flex-col items-center justify-center rounded-xl font-bold text-[#9E1B32] select-none animate-in zoom-in-75">
                                           <span className="text-4xl">{getCleanInitials(person.name)}</span>
                                         </div>
                                       )}
                                     </div>
 
-                                    {/* Right: Info Column with fixed/responsive height to align with outer boundaries */}
-                                    <div className="flex-1 p-5 md:p-6 flex flex-col justify-between overflow-hidden h-[280px] md:h-full">
+                                    {/* Right: Info Column (flexible height on mobile so bio & action links never get clipped) */}
+                                    <div className="flex-1 p-5 md:p-6 flex flex-col justify-between min-w-0">
                                       <div>
                                         <div className="border-b border-gray-100 pb-2 mb-3 flex flex-wrap items-start justify-between gap-2">
                                           <div>

@@ -18,11 +18,9 @@ import {
   Key,
   Layers,
   Lock,
-  LogOut,
   Plus,
   Shield,
   Trash2,
-  UserCheck,
   Users,
 } from 'lucide-react';
 import {
@@ -69,7 +67,6 @@ interface ProjectSubPageProps {
   onBack: () => void;
   onUpdateProject: (updated: Project) => void;
   onLoginClick: () => void;
-  onLogout?: () => void;
 }
 
 function getSubTabIcon(kind?: ProjectCustomSubTab['kind']) {
@@ -130,7 +127,6 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   onBack,
   onUpdateProject,
   onLoginClick,
-  onLogout,
 }) => {
   const subPage: ProjectSubPageData = {
     ...DEFAULT_PROJECT_SUBPAGE,
@@ -148,7 +144,12 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   const customSubTabs = buildNormalizedSubTabs(project, subPage);
   const collaborators = subPage.collaborators || [];
-  const headerAccent = subPage.headerBgColor || primaryColor;
+  // Use a clean Coastal/Deep Ocean accent (or non-crimson custom color) instead of heavy crimson blocks
+  const customNonCrimson =
+    subPage.headerBgColor && subPage.headerBgColor.toLowerCase() !== '#9e1b32'
+      ? subPage.headerBgColor
+      : '';
+  const headerAccent = customNonCrimson || '#0f4c81';
 
   const [activeSubId, setActiveSubId] = useState<string>(customSubTabs[0]?.id || 'overview');
   const [previewRole, setPreviewRole] = useState<PreviewRole>('actual');
@@ -383,15 +384,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     <div className="space-y-5 animate-in fade-in duration-200 text-left">
       {/* Standalone Lab Brand & Authorization Strip (shown on ?project=<id> new tab & sponsor links) */}
       {isStandalone && (
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-5 sm:px-7 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-4 sm:px-7 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-4 text-left cursor-pointer group min-w-0 flex-1"
+            className="flex items-center gap-3.5 sm:gap-4 text-left cursor-pointer group min-w-0 flex-1"
             title="Return to ERSL Lab Website"
           >
             <div
-              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 shadow-sm overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 shadow-xs overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
               style={{ borderColor: primaryColor }}
             >
               <img
@@ -410,63 +411,45 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </div>
             <div className="min-w-0">
               <span
-                className="text-xs sm:text-sm font-extrabold uppercase tracking-wider block"
+                className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider block leading-snug"
                 style={{ color: primaryColor }}
               >
                 {siteConfig?.departmentName || 'Department of Geography & the Environment'} · The University of Alabama
               </span>
-              <h1 className="text-lg sm:text-2xl font-black text-slate-900 leading-tight group-hover:text-[#9E1B32] transition-colors">
+              <h1 className="text-base sm:text-2xl font-black text-slate-900 leading-tight mt-0.5 group-hover:text-[#9E1B32] transition-colors">
                 {siteConfig?.labFullName || 'Environmental Remote Sensing Laboratory (ERSL)'}
               </h1>
             </div>
           </button>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {!currentUser ? (
+          {!currentUser && (
+            <div className="shrink-0 flex justify-end">
               <button
                 type="button"
                 onClick={onLoginClick}
                 className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white cursor-pointer shadow-xs"
-                style={{ backgroundColor: primaryColor }}
+                style={{ backgroundColor: headerAccent }}
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Member Login</span>
               </button>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-800 border border-gray-200">
-                  <UserCheck className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                  <span>{currentUser.name}</span>
-                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-600">
-                    {currentUser.role}
-                  </span>
-                </span>
-
-                {onLogout && (
-                  <button
-                    type="button"
-                    onClick={onLogout}
-                    className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 cursor-pointer"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Top Crimson Project Banner */}
-      <div className="rounded-2xl border border-gray-200 shadow-xs overflow-hidden bg-white">
-        <div className="p-5 md:p-6 space-y-3.5 text-white" style={{ backgroundColor: headerAccent }}>
+      {/* Top Light Editorial Project Banner */}
+      <div
+        className="rounded-2xl border border-slate-200 shadow-xs overflow-hidden bg-gradient-to-br from-white via-slate-50/80 to-sky-50/75"
+        style={{ borderTopWidth: '4px', borderTopColor: headerAccent }}
+      >
+        <div className="p-5 md:p-6 space-y-3.5 text-slate-900">
           {!isStandalone && (
             <div>
               <button
                 type="button"
                 onClick={onBack}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Research Projects</span>
@@ -475,28 +458,31 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           )}
 
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-white leading-snug">{project.title}</h2>
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 leading-snug">{project.title}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-200/70">
               <div className="flex flex-wrap items-center gap-2">
                 {linkedThemes.map(t => (
                   <span
                     key={t.id}
-                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25"
+                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200 shadow-2xs"
                   >
                     {t.title}
                   </span>
                 ))}
                 {project.details && (
-                  <span className="text-xs font-semibold text-red-100 ml-1">· {project.details}</span>
+                  <span className="text-xs font-semibold text-slate-500 ml-1">· {project.details}</span>
                 )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
+                <span
+                  className="text-[11px] font-extrabold px-2.5 py-1 rounded-md text-white shadow-2xs"
+                  style={{ backgroundColor: headerAccent }}
+                >
                   {project.agency}
                 </span>
                 {subPage.timeline && (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/20 bg-black/15 text-white/95">
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-sky-200 bg-sky-50 text-sky-900">
                     {subPage.timeline}
                   </span>
                 )}
