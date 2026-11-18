@@ -196,7 +196,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
             onError={handleLogoError}
             alt="ERSL Logo"
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover rounded-full"
+            className="w-full h-full object-contain rounded-full bg-white"
             loading="eager"
           />
         )}
@@ -219,7 +219,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
         >
           <div className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
             <button onClick={() => onTabChange('home')} className="flex items-center gap-2.5 text-left cursor-pointer min-w-0 flex-1">
-              {renderLogo('w-10 h-10')}
+              {renderLogo('w-12 h-12 sm:w-14 sm:h-14')}
               <div className="min-w-0 flex-1">
                 <span className="text-[10px] font-black uppercase tracking-wider block truncate" style={{ color: siteConfig.subheadingColor || primaryColor }}>
                   UA Geography · {siteConfig.labShortName}
@@ -314,7 +314,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
             title="Go to ERSL Home"
             className="p-4 flex items-center gap-3 text-left border-b border-gray-200/30 cursor-pointer group"
           >
-            {renderLogo('w-14 h-14')}
+            {renderLogo('w-16 h-16')}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span

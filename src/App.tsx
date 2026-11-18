@@ -1684,7 +1684,6 @@ export default function App() {
                 people={people}
                 currentUser={currentUser}
                 canEdit={Boolean(editMode)}
-                editMode={Boolean(editMode)}
                 isStandalone
                 siteConfig={siteConfig}
                 primaryColor={accentColor}
@@ -1692,7 +1691,6 @@ export default function App() {
                 onBack={exitStandaloneProject}
                 onUpdateProject={handleUpdateProject}
                 onLoginClick={() => setShowSSOPopup(true)}
-                onToggleEditMode={() => setEditMode(prev => !prev)}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1810,7 +1808,7 @@ export default function App() {
                           src={(editingHomeSection === 'mission' ? homeEditDraft?.logoUrl : siteConfig.logoUrl) || 'https://alabama.box.com/shared/static/bl5k9qrcbymh4xgvlt03u8fdw81j8vlq.jpg'}
                           alt="Environmental Remote Sensing Laboratory Logo"
                           referrerPolicy="no-referrer"
-                          className="w-44 sm:w-64 lg:w-full max-h-72 h-auto object-contain rounded-xl"
+                          className="w-56 sm:w-72 lg:w-full max-h-80 h-auto object-contain rounded-xl"
                           onError={(e) => {
                             const img = e.currentTarget as HTMLImageElement;
                             if (!img.dataset.fallbackUsed) {
@@ -2455,7 +2453,6 @@ export default function App() {
                         people={people}
                         currentUser={currentUser}
                         canEdit={Boolean(editMode)}
-                        editMode={Boolean(editMode)}
                         siteConfig={siteConfig}
                         primaryColor={accentColor}
                         initialSubTabId={selectedProjectSubTabId}
@@ -2465,7 +2462,6 @@ export default function App() {
                         }}
                         onUpdateProject={handleUpdateProject}
                         onLoginClick={() => setShowSSOPopup(true)}
-                        onToggleEditMode={() => setEditMode(prev => !prev)}
                         onLogout={handleLogout}
                       />
                     );

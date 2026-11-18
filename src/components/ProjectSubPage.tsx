@@ -21,7 +21,6 @@ import {
   LogOut,
   Plus,
   Shield,
-  Sliders,
   Trash2,
   UserCheck,
   Users,
@@ -63,7 +62,6 @@ interface ProjectSubPageProps {
   people?: Person[];
   currentUser: User | null;
   canEdit: boolean;
-  editMode?: boolean;
   isStandalone?: boolean;
   siteConfig?: SiteConfig;
   primaryColor?: string;
@@ -71,7 +69,6 @@ interface ProjectSubPageProps {
   onBack: () => void;
   onUpdateProject: (updated: Project) => void;
   onLoginClick: () => void;
-  onToggleEditMode?: () => void;
   onLogout?: () => void;
 }
 
@@ -126,7 +123,6 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   people = [],
   currentUser,
   canEdit,
-  editMode = false,
   isStandalone = false,
   siteConfig,
   primaryColor = '#9E1B32',
@@ -134,7 +130,6 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   onBack,
   onUpdateProject,
   onLoginClick,
-  onToggleEditMode,
   onLogout,
 }) => {
   const subPage: ProjectSubPageData = {
@@ -178,10 +173,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   const resolvedLogoSrc = rawLogo
     ? rawLogo.startsWith('/images/')
       ? `${base}${rawLogo.slice(1)}`
-      : rawLogo.startsWith('http') || rawLogo.startsWith('data:')
-        ? rawLogo
-        : resolveAssetUrl(rawLogo)
-    : `${base}images/ERSL_Logo.png`;
+      : resolveAssetUrl(rawLogo)
+    : 'https://alabama.box.com/shared/static/bl5k9qrcbymh4xgvlt03u8fdw81j8vlq.jpg';
 
   // Modals
   const [editingInfo, setEditingInfo] = useState(false);
@@ -394,21 +387,28 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-4 text-left cursor-pointer group"
+            className="flex items-center gap-4 text-left cursor-pointer group min-w-0 flex-1"
             title="Return to ERSL Lab Website"
           >
             <div
-              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 shadow-xs overflow-hidden bg-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 shadow-sm overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
               style={{ borderColor: primaryColor }}
             >
               <img
                 src={resolvedLogoSrc}
                 alt="ERSL Lab Logo"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  if (!img.dataset.fallbackUsed) {
+                    img.dataset.fallbackUsed = '1';
+                    img.src = `${base}images/logo/logo.jpg`;
+                  }
+                }}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <span
                 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider block"
                 style={{ color: primaryColor }}
@@ -421,7 +421,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </div>
           </button>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {!currentUser ? (
               <button
                 type="button"
@@ -441,21 +441,6 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                     {currentUser.role}
                   </span>
                 </span>
-
-                {currentUser.role !== 'Viewer' && onToggleEditMode && (
-                  <button
-                    type="button"
-                    onClick={onToggleEditMode}
-                    className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
-                      editMode
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
-                        : 'bg-white hover:bg-slate-50 text-slate-700 border-gray-200'
-                    }`}
-                  >
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>{editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF'}</span>
-                  </button>
-                )}
 
                 {onLogout && (
                   <button
