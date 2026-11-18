@@ -23,6 +23,7 @@ interface ThemeSubPageProps {
   projects: Project[];
   publications: Publication[];
   canEdit: boolean;
+  canShareLink?: boolean;
   primaryColor?: string;
   resolveThemeImage: (imagePath: string) => string;
   onBack: () => void;
@@ -38,6 +39,7 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
   projects,
   publications,
   canEdit,
+  canShareLink = false,
   primaryColor = '#9E1B32',
   resolveThemeImage,
   onBack,
@@ -465,23 +467,25 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => copyProjectLink(proj.id)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer"
-                      >
-                        {copiedId === proj.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span className="text-emerald-700">Sponsor Link Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy Sponsor Link</span>
-                          </>
-                        )}
-                      </button>
+                      {canShareLink && (
+                        <button
+                          type="button"
+                          onClick={() => copyProjectLink(proj.id)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                        >
+                          {copiedId === proj.id ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700">Sponsor Link Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy Sponsor Link</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

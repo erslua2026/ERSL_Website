@@ -2257,6 +2257,7 @@ export default function App() {
                         projects={projects}
                         publications={publications}
                         canEdit={Boolean(editMode)}
+                        canShareLink={Boolean(currentUser)}
                         primaryColor={accentColor}
                         resolveThemeImage={(img) => resolveImagePath(img, 'research')}
                         onBack={() => setSelectedThemeDetails(null)}
@@ -2640,28 +2641,32 @@ export default function App() {
                                   className="border-t border-gray-200 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500 font-bold"
                                   onClick={e => e.stopPropagation()}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const shareUrl = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(proj.id)}`;
-                                      navigator.clipboard?.writeText(shareUrl);
-                                      setCopiedProjectUrlId(proj.id);
-                                      setTimeout(() => setCopiedProjectUrlId(null), 2000);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
-                                  >
-                                    {copiedProjectUrlId === proj.id ? (
-                                      <>
-                                        <Check className="w-3 h-3 text-emerald-600" />
-                                        <span className="text-emerald-700">Sponsor Link Copied!</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3 h-3" />
-                                        <span>Copy Sponsor Link</span>
-                                      </>
-                                    )}
-                                  </button>
+                                  {currentUser ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const shareUrl = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(proj.id)}`;
+                                        navigator.clipboard?.writeText(shareUrl);
+                                        setCopiedProjectUrlId(proj.id);
+                                        setTimeout(() => setCopiedProjectUrlId(null), 2000);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                                    >
+                                      {copiedProjectUrlId === proj.id ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-emerald-600" />
+                                          <span className="text-emerald-700">Sponsor Link Copied!</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span>Copy Sponsor Link</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="text-gray-400">Open standalone project page &rarr;</span>
+                                  )}
 
                                   <span className="uppercase tracking-wider font-extrabold" style={{ color: subheadingAccent }}>
                                     {proj.status || 'Active'}

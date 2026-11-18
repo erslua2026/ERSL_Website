@@ -228,9 +228,6 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     }
   }, [project.id, initialSubTabId]);
 
-  const activeSubTabObj = customSubTabs.find(t => t.id === activeSubId) || customSubTabs[0];
-  const activeTabIndex = customSubTabs.findIndex(t => t.id === activeSubTabObj?.id);
-
   const effectivePreview: PreviewRole = canEdit ? previewRole : 'actual';
   const isShowingPreviewAsOther = canEdit && effectivePreview !== 'actual';
   const showEditControls = canEdit && !isShowingPreviewAsOther;
@@ -243,8 +240,22 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     previewRole: effectivePreview,
   });
 
+  const visibleSubTabs = showEditControls
+    ? customSubTabs
+    : customSubTabs.filter(tab => canViewVisibility(tab.visibility));
+
+  const fallbackVisibleTab =
+    visibleSubTabs[0] || customSubTabs.find(t => t.visibility === 'public') || customSubTabs[0];
+  const activeSubTabObj = visibleSubTabs.find(t => t.id === activeSubId) || fallbackVisibleTab;
+  const activeTabIndex = customSubTabs.findIndex(t => t.id === activeSubTabObj?.id);
+
   const currentVisibility: SubTabVisibility = activeSubTabObj?.visibility || 'public';
   const hasAccess = (canEdit && effectivePreview === 'actual') || canViewVisibility(currentVisibility);
+  const hasPasskeyCollaboratorTabs =
+    !showEditControls &&
+    !passkeyUnlocked &&
+    Boolean(subPage.collaboratorAccessCode) &&
+    customSubTabs.some(t => t.visibility === 'collaborators' && !canViewVisibility('collaborators'));
   const linkedThemes = themes.filter(t => (project.themeIds || []).includes(t.id));
 
   // Persist helper keeping legacy fields & home-page fieldPhotos reel synchronized
@@ -379,14 +390,16 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     <div className="space-y-5 animate-in fade-in duration-200 text-left">
       {/* Standalone Lab Brand & Authorization Strip (shown on ?project=<id> new tab & sponsor links) */}
       {isStandalone && (
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="w-11 h-11 rounded-full border-2 shadow-xs overflow-hidden bg-white flex items-center justify-center shrink-0 cursor-pointer hover:scale-105 transition-transform"
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-5 sm:px-7 py-4 flex flex-wrap items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center gap-4 text-left cursor-pointer group"
+            title="Return to ERSL Lab Website"
+          >
+            <div
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 shadow-xs overflow-hidden bg-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
               style={{ borderColor: primaryColor }}
-              title="Return to ERSL Main Website"
             >
               <img
                 src={resolvedLogoSrc}
@@ -394,58 +407,30 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
-            </button>
+            </div>
             <div>
               <span
-                className="text-[10px] font-black uppercase tracking-widest block"
+                className="text-xs sm:text-sm font-extrabold uppercase tracking-wider block"
                 style={{ color: primaryColor }}
               >
-                The University of Alabama · Geography &amp; Environment
+                {siteConfig?.departmentName || 'Department of Geography & the Environment'} · The University of Alabama
               </span>
-              <h1 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
+              <h1 className="text-lg sm:text-2xl font-black text-slate-900 leading-tight group-hover:text-[#9E1B32] transition-colors">
                 {siteConfig?.labFullName || 'Environmental Remote Sensing Laboratory (ERSL)'}
               </h1>
             </div>
-          </div>
+          </button>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCopySponsorLink}
-              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 cursor-pointer"
-              title="Copy direct shareable URL for sponsors and collaborators"
-            >
-              {copiedSponsorLink ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700">Sponsor Link Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Share Link</span>
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={onBack}
-              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-red-50 text-slate-800 hover:text-[#9E1B32] cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Main ERSL Website</span>
-            </button>
-
             {!currentUser ? (
               <button
                 type="button"
                 onClick={onLoginClick}
-                className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg text-white cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white cursor-pointer shadow-xs"
                 style={{ backgroundColor: primaryColor }}
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Member / Admin Login</span>
+                <span>Member Login</span>
               </button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
@@ -490,70 +475,61 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
       {/* Top Crimson Project Banner */}
       <div className="rounded-2xl border border-gray-200 shadow-xs overflow-hidden bg-white">
-        <div className="p-5 md:p-6 space-y-4 text-white" style={{ backgroundColor: headerAccent }}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{isStandalone ? 'Back to ERSL Lab Website' : 'Back to Research Projects'}</span>
-            </button>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
-                {project.agency}
-              </span>
-              {subPage.timeline && (
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/20 bg-black/15 text-white/95">
-                  {subPage.timeline}
-                </span>
-              )}
-              <span className="text-[10px] font-mono text-white/85 bg-black/20 border border-white/20 px-2 py-1 rounded">
-                UA-ERSL-{project.id.toUpperCase()}
-              </span>
-              {!isStandalone && (
-                <button
-                  type="button"
-                  onClick={handleCopySponsorLink}
-                  className="text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
-                >
-                  {copiedSponsorLink ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedSponsorLink ? 'Copied Sponsor Link' : 'Share Link'}</span>
-                </button>
-              )}
+        <div className="p-5 md:p-6 space-y-3.5 text-white" style={{ backgroundColor: headerAccent }}>
+          {!isStandalone && (
+            <div>
+              <button
+                type="button"
+                onClick={onBack}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Research Projects</span>
+              </button>
             </div>
-          </div>
+          )}
 
           <div>
             <h2 className="text-xl md:text-2xl font-black text-white leading-snug">{project.title}</h2>
-            <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {linkedThemes.map(t => (
-                <span
-                  key={t.id}
-                  className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25"
-                >
-                  {t.title}
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {linkedThemes.map(t => (
+                  <span
+                    key={t.id}
+                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25"
+                  >
+                    {t.title}
+                  </span>
+                ))}
+                {project.details && (
+                  <span className="text-xs font-semibold text-red-100 ml-1">· {project.details}</span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
+                  {project.agency}
                 </span>
-              ))}
-              {project.details && (
-                <span className="text-xs font-semibold text-red-100 ml-1">· {project.details}</span>
-              )}
+                {subPage.timeline && (
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/20 bg-black/15 text-white/95">
+                    {subPage.timeline}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Vertical Left Sidebar (Sub-Tabs + Edit Controls) + Main Project Content Area */}
+      {/* Vertical Left Sidebar (Sub-Tabs + Member Share Link + Edit Controls) + Main Project Content Area */}
       <div className="flex flex-col md:flex-row gap-5 items-start">
         <aside className="w-full md:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3.5 space-y-4">
-          {/* Vertical Sub-Page Navigation */}
+          {/* Vertical Sub-Page Navigation (Protected tabs hidden from public) */}
           <div className="space-y-1">
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-2 block mb-1.5">
-              Project Sub-Pages
+              Project Sections
             </span>
-            {customSubTabs.map(tab => {
+            {visibleSubTabs.map(tab => {
               const active = activeSubTabObj?.id === tab.id;
               return (
                 <button
@@ -572,7 +548,9 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                     <span className="shrink-0">{getSubTabIcon(tab.kind)}</span>
                     <span className="truncate">{tab.label}</span>
                   </span>
-                  <span className="shrink-0">{getVisibilityIcon(tab.visibility, active)}</span>
+                  {showEditControls && (
+                    <span className="shrink-0">{getVisibilityIcon(tab.visibility, active)}</span>
+                  )}
                 </button>
               );
             })}
@@ -589,19 +567,68 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             )}
           </div>
 
-          {/* Active Access Pill */}
-          <div className="pt-3 border-t border-gray-100 space-y-2">
-            {!isLabMember && isLinkedCollaborator && (
-              <div className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 flex items-center gap-1.5">
-                <Key className="w-3 h-3 shrink-0" />
-                <span>Collaborator Access</span>
-              </div>
-            )}
-            <div className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${activeVisMeta.pillClass}`}>
-              {getVisibilityIcon(currentVisibility, false)}
-              <span>{activeVisMeta.shortLabel}</span>
+          {/* Copy Share Link inside Vertical Sidebar — Visible Only After Member Login */}
+          {currentUser && (
+            <div className="pt-3 border-t border-gray-100 space-y-2">
+              <button
+                type="button"
+                onClick={handleCopySponsorLink}
+                className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Copy direct shareable URL for sponsors and collaborators"
+              >
+                {copiedSponsorLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Share Link Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Share Link</span>
+                  </>
+                )}
+              </button>
+
+              {!isLabMember && isLinkedCollaborator && (
+                <div className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 flex items-center gap-1.5">
+                  <Key className="w-3 h-3 shrink-0" />
+                  <span>Collaborator Access</span>
+                </div>
+              )}
+
+              {showEditControls && (
+                <div className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${activeVisMeta.pillClass}`}>
+                  {getVisibilityIcon(currentVisibility, false)}
+                  <span>{activeVisMeta.shortLabel}</span>
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* Optional Collaborator Passkey Unlock in Sidebar (only if project has a passkey & locked tabs exist) */}
+          {hasPasskeyCollaboratorTabs && (
+            <form onSubmit={handleUnlockWithPasskey} className="pt-3 border-t border-gray-100 space-y-2">
+              <label className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 flex items-center gap-1">
+                <Key className="w-3 h-3" /> Collaborator Passkey
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  type="password"
+                  value={passkeyInput}
+                  onChange={e => setPasskeyInput(e.target.value)}
+                  placeholder="Enter passkey..."
+                  className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold cursor-pointer"
+                >
+                  Go
+                </button>
+              </div>
+              {passkeyError && <p className="text-[10px] font-bold text-red-600">{passkeyError}</p>}
+            </form>
+          )}
 
           {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active) */}
           {showEditControls && activeSubTabObj && (

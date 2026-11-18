@@ -483,16 +483,16 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
         style={isGlass ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
       >
         {/* Row 1: Text Brand Lockup (clicks Home, no logo icon here) + Site Search + Member Login */}
-        <div className={`max-w-7xl mx-auto px-4 md:px-8 ${isCompact ? 'py-2' : 'py-2.5'} flex flex-wrap justify-between items-center gap-4`}>
+        <div className={`max-w-7xl mx-auto px-4 md:px-8 ${isCompact ? 'py-2.5' : 'py-3'} flex flex-wrap justify-between items-center gap-4`}>
           <button
             onClick={() => onTabChange('home')}
             title="Go to ERSL Home"
             className="text-left cursor-pointer group shrink-0 transition-opacity hover:opacity-85"
           >
-            <h1 className="font-black text-xl md:text-[26px] tracking-tight leading-tight" style={{ color: primaryColor }}>
+            <h1 className="font-black text-2xl md:text-[28px] tracking-tight leading-tight" style={{ color: primaryColor }}>
               {siteConfig.labFullName}
             </h1>
-            <p className="text-xs md:text-[13px] font-semibold text-slate-600 leading-tight mt-0.5">
+            <p className="text-xs md:text-sm font-bold text-slate-700 leading-tight mt-1">
               {siteConfig.departmentName || 'Department of Geography & the Environment'}
             </p>
           </button>
