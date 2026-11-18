@@ -1,11 +1,26 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const ADMIN_EMAILS = ['hliu@ua.edu', 'npurushothaman@ua.edu'];
+
+function isAllowedOrigin(origin: string | null): boolean {
+  if (!origin) return true;
+  if (origin === 'https://ersl.pages.dev') return true;
+  if (/^https:\/\/[a-z0-9-]+\.ersl\.pages\.dev$/i.test(origin)) return true;
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+  return false;
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin');
+  const allowOrigin = origin && isAllowedOrigin(origin) ? origin : 'https://ersl.pages.dev';
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
 
 const BOX_CLIENT_ID = Deno.env.get('BOX_CLIENT_ID') ?? '';
 const BOX_CLIENT_SECRET = Deno.env.get('BOX_CLIENT_SECRET') ?? '';
@@ -15,24 +30,36 @@ const BOX_ROOT_FOLDER_ID = Deno.env.get('BOX_ROOT_FOLDER_ID') ?? '436999117457';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-// Map ERSL portal keys cleanly onto the existing ERSL_Website_Storage structure
+// Explicit allowlist mapping ERSL portal keys to ERSL_Website_Storage folders
 const SECTION_FOLDER_MAP: Record<string, string> = {
   ersl_sec_datalayers: '02_Datasets_Public',
   ersl_sec_publications: '02_Datasets_Public',
   ersl_sec_themes: '02_Datasets_Public',
+  ersl_subpage_themes: '02_Datasets_Public',
+  ersl_sec_home: '06_Website_Data_Sync',
+  ersl_sec_research: '02_Datasets_Public',
   ersl_sec_people: '03_Datasets_Members',
   ersl_sec_teaching: '03_Datasets_Members',
   ersl_sec_bulletins: '03_Datasets_Members',
   ersl_sec_bulletin_folders: '03_Datasets_Members',
+  ersl_professional_hub: '03_Datasets_Members',
+  ersl_professional_posts: '03_Datasets_Members',
   ersl_workplan: '03_Datasets_Members',
+  ersl_workplan_matrix: '03_Datasets_Members',
   ersl_reservoir: '03_Datasets_Members',
+  ersl_reservoir_matrix: '03_Datasets_Members',
   ersl_sec_projects: '04_Projects',
+  ersl_subpage_projects: '04_Projects',
   ersl_sec_software: '05_Softwares_And_Guides',
   ersl_sec_instruments: '06_Website_Data_Sync',
+  ersl_subpage_instruments: '06_Website_Data_Sync',
   ersl_sec_news: '06_Website_Data_Sync',
   ersl_site_config: '06_Website_Data_Sync',
   ersl_custom_pages: '06_Website_Data_Sync',
+  ersl_sec_auditlogs: '06_Website_Data_Sync',
 };
+
+const PRIVATE_UPLOAD_DESTINATIONS = new Set(['workplan', 'bulletins', 'teaching']);
 
 const FILE_DESTINATION_MAP: Record<string, [string, string?]> = {
   publications: ['02_Datasets_Public', 'Publications'],
@@ -153,9 +180,10 @@ async function upsertFileToBox(
   return data.entries?.[0];
 }
 
-async function createPublicLinks(
+async function createSharedLinks(
   token: string,
-  fileId: string
+  fileId: string,
+  isPrivate: boolean
 ): Promise<{ directUrl: string | null; shareUrl: string | null }> {
   const res = await fetch(`https://api.box.com/2.0/files/${fileId}?fields=shared_link`, {
     method: 'PUT',
@@ -165,7 +193,7 @@ async function createPublicLinks(
     },
     body: JSON.stringify({
       shared_link: {
-        access: 'open',
+        access: isPrivate ? 'company' : 'open',
         permissions: {
           can_download: true,
           can_preview: true,
@@ -201,6 +229,15 @@ function decodeBase64(b64: string): Uint8Array {
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+  const reqOrigin = req.headers.get('Origin');
+  if (reqOrigin && !isAllowedOrigin(reqOrigin)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Origin not allowed.' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -216,19 +253,40 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Require an authenticated ERSL member/admin JWT
+  // Require an authenticated AND approved ERSL member/admin JWT
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Server authentication environment is not configured.' }),
+      { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const authHeader = req.headers.get('Authorization') || '';
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
-    if (userErr || !userData?.user) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Authentication required to write to UA Box.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+  if (userErr || !userData?.user) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Authentication required to write to UA Box.' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const userEmail = String(userData.user.email || '').toLowerCase().trim();
+  const isBootstrapAdmin = ADMIN_EMAILS.includes(userEmail);
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('role')
+    .eq('id', userData.user.id)
+    .maybeSingle();
+
+  const callerRole = String(profile?.role || '').toLowerCase();
+  if (!isBootstrapAdmin && callerRole !== 'admin' && callerRole !== 'member') {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Approved ERSL member or admin role required.' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -264,8 +322,8 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const resolvedDestination = destination || `images/${String(category)}`;
-      const targetFolderId = await resolveUploadFolderId(token, String(resolvedDestination));
+      const resolvedDestination = String(destination || `images/${String(category)}`);
+      const targetFolderId = await resolveUploadFolderId(token, resolvedDestination);
       const cleanName = String(fileName).replace(/[^A-Za-z0-9._-]/g, '_');
       const uploaded = await upsertFileToBox(
         token,
@@ -274,8 +332,9 @@ Deno.serve(async (req: Request) => {
         decodeBase64(base64Data),
         contentType
       );
+      const isPrivateDest = PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination);
       const links = uploaded?.id
-        ? await createPublicLinks(token, uploaded.id)
+        ? await createSharedLinks(token, uploaded.id, isPrivateDest)
         : { directUrl: null, shareUrl: null };
 
       return new Response(
@@ -292,16 +351,23 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'sync_json') {
       const { key, payload, updatedBy = 'Admin' } = body;
-      if (!key || payload === undefined) {
+      const keyStr = String(key || '');
+      if (!keyStr || payload === undefined) {
         return new Response(
           JSON.stringify({ ok: false, error: 'key and payload are required.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      if (!Object.prototype.hasOwnProperty.call(SECTION_FOLDER_MAP, keyStr)) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Unsupported sync key.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-      const targetSubfolder = SECTION_FOLDER_MAP[String(key)] || '06_Website_Data_Sync';
+      const targetSubfolder = SECTION_FOLDER_MAP[keyStr];
       const folderId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, targetSubfolder);
-      const cleanKey = String(key).replace(/[^A-Za-z0-9._-]/g, '_');
+      const cleanKey = keyStr.replace(/[^A-Za-z0-9._-]/g, '_');
       const jsonText = JSON.stringify(
         {
           key: cleanKey,
@@ -331,12 +397,13 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ ok: false, error: `Unknown action "${action}"` }),
+      JSON.stringify({ ok: false, error: 'Unknown action.' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err: any) {
+    console.error('box-sync error:', err);
     return new Response(
-      JSON.stringify({ ok: false, error: err?.message || 'Box sync error' }),
+      JSON.stringify({ ok: false, error: 'Box sync operation failed.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

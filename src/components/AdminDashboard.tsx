@@ -12,6 +12,7 @@ interface AdminDashboardProps {
   auditLogs: AuditLog[];
   onClearLogs: () => void;
   onOpenCustomizer?: () => void;
+  onSyncCloud?: () => Promise<void> | void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -23,16 +24,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   auditLogs,
   onClearLogs,
   onOpenCustomizer,
+  onSyncCloud,
 }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'box' | 'logs'>('users');
   const [syncLoading, setSyncLoading] = useState(false);
 
-  const triggerSync = () => {
+  const triggerSync = async () => {
     setSyncLoading(true);
-    setTimeout(() => {
+    try {
+      if (onSyncCloud) {
+        await onSyncCloud();
+        alert('System Sync Complete!\n- Pulled latest shared database state from Supabase Cloud');
+      } else {
+        alert('Cloud sync handler unavailable.');
+      }
+    } catch {
+      alert('Cloud sync encountered an error. Check your network connection and permissions.');
+    } finally {
       setSyncLoading(false);
-      alert('System Sync Complete!\n- Synced publications with Google Scholar\n- Refreshed database roles and access permissions');
-    }, 1000);
+    }
   };
 
   return (

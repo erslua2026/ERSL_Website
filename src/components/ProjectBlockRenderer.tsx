@@ -18,7 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ProjectContentBlock, ProjectContentBlockType } from '../types';
-import { isBoxUrl, resolveAssetUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { isBoxUrl, resolveAssetUrl, sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
 
 export interface BlockTypeMeta {
   type: ProjectContentBlockType;
@@ -355,22 +355,22 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
               {isShowingEmbed ? 'Hide Box Preview' : 'Preview Box Folder'}
             </button>
           )}
-          {boxLink && (
+          {boxLink && sanitizeExternalUrl(boxLink) && (
             <a
-              href={boxLink}
+              href={sanitizeExternalUrl(boxLink)}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="text-xs font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
             >
               <FolderGit2 className="w-3.5 h-3.5" />
               <span>Open in UA Box</span>
             </a>
           )}
-          {block.url && block.url !== boxLink && (
+          {block.url && block.url !== boxLink && sanitizeExternalUrl(block.url) && (
             <a
-              href={block.url}
+              href={sanitizeExternalUrl(block.url)}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
               style={{ backgroundColor: primaryColor }}
             >
@@ -387,7 +387,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
         </div>
       )}
 
-      {isShowingEmbed && boxLink && (
+      {isShowingEmbed && boxLink && toBoxEmbedUrl(boxLink) && (
         <div className="border border-gray-200 rounded-xl overflow-hidden bg-white mt-2">
           <div className="px-4 py-2 bg-slate-50 border-b border-gray-200 flex items-center justify-between text-xs font-bold text-slate-700">
             <span>UA Box Embedded Storage Viewer</span>

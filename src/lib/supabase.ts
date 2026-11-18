@@ -54,12 +54,15 @@ export async function fetchProfile(
         id: user.id,
         email: user.email || '',
         name: user.user_metadata?.name || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : 'Lab Member'),
-        role: isAdmin ? 'admin' : 'member',
+        role: isAdmin ? 'admin' : 'pending',
       };
-      // Auto-upsert into profiles in background if table exists
-      try {
-        Promise.resolve(supabase.from('profiles').upsert([fallbackProfile])).catch(() => {});
-      } catch {}
+      // Only create missing row when the lookup cleanly returned null (not on transient network error),
+      // and never self-promote non-admin accounts above 'pending'.
+      if (!error && !data) {
+        try {
+          Promise.resolve(supabase.from('profiles').upsert([fallbackProfile])).catch(() => { });
+        } catch { }
+      }
       return fallbackProfile;
     }
   } catch (e) {

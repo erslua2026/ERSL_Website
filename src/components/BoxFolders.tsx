@@ -3,6 +3,7 @@ import { ExternalLink, Plus, Trash2, Lock, Globe } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { User } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
+import { sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
 
 interface BoxFolder {
   id: string;
@@ -11,23 +12,6 @@ interface BoxFolder {
   share_url: string;
   visibility: 'public' | 'private';
 }
-
-// https://ua.box.com/s/abc123  ->  https://ua.app.box.com/embed/s/abc123
-const toEmbedUrl = (url: string): string => {
-  try {
-    const u = new URL(url.trim());
-    const m = u.pathname.match(/\/s\/([A-Za-z0-9]+)/);
-    if (!m) return url;
-    const host = u.hostname.includes('.app.box.com')
-      ? u.hostname
-      : u.hostname === 'app.box.com' || u.hostname === 'www.box.com' || u.hostname === 'box.com'
-        ? 'app.box.com'
-        : u.hostname.replace('.box.com', '.app.box.com');
-    return `https://${host}/embed/s/${m[1]}`;
-  } catch {
-    return url;
-  }
-};
 
 export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPassProps> = ({
   currentUser,
@@ -152,7 +136,11 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
             </div>
             {f.description && <p className="text-xs text-gray-500 mt-1">{f.description}</p>}
             <div className="mt-3 flex items-center justify-between text-xs">
-              <a href={f.share_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 font-semibold inline-flex items-center gap-1 hover:underline"><ExternalLink className="w-3 h-3" /> Open in Box</a>
+              {sanitizeExternalUrl(f.share_url) ? (
+                <a href={sanitizeExternalUrl(f.share_url)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 font-semibold inline-flex items-center gap-1 hover:underline"><ExternalLink className="w-3 h-3" /> Open in Box</a>
+              ) : (
+                <span className="text-gray-400 italic">Invalid Box link</span>
+              )}
               {isAdmin && <button onClick={e => { e.stopPropagation(); remove(f); }} className="text-red-500 p-1 hover:bg-red-50 rounded cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
             </div>
           </div>
@@ -163,7 +151,13 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
       {current && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-2 border-b border-gray-100 text-xs font-bold text-gray-600">{current.name}</div>
-          <iframe title={current.name} src={toEmbedUrl(current.share_url)} className="w-full h-[600px]" allowFullScreen />
+          {toBoxEmbedUrl(current.share_url) ? (
+            <iframe title={current.name} src={toBoxEmbedUrl(current.share_url)} className="w-full h-[600px]" allowFullScreen />
+          ) : (
+            <div className="p-8 text-center text-xs text-amber-700 bg-amber-50">
+              Preview unavailable: only verified <code>box.com</code> / <code>boxcloud.com</code> URLs can be embedded.
+            </div>
+          )}
           <p className="text-[11px] text-gray-400 p-2">If the folder shows a sign-in prompt or is blank, the Box link requires a UA login or embedding is disabled — use “Open in Box”.</p>
         </div>
       )}

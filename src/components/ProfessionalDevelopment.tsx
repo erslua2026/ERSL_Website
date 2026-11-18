@@ -8,6 +8,8 @@ import {
 import type { User as UserType } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { getCloudData, setCloudData } from '../lib/cloudStore';
+import { supabase } from '../lib/supabase';
+import { sanitizeExternalUrl } from '../lib/boxUtils';
 import {
   initialProfSubSections, initialProfLinks, ProfSubSection, ProfResourceLink
 } from '../data/professionalHubData';
@@ -429,35 +431,106 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
   const [linkBoxUrl, setLinkBoxUrl] = useState('');
   const [linkTags, setLinkTags] = useState('');
 
-  // Hydrate posts and sub-section hub from cloud on mount
+  const lastLocalEditAtRef = useRef<number>(0);
+
+  // Merge helper for concurrent edits on subSections & resourceLinks
+  const mergeHubLists = <T extends { id: string }>(cloudList: T[] | undefined, localList: T[]): T[] => {
+    if (!Array.isArray(cloudList) || cloudList.length === 0) return localList;
+    const map = new Map<string, T>();
+    cloudList.forEach(item => map.set(item.id, item));
+    localList.forEach(item => {
+      if (!map.has(item.id)) map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  };
+
+  // Hydrate posts and sub-section hub from cloud + Realtime sync for concurrent members
   useEffect(() => {
-    getCloudData<MentorshipPost[]>('ersl_professional_posts').then(({ data }) => {
-      if (Array.isArray(data) && data.length > 0) {
-        setPosts(data);
-        try { localStorage.setItem('ersl_professional_posts', JSON.stringify(data)); } catch {}
+    const refreshFromCloud = (force = false) => {
+      if (!force && Date.now() - lastLocalEditAtRef.current < 4000) return;
+
+      getCloudData<MentorshipPost[]>('ersl_professional_posts').then(({ data }) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setPosts(data);
+          try { localStorage.setItem('ersl_professional_posts', JSON.stringify(data)); } catch {}
+        }
+      });
+
+      getCloudData<{ subSections?: ProfSubSection[]; links?: ProfResourceLink[] }>('ersl_professional_hub').then(({ data }) => {
+        if (!data) return;
+        if (Array.isArray(data.subSections) && data.subSections.length > 0) {
+          setSubSections(data.subSections);
+          try { localStorage.setItem('ersl_prof_subsections', JSON.stringify(data.subSections)); } catch {}
+        }
+        if (Array.isArray(data.links) && data.links.length > 0) {
+          setResourceLinks(data.links);
+          try { localStorage.setItem('ersl_prof_links', JSON.stringify(data.links)); } catch {}
+        }
+      });
+    };
+
+    refreshFromCloud(true);
+
+    const onFocus = () => refreshFromCloud(false);
+    window.addEventListener('focus', onFocus);
+
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel('ersl-professional-hub-realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'reservoir_matrix' },
+          (payload: any) => {
+            const changedId = payload?.new?.id || payload?.old?.id;
+            if (changedId !== 'ersl_professional_hub' && changedId !== 'ersl_professional_posts') return;
+            refreshFromCloud(false);
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      if (supabase && channel) {
+        supabase.removeChannel(channel);
       }
-    });
-    getCloudData<{ subSections?: ProfSubSection[]; links?: ProfResourceLink[] }>('ersl_professional_hub').then(({ data }) => {
-      if (!data) return;
-      if (Array.isArray(data.subSections) && data.subSections.length > 0) {
-        setSubSections(data.subSections);
-        try { localStorage.setItem('ersl_prof_subsections', JSON.stringify(data.subSections)); } catch {}
-      }
-      if (Array.isArray(data.links) && data.links.length > 0) {
-        setResourceLinks(data.links);
-        try { localStorage.setItem('ersl_prof_links', JSON.stringify(data.links)); } catch {}
-      }
-    });
+    };
   }, []);
 
-  const syncHubToCloud = (nextSubSections: ProfSubSection[], nextLinks: ProfResourceLink[]) => {
+  const syncHubToCloud = async (
+    nextSubSections: ProfSubSection[],
+    nextLinks: ProfResourceLink[],
+    options?: { deletedSubId?: string; deletedLinkId?: string }
+  ) => {
+    lastLocalEditAtRef.current = Date.now();
     try {
       localStorage.setItem('ersl_prof_subsections', JSON.stringify(nextSubSections));
       localStorage.setItem('ersl_prof_links', JSON.stringify(nextLinks));
     } catch {}
-    setCloudData('ersl_professional_hub', { subSections: nextSubSections, links: nextLinks }, {
-      updatedBy: currentUser?.name || 'Lab Member'
-    }).catch(() => {});
+
+    try {
+      const { data: latestCloud } = await getCloudData<{ subSections?: ProfSubSection[]; links?: ProfResourceLink[] }>('ersl_professional_hub');
+      let finalSubs = options?.deletedSubId
+        ? nextSubSections
+        : mergeHubLists(latestCloud?.subSections, nextSubSections);
+      let finalLinks = options?.deletedLinkId
+        ? nextLinks
+        : mergeHubLists(latestCloud?.links, nextLinks);
+
+      if (options?.deletedSubId) {
+        finalSubs = finalSubs.filter(s => s.id !== options.deletedSubId);
+      }
+      if (options?.deletedLinkId) {
+        finalLinks = finalLinks.filter(l => l.id !== options.deletedLinkId);
+      }
+
+      await setCloudData(
+        'ersl_professional_hub',
+        { subSections: finalSubs, links: finalLinks },
+        { updatedBy: currentUser?.name || currentUser?.email || 'Lab Member' }
+      );
+    } catch {}
   };
 
   const handleAddSubSection = () => {
@@ -484,7 +557,7 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
     setSubSections(nextSubs);
     setResourceLinks(nextLinks);
     if (activeSubSectionId === sub.id) setActiveSubSectionId('guides');
-    syncHubToCloud(nextSubs, nextLinks);
+    syncHubToCloud(nextSubs, nextLinks, { deletedSubId: sub.id });
   };
 
   const openLinkModal = (existing?: ProfResourceLink) => {
@@ -524,15 +597,16 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
     if (!confirm('Delete this resource link?')) return;
     const nextLinks = resourceLinks.filter(l => l.id !== id);
     setResourceLinks(nextLinks);
-    syncHubToCloud(subSections, nextLinks);
+    syncHubToCloud(subSections, nextLinks, { deletedLinkId: id });
   };
 
   const handleDeletePost = (id: string, title: string) => {
     if (!confirm(`Delete mentorship guide "${title}"?`)) return;
+    lastLocalEditAtRef.current = Date.now();
     const updated = posts.filter(p => p.id !== id);
     setPosts(updated);
     try { localStorage.setItem('ersl_professional_posts', JSON.stringify(updated)); } catch {}
-    setCloudData('ersl_professional_posts', updated, { updatedBy: currentUser?.name || 'Admin' }).catch(() => {});
+    setCloudData('ersl_professional_posts', updated, { updatedBy: currentUser?.name || currentUser?.email || 'Admin' }).catch(() => {});
   };
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPost, setSelectedPost] = useState<MentorshipPost | null>(null);
@@ -575,8 +649,9 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
   }, [posts, activeCategory, searchQuery]);
 
   const handleDownload = (att: GuideAttachment) => {
+    const safeUrl = att.url ? sanitizeExternalUrl(att.url) : '';
     if (att.url) {
-      window.open(att.url, '_blank');
+      if (safeUrl) window.open(safeUrl, '_blank', 'noopener,noreferrer');
       return;
     }
     // Simulate generation and download of formatted pack
@@ -669,10 +744,20 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
       tags: newTags.split(',').map(t => t.trim()).filter(Boolean)
     };
 
+    lastLocalEditAtRef.current = Date.now();
     const updated = [newPost, ...posts];
     setPosts(updated);
     try { localStorage.setItem('ersl_professional_posts', JSON.stringify(updated)); } catch {}
-    setCloudData('ersl_professional_posts', updated, { updatedBy: currentUser?.name || 'Lab Mentor' }).catch(() => {});
+    (async () => {
+      try {
+        const { data: latestCloud } = await getCloudData<MentorshipPost[]>('ersl_professional_posts');
+        const basePosts = Array.isArray(latestCloud) ? latestCloud : posts;
+        const mergedPosts = basePosts.some(p => p.id === newPost.id) ? basePosts : [newPost, ...basePosts];
+        setPosts(mergedPosts);
+        try { localStorage.setItem('ersl_professional_posts', JSON.stringify(mergedPosts)); } catch {}
+        await setCloudData('ersl_professional_posts', mergedPosts, { updatedBy: currentUser?.name || currentUser?.email || 'Lab Mentor' });
+      } catch {}
+    })();
 
     // Reset Form
     setNewTitle('');
@@ -962,22 +1047,22 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
                             </div>
                           )}
                           <div className="flex flex-wrap gap-2">
-                            {item.url && (
+                            {item.url && sanitizeExternalUrl(item.url) && (
                               <a
-                                href={item.url}
+                                href={sanitizeExternalUrl(item.url)}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 <span>Open Link</span>
                               </a>
                             )}
-                            {item.boxUrl && (
+                            {item.boxUrl && sanitizeExternalUrl(item.boxUrl) && (
                               <a
-                                href={item.boxUrl}
+                                href={sanitizeExternalUrl(item.boxUrl)}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center justify-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors"
                               >
                                 <FolderGit2 className="w-3.5 h-3.5" />

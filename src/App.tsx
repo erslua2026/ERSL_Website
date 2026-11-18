@@ -32,7 +32,7 @@ import { ThemeSubPage } from './components/ThemeSubPage';
 import { InstrumentSubPage } from './components/InstrumentSubPage';
 import { CustomPageView } from './components/CustomPageView';
 import { SiteCustomizerModal } from './components/SiteCustomizerModal';
-import { resolveAssetUrl } from './lib/boxUtils';
+import { resolveAssetUrl, sanitizeExternalUrl } from './lib/boxUtils';
 import { LoginModal } from './components/LoginModal';
 import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Workplan } from './components/Workplan';
@@ -541,12 +541,17 @@ export default function App() {
     notifyCloudResult(results.every(Boolean), 'Update');
   };
 
-  // Hydrate all sections in ONE batched Supabase query (no persistent Realtime WebSocket cost)
-  const hydrateFromCloud = async (showToast = false) => {
+  const currentUserRef = useRef<User | null>(currentUser);
+  currentUserRef.current = currentUser;
+
+  // Hydrate sections cleanly: public sections for visitors, member/admin keys only when authenticated
+  const hydrateFromCloud = async (showToast = false, userOverride?: User | null) => {
     if (!supabase) return;
     if (showToast) setCloudStatus({ type: 'syncing', text: 'Refreshing from ERSL Cloud...' });
 
-    const keys = [
+    const effectiveUser = userOverride !== undefined ? userOverride : currentUserRef.current;
+
+    const PUBLIC_KEYS = [
       'ersl_site_content',
       'ersl_sec_publications',
       'ersl_sec_software',
@@ -556,11 +561,20 @@ export default function App() {
       'ersl_sec_themes',
       'ersl_sec_projects',
       'ersl_sec_news',
+      'ersl_site_config',
+      'ersl_custom_pages',
+    ];
+    const MEMBER_KEYS = [
       'ersl_sec_teaching',
       'ersl_sec_bulletins',
       'ersl_sec_bulletin_folders',
-      'ersl_site_config',
-      'ersl_custom_pages',
+    ];
+    const ADMIN_KEYS = ['ersl_sec_auditlogs'];
+
+    const keys = [
+      ...PUBLIC_KEYS,
+      ...(effectiveUser ? MEMBER_KEYS : []),
+      ...(effectiveUser?.role === 'Admin' ? ADMIN_KEYS : []),
     ];
 
     const byKey: Record<string, any> = {};
@@ -657,30 +671,37 @@ export default function App() {
         }
       } catch { }
     }
-    const tch = pick<any[]>('ersl_sec_teaching', 'teaching');
-    if (tch && (showToast || !isRecentlyWritten('ersl_sec_teaching'))) {
-      setTeachingList(tch);
-      try { localStorage.setItem('ersl_teaching', JSON.stringify(tch)); } catch { }
-    }
-    const bul = pick<BulletinItem[]>('ersl_sec_bulletins', 'bulletins', true);
-    if (bul && (showToast || !isRecentlyWritten('ersl_sec_bulletins'))) {
-      setBulletins(bul);
-      try { localStorage.setItem('ersl_bulletins', JSON.stringify(bul)); } catch { }
-    } else if (byKey['ersl_sec_bulletins'] === undefined && currentUser && currentUser.role !== 'Viewer') {
-      try {
-        const localBullRaw = localStorage.getItem('ersl_bulletins');
-        if (localBullRaw) {
-          const parsedBull = JSON.parse(localBullRaw);
-          if (Array.isArray(parsedBull) && parsedBull.length > 0) {
-            syncSiteContentToCloud({ bulletins: parsedBull });
+    if (effectiveUser) {
+      const tch = pick<any[]>('ersl_sec_teaching', 'teaching');
+      if (tch && (showToast || !isRecentlyWritten('ersl_sec_teaching'))) {
+        setTeachingList(tch);
+        try { localStorage.setItem('ersl_teaching', JSON.stringify(tch)); } catch { }
+      }
+      const bul = pick<BulletinItem[]>('ersl_sec_bulletins', 'bulletins', true);
+      if (bul && (showToast || !isRecentlyWritten('ersl_sec_bulletins'))) {
+        setBulletins(bul);
+        try { localStorage.setItem('ersl_bulletins', JSON.stringify(bul)); } catch { }
+      } else if (byKey['ersl_sec_bulletins'] === undefined && effectiveUser.role !== 'Viewer') {
+        try {
+          const localBullRaw = localStorage.getItem('ersl_bulletins');
+          if (localBullRaw) {
+            const parsedBull = JSON.parse(localBullRaw);
+            if (Array.isArray(parsedBull) && parsedBull.length > 0) {
+              syncSiteContentToCloud({ bulletins: parsedBull });
+            }
           }
-        }
-      } catch { }
+        } catch { }
+      }
+      const fld = pick<string[]>('ersl_sec_bulletin_folders', 'bulletinFolders');
+      if (fld && (showToast || !isRecentlyWritten('ersl_sec_bulletin_folders'))) {
+        setBulletinFolders(fld);
+        try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(fld)); } catch { }
+      }
     }
-    const fld = pick<string[]>('ersl_sec_bulletin_folders', 'bulletinFolders');
-    if (fld && (showToast || !isRecentlyWritten('ersl_sec_bulletin_folders'))) {
-      setBulletinFolders(fld);
-      try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(fld)); } catch { }
+
+    if (effectiveUser?.role === 'Admin' && Array.isArray(byKey['ersl_sec_auditlogs'])) {
+      setAuditLogs(byKey['ersl_sec_auditlogs']);
+      try { localStorage.setItem('ersl_auditlogs', JSON.stringify(byKey['ersl_sec_auditlogs'])); } catch { }
     }
 
     const siteCfg = byKey['ersl_site_config'] as SiteConfig | undefined;
@@ -707,10 +728,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && currentUser.role !== 'Viewer') {
-      hydrateFromCloud(false);
+    if (currentUser) {
+      hydrateFromCloud(false, currentUser);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.role]);
 
   // Real-time section listener & visibility refresh so edits made by other logged-in members appear automatically
   useEffect(() => {
@@ -772,21 +793,27 @@ export default function App() {
           }
           break;
         case 'ersl_sec_teaching':
-          if (Array.isArray(value) && value.length > 0) {
+          if (currentUserRef.current && Array.isArray(value) && value.length > 0) {
             setTeachingList(value);
             try { localStorage.setItem('ersl_teaching', JSON.stringify(value)); } catch { }
           }
           break;
         case 'ersl_sec_bulletins':
-          if (Array.isArray(value)) {
+          if (currentUserRef.current && Array.isArray(value)) {
             setBulletins(value);
             try { localStorage.setItem('ersl_bulletins', JSON.stringify(value)); } catch { }
           }
           break;
         case 'ersl_sec_bulletin_folders':
-          if (Array.isArray(value) && value.length > 0) {
+          if (currentUserRef.current && Array.isArray(value) && value.length > 0) {
             setBulletinFolders(value);
             try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_auditlogs':
+          if (currentUserRef.current?.role === 'Admin' && Array.isArray(value)) {
+            setAuditLogs(value);
+            try { localStorage.setItem('ersl_auditlogs', JSON.stringify(value)); } catch { }
           }
           break;
         case 'ersl_site_config':
@@ -1319,7 +1346,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [themes.length]);
 
-  // Helper: Log administrative/edit actions to audit trail
+  // Helper: Log administrative/edit actions to audit trail (Admin-only cloud persistence)
   const appendAuditLog = (action: string, target: string) => {
     const newLog: AuditLog = {
       id: `log-${Date.now()}`,
@@ -1329,7 +1356,13 @@ export default function App() {
       action,
       target
     };
-    setAuditLogs(prev => [newLog, ...prev]);
+    setAuditLogs(prev => {
+      const next = [newLog, ...prev].slice(0, 200);
+      if (currentUser?.role === 'Admin') {
+        setCloudData('ersl_sec_auditlogs', next, { updatedBy: currentUser.name || 'Admin' }).catch(() => {});
+      }
+      return next;
+    });
   };
 
   // Login handler from SSO Popup
@@ -1384,6 +1417,31 @@ export default function App() {
     setCurrentUser(null);
     setEditMode(false);
     setActiveTab(prev => (isTabPublic(prev) ? prev : 'home'));
+    setBulletins([]);
+    setTeachingList([]);
+    setAuditLogs([]);
+    setInboxEntries([]);
+
+    // Wipe private workspace / admin caches from browser storage on logout
+    const PRIVATE_LOCAL_KEYS = [
+      'ersl_tasks',
+      'ersl_workplan_comments',
+      'ersl_reservoir_rounds',
+      'ersl_reservoir_active_round',
+      'ersl_bulletins',
+      'ersl_bulletin_folders',
+      'ersl_teaching',
+      'ersl_auditlogs',
+      'ersl_all_users',
+      'ersl_inbox',
+      'ersl_prof_subsections',
+      'ersl_prof_links',
+      'ersl_professional_posts',
+      'ersl_boxfiles',
+    ];
+    try {
+      PRIVATE_LOCAL_KEYS.forEach(k => localStorage.removeItem(k));
+    } catch {}
   };
 
   // Role modification inside Admin Panel (syncs with Active Directory)
@@ -4107,11 +4165,11 @@ export default function App() {
 
                                   <div className="border-t border-gray-100 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-400 font-bold">
                                     <span>POSTED BY: {b.sender}</span>
-                                    {b.link ? (
+                                    {b.link && sanitizeExternalUrl(b.link) ? (
                                       <a
-                                        href={b.link}
+                                        href={sanitizeExternalUrl(b.link)}
                                         target="_blank"
-                                        rel="noreferrer"
+                                        rel="noopener noreferrer"
                                         style={{ color: subheadingAccent }}
                                         className="hover:underline inline-flex items-center gap-1"
                                       >
@@ -4389,8 +4447,12 @@ export default function App() {
                         onDeleteUser={handleAdminDeleteUser}
                         auditLogs={auditLogs}
                         onOpenCustomizer={() => setCustomizerOpen(true)}
+                        onSyncCloud={() => hydrateFromCloud(true)}
                         onClearLogs={() => {
                           setAuditLogs([]);
+                          if (currentUser?.role === 'Admin') {
+                            setCloudData('ersl_sec_auditlogs', [], { updatedBy: currentUser.name || 'Admin' }).catch(() => {});
+                          }
                           appendAuditLog('CLEAR_AUDIT_LOGS', 'Wiped operational terminal log history');
                         }}
                       />

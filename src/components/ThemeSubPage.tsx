@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { Project, Publication, ResearchTheme } from '../types';
-import { resolveAssetUrl } from '../lib/boxUtils';
+import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
 import { ImageUploadField } from './ImageUploadField';
 import { parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 
@@ -573,11 +573,11 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
 
                   {(pub.doi || pub.scholarUrl) && (
                     <div className="pt-2 flex flex-wrap gap-3">
-                      {pub.doi && (
+                      {pub.doi && sanitizeExternalUrl(pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`) && (
                         <a
-                          href={pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`}
+                          href={sanitizeExternalUrl(pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`)}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
                           style={{ color: primaryColor }}
                         >
@@ -585,11 +585,11 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       )}
-                      {pub.scholarUrl && (
+                      {pub.scholarUrl && sanitizeExternalUrl(pub.scholarUrl) && (
                         <a
-                          href={pub.scholarUrl}
+                          href={sanitizeExternalUrl(pub.scholarUrl)}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 hover:underline"
                         >
                           <span>Google Scholar</span>

@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { Instrument, InstrumentResourceItem, User } from '../types';
-import { resolveAssetUrl } from '../lib/boxUtils';
+import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
 import { ImageUploadField } from './ImageUploadField';
 import { BoxUploadButton } from './BoxUploadButton';
 
@@ -430,16 +430,20 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
 
                     <div className="pt-2 border-t border-gray-200/70">
                       {canAccessUrl ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-extrabold hover:underline"
-                          style={{ color: primaryColor }}
-                        >
-                          <span>Open {item.category}</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        sanitizeExternalUrl(item.url) ? (
+                          <a
+                            href={sanitizeExternalUrl(item.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-extrabold hover:underline"
+                            style={{ color: primaryColor }}
+                          >
+                            <span>Open {item.category}</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Invalid resource URL</span>
+                        )
                       ) : (
                         <button
                           type="button"

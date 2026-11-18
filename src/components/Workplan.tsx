@@ -424,7 +424,7 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
 
     const targetOwner = isAdmin ? form.owner_id : (currentUser?.id || form.owner_id);
     const assignedMember = people.find(p => p.id === targetOwner);
-    const recipientEmail = assignedMember?.email || 'npurushothaman@ua.edu';
+    const recipientEmail = assignedMember?.email?.trim() || '';
     const recipientName = assignedMember?.name || 'Lab Member';
 
     const newTask: Task = {
@@ -454,42 +454,22 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       setComments(mergedComments);
     } catch {}
 
-    // Build standard, professional email content
-    const mailSubject = `[ERSL Lab Workplan] New Research Milestone Assigned: ${form.title}`;
-    const mailBody = `Hello ${recipientName},\n\nA new research milestone has been assigned to you by Dr. Hongxing Liu on the ERSL Lab Workplan:\n\n• Task: ${form.title}\n• Target Due Date: ${form.due_date || 'No fixed deadline'}\n• Deliverables & Scope: ${form.description || 'Milestone tracking item.'}\n\nPlease visit the ERSL Portal to review instructions and post progress updates:\nhttps://ersl.pages.dev/\n\nBest regards,\nDr. Hongxing Liu\nEnvironmental Remote Sensing Laboratory (ERSL)\nDepartment of Geography and the Environment\nThe University of Alabama`;
-    const mailtoUrl = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
-
-    // Set interactive 1-click Outlook/Gmail email prompt
-    if (isAdmin && assignedMember) {
+    // Set interactive 1-click Outlook/Gmail email prompt (no client-side email API key)
+    if (isAdmin && assignedMember && recipientEmail) {
+      const mailSubject = `[ERSL Lab Workplan] New Research Milestone Assigned: ${form.title}`;
+      const mailBody = `Hello ${recipientName},\n\nA new research milestone has been assigned to you by Dr. Hongxing Liu on the ERSL Lab Workplan:\n\n• Task: ${form.title}\n• Target Due Date: ${form.due_date || 'No fixed deadline'}\n• Deliverables & Scope: ${form.description || 'Milestone tracking item.'}\n\nPlease visit the ERSL Portal to review instructions and post progress updates:\nhttps://ersl.pages.dev/\n\nBest regards,\nDr. Hongxing Liu\nEnvironmental Remote Sensing Laboratory (ERSL)\nDepartment of Geography and the Environment\nThe University of Alabama`;
+      const mailtoUrl = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
       setAssignedEmailPrompt({
         recipientName,
-        recipientEmail: recipientEmail,
+        recipientEmail,
         taskTitle: form.title,
         dueDate: form.due_date || 'No fixed deadline',
         description: form.description,
         mailtoUrl
       });
       setNotificationStatus(`Milestone assigned to ${recipientName} (${recipientEmail}). Click below to dispatch email!`);
-
-      // Attempt automated background dispatch via webhook or Web3Forms
-      try {
-        await fetch('https://api.web3forms.com/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            access_key: 'b289c8a1-63ee-4be7-8a62-a5f1c93a8d9a',
-            subject: mailSubject,
-            from_name: 'ERSL Lab Workplan (Dr. Hongxing Liu)',
-            to: recipientEmail,
-            message: mailBody,
-            recipient: recipientEmail,
-            task: form.title,
-            due: form.due_date
-          })
-        });
-      } catch {
-        // Fallback provided by mailto
-      }
+    } else if (isAdmin && assignedMember) {
+      setNotificationStatus(`Milestone assigned to ${recipientName}. (No email address on file for this member.)`);
     }
 
     setForm({ ...form, title: '', description: '', due_date: '' });
