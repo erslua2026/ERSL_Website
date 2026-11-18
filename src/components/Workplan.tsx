@@ -165,6 +165,11 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
 
   // Track alias IDs (e.g. user-naveen, uuid, person-purushothaman) mapping to canonical Profile ID
   const [aliasMap, setAliasMap] = useState<Record<string, string>>({});
+  const lastLocalEditAtRef = useRef<number>(0);
+  const tasksRef = useRef<Task[]>(tasks);
+  tasksRef.current = tasks;
+  const commentsRef = useRef<Record<string, Comment[]>>(comments);
+  commentsRef.current = comments;
 
   const load = useCallback(async () => {
     // 1. Load local tasks backup if available
@@ -309,6 +314,44 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
 
   useEffect(() => { load(); }, [load]);
 
+  // Real-time sync + focus refresh so multiple logged-in members see tasks & comments live
+  useEffect(() => {
+    if (!supabase) return;
+    let isMounted = true;
+    const channel = supabase
+      .channel('ersl_workplan_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservoir_matrix', filter: 'id=eq.ersl_workplan_matrix' },
+        (payload: any) => {
+          if (!isMounted || payload?.new?.id !== 'ersl_workplan_matrix') return;
+          if (Date.now() - lastLocalEditAtRef.current < 3500) return;
+          const matrix = payload?.new?.rounds;
+          if (matrix?.tasks && Array.isArray(matrix.tasks)) {
+            setTasks(matrix.tasks);
+            try { localStorage.setItem('ersl_tasks', JSON.stringify(matrix.tasks)); } catch {}
+          }
+          if (matrix?.comments && typeof matrix.comments === 'object' && !Array.isArray(matrix.comments)) {
+            setComments(matrix.comments);
+          }
+        }
+      )
+      .subscribe();
+
+    const handleFocus = () => {
+      if (isMounted && Date.now() - lastLocalEditAtRef.current > 4000) {
+        load();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+      supabase?.removeChannel(channel);
+    };
+  }, [load]);
+
   const nameOf = (id: string) => {
     const canonicalId = aliasMap[id] || id;
     const p = people.find(item => item.id === id || item.id === canonicalId);
@@ -350,6 +393,29 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
     });
   }, [people, tasks, aliasMap]);
 
+  const mergeCommentMaps = (
+    cloudMap?: Record<string, Comment[]> | null,
+    localMap?: Record<string, Comment[]> | null
+  ): Record<string, Comment[]> => {
+    const out: Record<string, Comment[]> = {};
+    const allKeys = new Set([
+      ...Object.keys(cloudMap && typeof cloudMap === 'object' ? cloudMap : {}),
+      ...Object.keys(localMap && typeof localMap === 'object' ? localMap : {}),
+    ]);
+    allKeys.forEach(tid => {
+      const a = Array.isArray(cloudMap?.[tid]) ? cloudMap![tid] : [];
+      const b = Array.isArray(localMap?.[tid]) ? localMap![tid] : [];
+      const byId = new Map<string, Comment>();
+      [...a, ...b].forEach(c => {
+        if (c && c.id) byId.set(c.id, c);
+      });
+      out[tid] = Array.from(byId.values()).sort(
+        (x, y) => new Date(x.created_at).getTime() - new Date(y.created_at).getTime()
+      );
+    });
+    return out;
+  };
+
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -370,15 +436,23 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       status: 'not_started'
     };
 
-    // Optimistic local add & guaranteed cloud sync
+    // Optimistic local add & merge-safe cloud sync (never drops concurrent members' tasks/comments)
+    lastLocalEditAtRef.current = Date.now();
     const nextTasks = [newTask, ...tasks];
     setTasks(nextTasks);
     try {
       localStorage.setItem('ersl_tasks', JSON.stringify(nextTasks));
     } catch {}
 
-    // Persist to Supabase cloud database
-    setCloudData('ersl_workplan_matrix', { tasks: nextTasks, comments }, { updatedBy: currentUser?.name || currentUser?.email }).catch(() => {});
+    try {
+      const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
+      const baseTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : nextTasks;
+      const mergedTasks = baseTasks.some(t => t.id === newTask.id) ? baseTasks : [newTask, ...baseTasks];
+      const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
+      await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name || currentUser?.email });
+      setTasks(mergedTasks);
+      setComments(mergedComments);
+    } catch {}
 
     // Build standard, professional email content
     const mailSubject = `[ERSL Lab Workplan] New Research Milestone Assigned: ${form.title}`;
@@ -420,10 +494,10 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
 
     setForm({ ...form, title: '', description: '', due_date: '' });
     setIsSubmitting(false);
-    load();
   };
 
   const update = async (id: string, patch: Partial<Task>) => {
+    lastLocalEditAtRef.current = Date.now();
     const updated = tasks.map(t => t.id === id ? { ...t, ...patch } : t);
     setTasks(updated);
     try { localStorage.setItem('ersl_tasks', JSON.stringify(updated)); } catch {}
@@ -432,17 +506,34 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       setActiveTaskModal(prev => prev ? { ...prev, ...patch } : null);
     }
 
-    setCloudData('ersl_workplan_matrix', { tasks: updated, comments }, { updatedBy: currentUser?.name }).catch(() => {});
+    try {
+      const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
+      const baseTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : updated;
+      const mergedTasks = baseTasks.map(t => (t.id === id ? { ...t, ...patch } : t));
+      const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
+      await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+    } catch {
+      setCloudData('ersl_workplan_matrix', { tasks: updated, comments: commentsRef.current }, { updatedBy: currentUser?.name }).catch(() => {});
+    }
   };
 
   const remove = async (t: Task) => {
     if (!confirm(`Delete task "${t.title}"?`)) return;
+    lastLocalEditAtRef.current = Date.now();
     const updated = tasks.filter(item => item.id !== t.id);
     setTasks(updated);
     try { localStorage.setItem('ersl_tasks', JSON.stringify(updated)); } catch {}
     if (activeTaskModal?.id === t.id) setActiveTaskModal(null);
 
-    setCloudData('ersl_workplan_matrix', { tasks: updated, comments }, { updatedBy: currentUser?.name }).catch(() => {});
+    try {
+      const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
+      const baseTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : updated;
+      const mergedTasks = baseTasks.filter(item => item.id !== t.id);
+      const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
+      await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+    } catch {
+      setCloudData('ersl_workplan_matrix', { tasks: updated, comments: commentsRef.current }, { updatedBy: currentUser?.name }).catch(() => {});
+    }
   };
 
   const loadComments = useCallback(async (taskId: string) => {
@@ -497,7 +588,8 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       created_at: new Date().toISOString()
     };
 
-    // Optimistic UI update and cloud persistence
+    // Optimistic UI update and merge-safe cloud persistence
+    lastLocalEditAtRef.current = Date.now();
     const current = comments[taskId] || [];
     const updated = [...current, newComment];
     const updatedComments = { ...comments, [taskId]: updated };
@@ -506,7 +598,14 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       localStorage.setItem(`ersl_comments_${taskId}`, JSON.stringify(updated));
     } catch {}
 
-    setCloudData('ersl_workplan_matrix', { tasks, comments: updatedComments }, { updatedBy: currentUser?.name }).catch(() => {});
+    try {
+      const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
+      const mergedTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : tasksRef.current;
+      const mergedComments = mergeCommentMaps(latestCloud?.comments, updatedComments);
+      await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+    } catch {
+      setCloudData('ersl_workplan_matrix', { tasks: tasksRef.current, comments: updatedComments }, { updatedBy: currentUser?.name }).catch(() => {});
+    }
   };
 
   // Role Scoping: Admin sees filtered selection (or all), members ONLY see their own tasks

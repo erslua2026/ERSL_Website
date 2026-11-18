@@ -18,7 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ProjectContentBlock, ProjectContentBlockType } from '../types';
-import { isBoxUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { isBoxUrl, resolveAssetUrl, toBoxEmbedUrl } from '../lib/boxUtils';
 
 export interface BlockTypeMeta {
   type: ProjectContentBlockType;
@@ -257,16 +257,16 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
   }
 
   if (block.type === 'image') {
-    const imgSrc = block.url || block.boxUrl || '';
+    const imgSrc = resolveAssetUrl(block.url || block.boxUrl || '');
     return (
-      <figure className="rounded-xl overflow-hidden border border-gray-200 bg-slate-50">
+      <figure className="rounded-xl overflow-hidden border border-gray-200 bg-slate-900">
         {imgSrc && (
           <img
             src={imgSrc}
             alt={block.caption || block.title}
             loading="lazy"
             referrerPolicy="no-referrer"
-            className="w-full max-h-80 object-cover"
+            className="w-full max-h-96 object-contain mx-auto"
           />
         )}
         <figcaption className="p-3 bg-white border-t border-gray-100 flex items-start justify-between gap-2">

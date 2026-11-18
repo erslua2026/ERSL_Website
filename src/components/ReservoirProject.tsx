@@ -650,6 +650,7 @@ export const ReservoirProject: React.FC<
   // 3. Responds to state requests so newly opened admin tabs receive latest progress.
   // 4. Polls periodically and on window focus to stay completely synchronized.
   const [isCloudFetching, setIsCloudFetching] = useState(false);
+  const lastLocalEditAtRef = useRef<number>(0);
 
   // =========================================================================
   // CLOUD PERSISTENCE & SYNCHRONIZATION (DATABASE-FIRST ARCHITECTURE)
@@ -659,6 +660,8 @@ export const ReservoirProject: React.FC<
   // =========================================================================
   const fetchCloudData = async (showFeedback = false) => {
     if (!supabase) return;
+    if (!showFeedback && Date.now() - lastLocalEditAtRef.current < 4000) return;
+    const fetchStartedAt = Date.now();
     setIsCloudFetching(true);
     try {
       const { data, error } = await supabase
@@ -666,6 +669,10 @@ export const ReservoirProject: React.FC<
         .select('*')
         .eq('id', 'ersl_reservoir_matrix')
         .maybeSingle();
+
+      if (!showFeedback && lastLocalEditAtRef.current > fetchStartedAt) {
+        return;
+      }
 
       if (!error && data && data.rounds && Array.isArray(data.rounds)) {
         const sanitized = sanitizeRounds(data.rounds);
@@ -796,6 +803,7 @@ export const ReservoirProject: React.FC<
     updater: (prev: RoundRow[]) => RoundRow[],
     newActiveRound?: number
   ) => {
+    lastLocalEditAtRef.current = Date.now();
     setRounds(prev => {
       const nextRounds = updater(prev);
       roundsRef.current = nextRounds;

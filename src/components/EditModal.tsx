@@ -284,7 +284,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         });
       }
     }
-  }, [item, type, themes]);
+  }, [item, type]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

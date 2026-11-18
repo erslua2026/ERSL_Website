@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Edit, Edit2, Trash2, Calendar, FileText, Search, Download, ExternalLink,
   Mail, Users, Award, ShieldAlert, GraduationCap, Check, HelpCircle,
@@ -505,6 +505,10 @@ export default function App() {
     }
   };
 
+  const lastSectionWriteAtRef = useRef<Record<string, number>>({});
+  const isRecentlyWritten = (cloudKey: string) =>
+    Date.now() - (lastSectionWriteAtRef.current[cloudKey] || 0) < 4000;
+
   // Per-section Cloud Synchronizer: 1 single row write for ONLY the edited section (low egress, no cross-admin overwrite)
   const syncSiteContentToCloud = async (overrides?: {
     publications?: Publication[];
@@ -528,6 +532,7 @@ export default function App() {
       .map(([field, val]) => {
         const cfg = SECTION_STORAGE_KEYS[field];
         if (!cfg) return Promise.resolve(true);
+        lastSectionWriteAtRef.current[cfg.cloudKey] = Date.now();
         try { localStorage.setItem(cfg.localKey, JSON.stringify(val)); } catch { }
         return setCloudData(cfg.cloudKey, val, { updatedBy });
       });
@@ -592,27 +597,27 @@ export default function App() {
     };
 
     const pubs = pick<Publication[]>('ersl_sec_publications', 'publications');
-    if (pubs) {
+    if (pubs && (showToast || !isRecentlyWritten('ersl_sec_publications'))) {
       setPublications(pubs);
       try { localStorage.setItem('ersl_publications', JSON.stringify(pubs)); } catch { }
     }
     const soft = pick<Software[]>('ersl_sec_software', 'software');
-    if (soft) {
+    if (soft && (showToast || !isRecentlyWritten('ersl_sec_software'))) {
       setSoftwareList(soft);
       try { localStorage.setItem('ersl_software', JSON.stringify(soft)); } catch { }
     }
     const dl = pick<DataLayer[]>('ersl_sec_datalayers', 'dataLayers');
-    if (dl) {
+    if (dl && (showToast || !isRecentlyWritten('ersl_sec_datalayers'))) {
       setDataLayers(dl);
       try { localStorage.setItem('ersl_datalayers', JSON.stringify(dl)); } catch { }
     }
     const inst = pick<Instrument[]>('ersl_sec_instruments', 'instruments');
-    if (inst) {
+    if (inst && (showToast || !isRecentlyWritten('ersl_sec_instruments'))) {
       setInstruments(inst);
       try { localStorage.setItem('ersl_instruments', JSON.stringify(inst)); } catch { }
     }
     const ppl = pick<Person[]>('ersl_sec_people', 'people');
-    if (ppl) {
+    if (ppl && (showToast || !isRecentlyWritten('ersl_sec_people'))) {
       const { updatedList, graduatedNames } = applyAutoGraduation(ppl);
       setPeople(updatedList);
       try { localStorage.setItem('ersl_people', JSON.stringify(updatedList)); } catch { }
@@ -622,7 +627,7 @@ export default function App() {
       }
     }
     const thm = pick<ResearchTheme[]>('ersl_sec_themes', 'themes');
-    if (thm) {
+    if (thm && (showToast || !isRecentlyWritten('ersl_sec_themes'))) {
       const normalizedThm = normalizeThemes(thm);
       setThemes(normalizedThm);
       try { localStorage.setItem('ersl_themes', JSON.stringify(normalizedThm)); } catch { }
@@ -631,13 +636,13 @@ export default function App() {
       }
     }
     const prj = pick<Project[]>('ersl_sec_projects', 'projects');
-    if (prj) {
+    if (prj && (showToast || !isRecentlyWritten('ersl_sec_projects'))) {
       const normalizedPrj = normalizeProjects(prj);
       setProjects(normalizedPrj);
       try { localStorage.setItem('ersl_projects', JSON.stringify(normalizedPrj)); } catch { }
     }
     const nws = pick<NewsItem[]>('ersl_sec_news', 'news', true);
-    if (nws) {
+    if (nws && (showToast || !isRecentlyWritten('ersl_sec_news'))) {
       setNews(nws);
       try { localStorage.setItem('ersl_news', JSON.stringify(nws)); } catch { }
     } else if (byKey['ersl_sec_news'] === undefined && currentUser && currentUser.role !== 'Viewer') {
@@ -653,12 +658,12 @@ export default function App() {
       } catch { }
     }
     const tch = pick<any[]>('ersl_sec_teaching', 'teaching');
-    if (tch) {
+    if (tch && (showToast || !isRecentlyWritten('ersl_sec_teaching'))) {
       setTeachingList(tch);
       try { localStorage.setItem('ersl_teaching', JSON.stringify(tch)); } catch { }
     }
     const bul = pick<BulletinItem[]>('ersl_sec_bulletins', 'bulletins', true);
-    if (bul) {
+    if (bul && (showToast || !isRecentlyWritten('ersl_sec_bulletins'))) {
       setBulletins(bul);
       try { localStorage.setItem('ersl_bulletins', JSON.stringify(bul)); } catch { }
     } else if (byKey['ersl_sec_bulletins'] === undefined && currentUser && currentUser.role !== 'Viewer') {
@@ -673,20 +678,20 @@ export default function App() {
       } catch { }
     }
     const fld = pick<string[]>('ersl_sec_bulletin_folders', 'bulletinFolders');
-    if (fld) {
+    if (fld && (showToast || !isRecentlyWritten('ersl_sec_bulletin_folders'))) {
       setBulletinFolders(fld);
       try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(fld)); } catch { }
     }
 
     const siteCfg = byKey['ersl_site_config'] as SiteConfig | undefined;
-    if (siteCfg && Array.isArray(siteCfg.tabs)) {
+    if (siteCfg && Array.isArray(siteCfg.tabs) && (showToast || !isRecentlyWritten('ersl_site_config'))) {
       const merged = normalizeSiteConfig(siteCfg);
       setSiteConfig(merged);
       try { localStorage.setItem('ersl_site_config', JSON.stringify(merged)); } catch { }
     }
 
     const customPagesCloud = byKey['ersl_custom_pages'] as Record<string, CustomPageData> | undefined;
-    if (customPagesCloud && typeof customPagesCloud === 'object') {
+    if (customPagesCloud && typeof customPagesCloud === 'object' && !Array.isArray(customPagesCloud) && (showToast || !isRecentlyWritten('ersl_custom_pages'))) {
       setCustomPages(customPagesCloud);
       try { localStorage.setItem('ersl_custom_pages', JSON.stringify(customPagesCloud)); } catch { }
     }
@@ -707,7 +712,127 @@ export default function App() {
     }
   }, [currentUser?.id]);
 
+  // Real-time section listener & visibility refresh so edits made by other logged-in members appear automatically
+  useEffect(() => {
+    if (!supabase) return;
+    let mounted = true;
+
+    const applyRealtimeRow = (id: string, value: any) => {
+      if (!mounted || isRecentlyWritten(id)) return;
+      switch (id) {
+        case 'ersl_sec_publications':
+          if (Array.isArray(value) && value.length > 0) {
+            setPublications(value);
+            try { localStorage.setItem('ersl_publications', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_software':
+          if (Array.isArray(value) && value.length > 0) {
+            setSoftwareList(value);
+            try { localStorage.setItem('ersl_software', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_datalayers':
+          if (Array.isArray(value) && value.length > 0) {
+            setDataLayers(value);
+            try { localStorage.setItem('ersl_datalayers', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_instruments':
+          if (Array.isArray(value) && value.length > 0) {
+            setInstruments(value);
+            try { localStorage.setItem('ersl_instruments', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_people':
+          if (Array.isArray(value) && value.length > 0) {
+            const { updatedList } = applyAutoGraduation(value);
+            setPeople(updatedList);
+            try { localStorage.setItem('ersl_people', JSON.stringify(updatedList)); } catch { }
+          }
+          break;
+        case 'ersl_sec_themes':
+          if (Array.isArray(value) && value.length > 0) {
+            const normalizedThm = normalizeThemes(value);
+            setThemes(normalizedThm);
+            try { localStorage.setItem('ersl_themes', JSON.stringify(normalizedThm)); } catch { }
+          }
+          break;
+        case 'ersl_sec_projects':
+          if (Array.isArray(value) && value.length > 0) {
+            const normalizedPrj = normalizeProjects(value);
+            setProjects(normalizedPrj);
+            try { localStorage.setItem('ersl_projects', JSON.stringify(normalizedPrj)); } catch { }
+          }
+          break;
+        case 'ersl_sec_news':
+          if (Array.isArray(value)) {
+            setNews(value);
+            try { localStorage.setItem('ersl_news', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_teaching':
+          if (Array.isArray(value) && value.length > 0) {
+            setTeachingList(value);
+            try { localStorage.setItem('ersl_teaching', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_bulletins':
+          if (Array.isArray(value)) {
+            setBulletins(value);
+            try { localStorage.setItem('ersl_bulletins', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_sec_bulletin_folders':
+          if (Array.isArray(value) && value.length > 0) {
+            setBulletinFolders(value);
+            try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_site_config':
+          if (value && Array.isArray(value.tabs)) {
+            const merged = normalizeSiteConfig(value);
+            setSiteConfig(merged);
+            try { localStorage.setItem('ersl_site_config', JSON.stringify(merged)); } catch { }
+          }
+          break;
+        case 'ersl_custom_pages':
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            setCustomPages(value);
+            try { localStorage.setItem('ersl_custom_pages', JSON.stringify(value)); } catch { }
+          }
+          break;
+      }
+    };
+
+    const channel = supabase
+      .channel('ersl_site_sections_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservoir_matrix' }, (payload: any) => {
+        const rowId = payload?.new?.id;
+        if (!rowId || rowId === 'ersl_reservoir_matrix' || rowId === 'ersl_workplan_matrix') return;
+        applyRealtimeRow(rowId, payload?.new?.rounds);
+      })
+      .subscribe();
+
+    let lastVisibilityHydrate = 0;
+    const handleVisibility = () => {
+      if (!mounted || document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastVisibilityHydrate < 15000) return;
+      lastVisibilityHydrate = now;
+      hydrateFromCloud(false);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      mounted = false;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      supabase?.removeChannel(channel);
+    };
+  }, []);
+
   const handleSaveSiteConfig = async (next: SiteConfig) => {
+    lastSectionWriteAtRef.current['ersl_site_config'] = Date.now();
     setSiteConfig(next);
     try { localStorage.setItem('ersl_site_config', JSON.stringify(next)); } catch { }
     const ok = await setCloudData('ersl_site_config', next, { updatedBy: currentUser?.name || 'Admin' });
@@ -735,6 +860,8 @@ export default function App() {
   });
 
   const handleCreateCustomPage = async (tab: TabConfig, page: CustomPageData) => {
+    lastSectionWriteAtRef.current['ersl_site_config'] = Date.now();
+    lastSectionWriteAtRef.current['ersl_custom_pages'] = Date.now();
     const nextConfig: SiteConfig = { ...siteConfig, tabs: [...siteConfig.tabs, tab] };
     const nextPages = { ...customPages, [tab.id]: page };
     setSiteConfig(nextConfig);
@@ -753,6 +880,8 @@ export default function App() {
   };
 
   const handleDeleteCustomTab = async (tabId: string) => {
+    lastSectionWriteAtRef.current['ersl_site_config'] = Date.now();
+    lastSectionWriteAtRef.current['ersl_custom_pages'] = Date.now();
     const nextConfig: SiteConfig = {
       ...siteConfig,
       tabs: siteConfig.tabs.filter(t => t.id !== tabId),
@@ -774,6 +903,7 @@ export default function App() {
   };
 
   const handleUpdateCustomPage = async (updated: CustomPageData) => {
+    lastSectionWriteAtRef.current['ersl_custom_pages'] = Date.now();
     const nextPages = { ...customPages, [updated.tabId]: updated };
     setCustomPages(nextPages);
     try { localStorage.setItem('ersl_custom_pages', JSON.stringify(nextPages)); } catch { }
@@ -853,8 +983,13 @@ export default function App() {
     appendAuditLog('DELETE_NEWS', `Deleted news announcement: "${title}"`);
   };
   const [bulletinFolders, setBulletinFolders] = useState<string[]>(() => {
-    const saved = localStorage.getItem('ersl_bulletin_folders');
-    return saved ? JSON.parse(saved) : ['General'];
+    try {
+      const saved = localStorage.getItem('ersl_bulletin_folders');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : ['General'];
+    } catch {
+      return ['General'];
+    }
   });
   const [activeBulletinFolder, setActiveBulletinFolder] = useState<string>('All');
   useEffect(() => {
@@ -863,7 +998,6 @@ export default function App() {
 
   // Lab Bulletins & Announcements State (Point 5)
   const [bulletins, setBulletins] = useState<any[]>(() => {
-    const saved = localStorage.getItem('ersl_bulletins');
     const defaultBulletins = [
       {
         id: 'b-1',
@@ -882,7 +1016,13 @@ export default function App() {
         priority: 'normal'
       }
     ];
-    return saved ? JSON.parse(saved) : defaultBulletins;
+    try {
+      const saved = localStorage.getItem('ersl_bulletins');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : defaultBulletins;
+    } catch {
+      return defaultBulletins;
+    }
   });
 
   // State for user management (inside Admin Panel)
@@ -892,14 +1032,24 @@ export default function App() {
       { id: 'user-mandal', name: 'Dr. Tapas Mandal', email: 'tmandal@ua.edu', role: 'Researcher', department: 'Geography' },
       { id: 'user-naveen', name: 'Naveen Purushothaman', email: 'npurushothaman@ua.edu', role: 'Researcher', department: 'Geography' }
     ];
-    const saved = localStorage.getItem('ersl_all_users');
-    return saved ? JSON.parse(saved) : defaultUsers;
+    try {
+      const saved = localStorage.getItem('ersl_all_users');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : defaultUsers;
+    } catch {
+      return defaultUsers;
+    }
   });
 
   // Admissions Contact Forms Inbox (Simulated CRM)
   const [inboxEntries, setInboxEntries] = useState<any[]>(() => {
-    const saved = localStorage.getItem('ersl_inbox');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('ersl_inbox');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   // Teaching Materials state (Point 5)
@@ -930,8 +1080,13 @@ export default function App() {
         updatedAt: '2026-07-10'
       }
     ];
-    const saved = localStorage.getItem('ersl_teaching');
-    return saved ? JSON.parse(saved) : defaultTeaching;
+    try {
+      const saved = localStorage.getItem('ersl_teaching');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : defaultTeaching;
+    } catch {
+      return defaultTeaching;
+    }
   });
 
   // Helper to resolve clean initials ignoring Dr. prefix (Point 6)
