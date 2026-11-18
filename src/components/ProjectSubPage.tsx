@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
-  ArrowRight,
+  ArrowUp,
   BookOpen,
   Calendar,
+  Check,
   Code2,
+  Copy,
   Database,
   Edit2,
   Eye,
@@ -15,9 +18,12 @@ import {
   Key,
   Layers,
   Lock,
+  LogOut,
   Plus,
   Shield,
+  Sliders,
   Trash2,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import {
@@ -29,9 +35,11 @@ import {
   ProjectCustomSubTab,
   ProjectSubPageData,
   ResearchTheme,
+  SiteConfig,
   SubTabVisibility,
   User,
 } from '../types';
+import { resolveAssetUrl } from '../lib/boxUtils';
 import {
   buildNormalizedSubTabs,
   DEFAULT_PROJECT_SUBPAGE,
@@ -55,11 +63,16 @@ interface ProjectSubPageProps {
   people?: Person[];
   currentUser: User | null;
   canEdit: boolean;
+  editMode?: boolean;
+  isStandalone?: boolean;
+  siteConfig?: SiteConfig;
   primaryColor?: string;
   initialSubTabId?: string;
   onBack: () => void;
   onUpdateProject: (updated: Project) => void;
   onLoginClick: () => void;
+  onToggleEditMode?: () => void;
+  onLogout?: () => void;
 }
 
 function getSubTabIcon(kind?: ProjectCustomSubTab['kind']) {
@@ -113,11 +126,16 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   people = [],
   currentUser,
   canEdit,
+  editMode = false,
+  isStandalone = false,
+  siteConfig,
   primaryColor = '#9E1B32',
   initialSubTabId,
   onBack,
   onUpdateProject,
   onLoginClick,
+  onToggleEditMode,
+  onLogout,
 }) => {
   const subPage: ProjectSubPageData = {
     ...DEFAULT_PROJECT_SUBPAGE,
@@ -140,6 +158,30 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
   const [activeSubId, setActiveSubId] = useState<string>(customSubTabs[0]?.id || 'overview');
   const [previewRole, setPreviewRole] = useState<PreviewRole>('actual');
   const [embeddedBoxUrl, setEmbeddedBoxUrl] = useState<string | null>(null);
+  const [copiedSponsorLink, setCopiedSponsorLink] = useState(false);
+
+  const shareableUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(project.id)}`
+      : `?project=${encodeURIComponent(project.id)}`;
+
+  const handleCopySponsorLink = () => {
+    try {
+      navigator.clipboard?.writeText(shareableUrl);
+      setCopiedSponsorLink(true);
+      setTimeout(() => setCopiedSponsorLink(false), 2200);
+    } catch {}
+  };
+
+  const rawLogo = siteConfig?.logoUrl?.trim();
+  const base = import.meta.env.BASE_URL;
+  const resolvedLogoSrc = rawLogo
+    ? rawLogo.startsWith('/images/')
+      ? `${base}${rawLogo.slice(1)}`
+      : rawLogo.startsWith('http') || rawLogo.startsWith('data:')
+        ? rawLogo
+        : resolveAssetUrl(rawLogo)
+    : `${base}images/ERSL_Logo.png`;
 
   // Modals
   const [editingInfo, setEditingInfo] = useState(false);
@@ -335,7 +377,118 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200 text-left">
-      {/* Top Crimson Project Banner + Customizable Sub-Pages Navigation */}
+      {/* Standalone Lab Brand & Authorization Strip (shown on ?project=<id> new tab & sponsor links) */}
+      {isStandalone && (
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="w-11 h-11 rounded-full border-2 shadow-xs overflow-hidden bg-white flex items-center justify-center shrink-0 cursor-pointer hover:scale-105 transition-transform"
+              style={{ borderColor: primaryColor }}
+              title="Return to ERSL Main Website"
+            >
+              <img
+                src={resolvedLogoSrc}
+                alt="ERSL Lab Logo"
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </button>
+            <div>
+              <span
+                className="text-[10px] font-black uppercase tracking-widest block"
+                style={{ color: primaryColor }}
+              >
+                The University of Alabama · Geography &amp; Environment
+              </span>
+              <h1 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
+                {siteConfig?.labFullName || 'Environmental Remote Sensing Laboratory (ERSL)'}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopySponsorLink}
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 cursor-pointer"
+              title="Copy direct shareable URL for sponsors and collaborators"
+            >
+              {copiedSponsorLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">Sponsor Link Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Share Link</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-red-50 text-slate-800 hover:text-[#9E1B32] cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Main ERSL Website</span>
+            </button>
+
+            {!currentUser ? (
+              <button
+                type="button"
+                onClick={onLoginClick}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg text-white cursor-pointer shadow-xs"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Member / Admin Login</span>
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-800 border border-gray-200">
+                  <UserCheck className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                  <span>{currentUser.name}</span>
+                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-600">
+                    {currentUser.role}
+                  </span>
+                </span>
+
+                {currentUser.role !== 'Viewer' && onToggleEditMode && (
+                  <button
+                    type="button"
+                    onClick={onToggleEditMode}
+                    className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                      editMode
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-gray-200'
+                    }`}
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>{editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF'}</span>
+                  </button>
+                )}
+
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 cursor-pointer"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Top Crimson Project Banner */}
       <div className="rounded-2xl border border-gray-200 shadow-xs overflow-hidden bg-white">
         <div className="p-5 md:p-6 space-y-4 text-white" style={{ backgroundColor: headerAccent }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -345,7 +498,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Research Themes &amp; Projects</span>
+              <span>{isStandalone ? 'Back to ERSL Lab Website' : 'Back to Research Projects'}</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -360,27 +513,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               <span className="text-[10px] font-mono text-white/85 bg-black/20 border border-white/20 px-2 py-1 rounded">
                 UA-ERSL-{project.id.toUpperCase()}
               </span>
-
-              {canEdit && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setManagingCollaborators(true)}
-                    className="text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                    <span>Collaborators ({collaborators.length})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingInfo(true)}
-                    className="text-xs font-bold bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    style={{ color: headerAccent }}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit Project Info</span>
-                  </button>
-                </>
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={handleCopySponsorLink}
+                  className="text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedSponsorLink ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSponsorLink ? 'Copied Sponsor Link' : 'Share Link'}</span>
+                </button>
               )}
             </div>
           </div>
@@ -402,141 +543,181 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Dynamic Sub-Pages Navigation Strip */}
-        <div className="px-5 md:px-6 py-3.5 bg-white space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {customSubTabs.map(tab => {
-                const active = activeSubTabObj?.id === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveSubId(tab.id);
-                      setEmbeddedBoxUrl(null);
-                    }}
-                    className={`px-3.5 py-2 text-xs font-bold rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      active ? 'text-white border-transparent shadow-xs' : 'text-slate-700 border-gray-200 bg-slate-50 hover:bg-slate-100'
-                    }`}
-                    style={active ? { backgroundColor: headerAccent } : undefined}
-                  >
-                    {getSubTabIcon(tab.kind)}
-                    <span>{tab.label}</span>
-                    {getVisibilityIcon(tab.visibility, active)}
-                  </button>
-                );
-              })}
-
-              {showEditControls && (
+      {/* Vertical Left Sidebar (Sub-Tabs + Edit Controls) + Main Project Content Area */}
+      <div className="flex flex-col md:flex-row gap-5 items-start">
+        <aside className="w-full md:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3.5 space-y-4">
+          {/* Vertical Sub-Page Navigation */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-2 block mb-1.5">
+              Project Sub-Pages
+            </span>
+            {customSubTabs.map(tab => {
+              const active = activeSubTabObj?.id === tab.id;
+              return (
                 <button
+                  key={tab.id}
                   type="button"
-                  onClick={() => setSubTabModal({ open: true, existing: null })}
-                  className="px-3 py-2 text-xs font-bold rounded-lg border border-dashed border-emerald-500 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1 cursor-pointer"
+                  onClick={() => {
+                    setActiveSubId(tab.id);
+                    setEmbeddedBoxUrl(null);
+                  }}
+                  className={`w-full px-3 py-2.5 text-xs font-bold rounded-xl flex items-center justify-between gap-2 transition-colors cursor-pointer text-left ${
+                    active ? 'text-white shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                  style={active ? { backgroundColor: headerAccent } : undefined}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Sub-Page</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0">{getSubTabIcon(tab.kind)}</span>
+                    <span className="truncate">{tab.label}</span>
+                  </span>
+                  <span className="shrink-0">{getVisibilityIcon(tab.visibility, active)}</span>
                 </button>
-              )}
-            </div>
+              );
+            })}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {!isLabMember && isLinkedCollaborator && (
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 flex items-center gap-1">
-                  <Key className="w-3 h-3" />
-                  <span>Collaborator Access Active</span>
-                </span>
-              )}
-              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${activeVisMeta.pillClass}`}>
-                {getVisibilityIcon(currentVisibility, false)}
-                <span>{activeVisMeta.shortLabel}</span>
-              </span>
+            {showEditControls && (
+              <button
+                type="button"
+                onClick={() => setSubTabModal({ open: true, existing: null })}
+                className="w-full mt-2 px-3 py-2 text-xs font-bold rounded-xl border border-dashed border-emerald-500 text-emerald-700 hover:bg-emerald-50 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Sub-Page</span>
+              </button>
+            )}
+          </div>
 
-              {canEdit && (
-                <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg border border-gray-200 text-[11px]">
-                  <Eye className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="font-bold text-slate-600">Preview:</span>
-                  <select
-                    value={previewRole}
-                    onChange={e => setPreviewRole(e.target.value as PreviewRole)}
-                    className="bg-transparent font-extrabold text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    <option value="actual">Editor View (All Tabs)</option>
-                    <option value="public">Public Visitor</option>
-                    <option value="collaborator">Linked Collaborator</option>
-                    <option value="member">ERSL Lab Member</option>
-                  </select>
-                </div>
-              )}
+          {/* Active Access Pill */}
+          <div className="pt-3 border-t border-gray-100 space-y-2">
+            {!isLabMember && isLinkedCollaborator && (
+              <div className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 flex items-center gap-1.5">
+                <Key className="w-3 h-3 shrink-0" />
+                <span>Collaborator Access</span>
+              </div>
+            )}
+            <div className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${activeVisMeta.pillClass}`}>
+              {getVisibilityIcon(currentVisibility, false)}
+              <span>{activeVisMeta.shortLabel}</span>
             </div>
           </div>
 
-          {/* Active Sub-Page Management Bar (visible in Edit Mode when not previewing) */}
+          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active) */}
           {showEditControls && activeSubTabObj && (
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-gray-100 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold text-slate-500">
-                  Sub-Page Controls ({activeSubTabObj.label}):
-                </span>
-                <label className="inline-flex items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-lg px-2.5 py-1">
-                  <span className="font-bold text-slate-600">Access:</span>
-                  <select
-                    value={activeSubTabObj.visibility}
-                    onChange={e => handleChangeSubTabVisibility(activeSubTabObj.id, e.target.value as SubTabVisibility)}
-                    className="bg-transparent font-extrabold text-slate-900 focus:outline-none cursor-pointer"
-                  >
-                    {VISIBILITY_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <div className="pt-3 border-t border-gray-100 space-y-2.5 text-xs">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
+                Edit Sub-Page: {activeSubTabObj.label}
+              </span>
 
-                <button
-                  type="button"
-                  onClick={() => setSubTabModal({ open: true, existing: activeSubTabObj })}
-                  className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-600 block px-1">Visibility Access</label>
+                <select
+                  value={activeSubTabObj.visibility}
+                  onChange={e => handleChangeSubTabVisibility(activeSubTabObj.id, e.target.value as SubTabVisibility)}
+                  className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-900 focus:outline-none cursor-pointer"
                 >
-                  <Edit2 className="w-3 h-3" /> Rename / Edit Intro
-                </button>
+                  {VISIBILITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSubTabModal({ open: true, existing: activeSubTabObj })}
+                className="w-full px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Rename / Edit Intro</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
                   disabled={activeTabIndex <= 0}
                   onClick={() => handleMoveSubTab(activeTabIndex, -1)}
-                  className="p-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-600 disabled:opacity-35 cursor-pointer"
-                  title="Move sub-page tab left"
+                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
+                  title="Move sub-page up"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <ArrowUp className="w-3.5 h-3.5" />
+                  <span>Up</span>
                 </button>
                 <button
                   type="button"
                   disabled={activeTabIndex >= customSubTabs.length - 1}
                   onClick={() => handleMoveSubTab(activeTabIndex, 1)}
-                  className="p-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-600 disabled:opacity-35 cursor-pointer"
-                  title="Move sub-page tab right"
+                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
+                  title="Move sub-page down"
                 >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  disabled={customSubTabs.length <= 1}
-                  onClick={() => handleDeleteSubTab(activeSubTabObj)}
-                  className="px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold flex items-center gap-1 disabled:opacity-40 cursor-pointer"
-                  title="Remove this sub-page"
-                >
-                  <Trash2 className="w-3 h-3" /> Remove Sub-Page
+                  <ArrowDown className="w-3.5 h-3.5" />
+                  <span>Down</span>
                 </button>
               </div>
+
+              <button
+                type="button"
+                disabled={customSubTabs.length <= 1}
+                onClick={() => handleDeleteSubTab(activeSubTabObj)}
+                className="w-full px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove Sub-Page</span>
+              </button>
             </div>
           )}
 
+          {/* Vertical Project Settings & Role Preview (Admins / Member Editors) */}
+          {canEdit && (
+            <div className="pt-3 border-t border-gray-100 space-y-2 text-xs">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
+                Project Admin Tools
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setEditingInfo(true)}
+                className="w-full px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 cursor-pointer bg-red-50/60 hover:bg-red-50 border-red-200"
+                style={{ color: headerAccent }}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Edit Project Info</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setManagingCollaborators(true)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Collaborators ({collaborators.length})</span>
+              </button>
+
+              <div className="space-y-1 pt-1">
+                <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1 px-1">
+                  <Eye className="w-3 h-3" /> Preview View As
+                </label>
+                <select
+                  value={previewRole}
+                  onChange={e => setPreviewRole(e.target.value as PreviewRole)}
+                  className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  <option value="actual">Editor View (All Tabs)</option>
+                  <option value="public">Public Visitor</option>
+                  <option value="collaborator">Linked Collaborator</option>
+                  <option value="member">ERSL Lab Member</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* Right Main Sub-Page Canvas */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
           {isShowingPreviewAsOther && (
-            <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+            <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs">
               <span className="font-bold text-amber-900">
                 Previewing sub-page access as: <strong className="uppercase">{effectivePreview}</strong>
               </span>
@@ -549,80 +730,78 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               </button>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Sub-Page Body OR Tiered Access Lock Screen */}
-      {!hasAccess ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 md:p-10 text-center max-w-lg mx-auto shadow-xs space-y-4">
-          <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
-            {currentVisibility === 'collaborators' ? (
-              <Users className="w-6 h-6 text-blue-700" />
-            ) : currentVisibility === 'admin' ? (
-              <Lock className="w-6 h-6 text-rose-700" />
-            ) : (
-              <Shield className="w-6 h-6 text-amber-700" />
-            )}
-          </div>
-
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900">
-              {currentVisibility === 'collaborators'
-                ? 'Project Collaborators & Lab Team Section'
-                : currentVisibility === 'admin'
-                  ? 'Lab Administrators Only'
-                  : 'ERSL Lab Members & Admins Only'}
-            </h3>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              The <strong>{activeSubTabObj?.label}</strong> sub-page for this project{' '}
-              {currentVisibility === 'collaborators'
-                ? 'is restricted to linked collaborators on this project, ERSL lab members, and lab admins.'
-                : currentVisibility === 'admin'
-                  ? 'is restricted strictly to ERSL lab administrators.'
-                  : 'is restricted to internal ERSL lab members and administrators.'}
-            </p>
-          </div>
-
-          {currentVisibility === 'collaborators' && subPage.collaboratorAccessCode && (
-            <form onSubmit={handleUnlockWithPasskey} className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 text-left space-y-2.5">
-              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                <Key className="w-3.5 h-3.5 text-blue-700" />
-                External Collaborator Passkey Unlock
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={passkeyInput}
-                  onChange={e => setPasskeyInput(e.target.value)}
-                  placeholder="Enter project collaborator passkey..."
-                  className="flex-1 p-2 text-xs bg-white border border-blue-200 rounded-lg focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
-                >
-                  Unlock
-                </button>
+          {/* Sub-Page Body OR Tiered Access Lock Screen */}
+          {!hasAccess ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 md:p-10 text-center max-w-lg mx-auto shadow-xs space-y-4">
+              <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
+                {currentVisibility === 'collaborators' ? (
+                  <Users className="w-6 h-6 text-blue-700" />
+                ) : currentVisibility === 'admin' ? (
+                  <Lock className="w-6 h-6 text-rose-700" />
+                ) : (
+                  <Shield className="w-6 h-6 text-amber-700" />
+                )}
               </div>
-              {passkeyError && <p className="text-[11px] font-bold text-red-600">{passkeyError}</p>}
-            </form>
-          )}
 
-          {currentVisibility !== 'admin' && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={onLoginClick}
-                className="text-white text-xs font-bold py-2 px-5 rounded-lg cursor-pointer shadow-xs"
-                style={{ backgroundColor: headerAccent }}
-              >
-                {currentVisibility === 'collaborators' ? 'Collaborator / Member Sign In' : 'ERSL Member Login'}
-              </button>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {currentVisibility === 'collaborators'
+                    ? 'Project Collaborators & Lab Team Section'
+                    : currentVisibility === 'admin'
+                      ? 'Lab Administrators Only'
+                      : 'ERSL Lab Members & Admins Only'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  The <strong>{activeSubTabObj?.label}</strong> sub-page for this project{' '}
+                  {currentVisibility === 'collaborators'
+                    ? 'is restricted to linked collaborators on this project, ERSL lab members, and lab admins.'
+                    : currentVisibility === 'admin'
+                      ? 'is restricted strictly to ERSL lab administrators.'
+                      : 'is restricted to internal ERSL lab members and administrators.'}
+                </p>
+              </div>
+
+              {currentVisibility === 'collaborators' && subPage.collaboratorAccessCode && (
+                <form onSubmit={handleUnlockWithPasskey} className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 text-left space-y-2.5">
+                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-blue-700" />
+                    External Collaborator Passkey Unlock
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={passkeyInput}
+                      onChange={e => setPasskeyInput(e.target.value)}
+                      placeholder="Enter project collaborator passkey..."
+                      className="flex-1 p-2 text-xs bg-white border border-blue-200 rounded-lg focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Unlock
+                    </button>
+                  </div>
+                  {passkeyError && <p className="text-[11px] font-bold text-red-600">{passkeyError}</p>}
+                </form>
+              )}
+
+              {currentVisibility !== 'admin' && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={onLoginClick}
+                    className="text-white text-xs font-bold py-2 px-5 rounded-lg cursor-pointer shadow-xs"
+                    style={{ backgroundColor: headerAccent }}
+                  >
+                    {currentVisibility === 'collaborators' ? 'Collaborator / Member Sign In' : 'ERSL Member Login'}
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 md:p-6 space-y-5">
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 md:p-6 space-y-5">
           {/* Sub-Page Intro Paragraph & Quick-Add Content Toolbar */}
           {(activeSubTabObj?.description || showEditControls) && (
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-gray-100">
@@ -886,6 +1065,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           </div>
         </div>
       )}
+        </div>
+      </div>
 
       {/* Modals */}
       {editingInfo && (

@@ -25,11 +25,12 @@ export const defaultSiteConfig: SiteConfig = {
   showSubheadings: true,
   swapHomeColors: false,
   themeStyle: 'macos-glass',
-  configVersion: 5,
+  configVersion: 6,
   tabs: [
     { id: 'home', label: 'Home', icon: '🏠', visibility: 'public' },
     { id: 'people', label: 'People', icon: '👥', visibility: 'public' },
     { id: 'research', label: 'Research Themes', icon: '🔬', visibility: 'public' },
+    { id: 'projects', label: 'Research Projects', icon: '📂', visibility: 'public' },
     { id: 'publications', label: 'Publications', icon: '📚', visibility: 'public' },
     { id: 'instruments', label: 'Instruments', icon: '🛰️', visibility: 'public' },
     { id: 'software', label: 'Software', icon: '💻', visibility: 'public' },
@@ -38,7 +39,7 @@ export const defaultSiteConfig: SiteConfig = {
     { id: 'teaching', label: 'Teaching', icon: '📖', visibility: 'members' },
     { id: 'bulletins', label: 'Lab Bulletin', icon: '📢', visibility: 'members' },
     { id: 'workplan', label: 'Work Plan', icon: '✅', visibility: 'members' },
-    { id: 'reservoir', label: 'Reservoir Project', icon: '🌊', visibility: 'members' },
+    { id: 'reservoir', label: 'Project Management', icon: '📊', visibility: 'members' },
     { id: 'box', label: 'Box Workspace', icon: '📁', visibility: 'members' },
   ],
   homeSlides: [

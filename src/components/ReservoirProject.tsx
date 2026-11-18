@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { User } from '../types';
+import { Project, User } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { initialPeople } from '../data/initialData';
 import { ADMIN_EMAILS, supabase } from '../lib/supabase';
@@ -28,6 +28,7 @@ import {
   Sparkles,
   Trophy,
   PartyPopper,
+  ExternalLink,
   Heart,
   Layers,
   FileSpreadsheet,
@@ -479,8 +480,16 @@ const CONGRATULATION_TEMPLATES = [
   })
 ];
 
-export const ReservoirProject: React.FC<{ currentUser: User } & SubPageHeaderPassProps> = ({
+export const ReservoirProject: React.FC<
+  {
+    currentUser: User;
+    projects?: Project[];
+    onOpenProjectNewTab?: (projectId: string) => void;
+  } & SubPageHeaderPassProps
+> = ({
   currentUser,
+  projects = [],
+  onOpenProjectNewTab,
   headerOverride,
   accentColor = '#9E1B32',
   showSubheadings = true,
@@ -1779,15 +1788,15 @@ export const ReservoirProject: React.FC<{ currentUser: User } & SubPageHeaderPas
       )}
 
       {/* =========================================================================
-          TOP BANNER: ERSL RESERVOIR DATA ALLOCATION & DELINEATION PROTOCOL
+          TOP BANNER: ERSL PROJECT MANAGEMENT & RESERVOIR DELINEATION MATRIX
           ========================================================================= */}
       <SubPageHeader
         tabId="reservoir"
         defaults={{
-          badge: 'ERSL GEOAI & HYDROLOGY LAB · SWOT & SAR',
-          title: 'National Reservoir Delineation Protocol Table',
+          badge: 'ERSL PROJECT OPERATIONS & TRACKING',
+          title: 'Project Management',
           subtitle:
-            "Official ERSL sprint allocation matrix tracking round-by-round basin delivery, team member allocation counts, collection dates, and Dr. Dan Tian's QA/QC quality verification.",
+            "Central ERSL project operations workspace housing the National Reservoir Delineation Protocol Matrix, team sprint allocations, collection tracking, and Dr. Dan Tian's QA/QC verification.",
         }}
         override={headerOverride}
         accentColor={accentColor}
@@ -1862,6 +1871,53 @@ export const ReservoirProject: React.FC<{ currentUser: User } & SubPageHeaderPas
           </div>
         }
       />
+
+      {/* Managed Projects Workspace Strip (Reservoir Matrix + Funded Project Portals) */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              Active Matrix
+            </span>
+            <h3 className="text-sm font-extrabold text-slate-900">
+              National Reservoir Delineation Protocol Matrix
+            </h3>
+          </div>
+          <span className="text-[11px] font-semibold text-slate-500">
+            Open any lab project portal in a new tab or manage Reservoir sprints below
+          </span>
+        </div>
+
+        {projects.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
+              Lab Project Portals:
+            </span>
+            {projects.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  if (onOpenProjectNewTab) {
+                    onOpenProjectNewTab(p.id);
+                  } else {
+                    const url = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(p.id)}`;
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-red-50 border border-gray-200 hover:border-[#9E1B32]/40 text-slate-700 hover:text-[#9E1B32] transition-colors cursor-pointer"
+                title={`Open ${p.title} sub-page in a new tab`}
+              >
+                <span className="max-w-[220px] truncate">{p.title}</span>
+                <ExternalLink className="w-3 h-3 shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="bg-slate-950 rounded-2xl shadow-xl border border-slate-800 p-5 text-white">
         {/* Milestone Summary Metrics (Clickable Tabs) */}

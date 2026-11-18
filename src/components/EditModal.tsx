@@ -640,14 +640,26 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Description</label>
+                <label className="block font-bold text-gray-700">Card Description (Short Preview)</label>
                 <textarea
                   name="description"
                   value={formData.description || ''}
                   onChange={handleChange}
-                  rows={4}
+                  rows={3}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                   required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Detailed Theme Overview (For Theme Sub-Page, Optional)</label>
+                <textarea
+                  name="overviewBody"
+                  value={formData.overviewBody || ''}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="Extended scientific narrative shown inside the Theme Overview sub-page..."
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
               </div>
 
@@ -706,7 +718,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Specifications & Description</label>
+                <label className="block font-bold text-gray-700">Card Summary &amp; Specifications</label>
                 <textarea
                   name="description"
                   value={formData.description || ''}
@@ -714,6 +726,18 @@ export const EditModal: React.FC<EditModalProps> = ({
                   rows={3}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                   required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Detailed Description (For Instrument Sub-Page, Optional)</label>
+                <textarea
+                  name="detailedDescription"
+                  value={formData.detailedDescription || ''}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="Full technical capabilities, SOP background, and deployment notes shown on the Instrument sub-page..."
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
               </div>
 

@@ -299,11 +299,11 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
           style={siteConfig.themeStyle !== 'classic' ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
         >
           {/* UA Brand Strip + Vertical ERSL Lockup */}
-          <div className="bg-[#1e1e1e]/95 text-gray-200 px-4 py-2 text-[10px] flex items-center justify-between border-b border-white/10">
-            <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="font-bold uppercase tracking-wider hover:text-white">
+          <div className="bg-gradient-to-r from-[#9E1B32]/8 via-slate-100/95 to-red-50/80 text-slate-800 px-4 py-2 text-[10px] flex items-center justify-between border-b border-[#9E1B32]/15">
+            <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="font-bold uppercase tracking-wider text-slate-900 hover:text-[#9E1B32] transition-colors">
               Univ. of Alabama
             </a>
-            <a href="https://mybama.ua.edu/" target="_blank" rel="noreferrer" className="hover:text-white flex items-center gap-1">
+            <a href="https://mybama.ua.edu/" target="_blank" rel="noreferrer" className="text-slate-700 hover:text-[#9E1B32] font-semibold flex items-center gap-1 transition-colors">
               <UserCircle className="w-3 h-3" style={{ color: primaryColor }} />
               <span>myBama</span>
             </a>
@@ -440,14 +440,14 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
 
   return (
     <header className="w-full select-none z-50">
-      {/* Row 0: Classic Dark Institutional UA Top Strip */}
-      <section className="bg-[#1a1a1a]/95 backdrop-blur-md text-[#e5e7eb] py-1.5 px-4 md:px-8 border-b border-white/10">
+      {/* Row 0: Light Crimson-Tinted Institutional UA Top Strip */}
+      <section className="bg-gradient-to-r from-[#9E1B32]/8 via-slate-50/95 to-red-50/85 backdrop-blur-md text-slate-800 py-1.5 px-4 md:px-8 border-b border-[#9E1B32]/15">
         <div className="max-w-7xl mx-auto flex justify-between items-center gap-4 text-[11px]">
-          <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="leading-tight hover:text-white transition-colors">
-            <span className="block font-bold tracking-wider uppercase text-[10px] md:text-[11px] text-white">
+          <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="leading-tight group transition-colors">
+            <span className="block font-bold tracking-wider uppercase text-[10px] md:text-[11px] text-slate-900 group-hover:text-[#9E1B32] transition-colors">
               THE UNIVERSITY OF ALABAMA<span className="text-[9px] align-top">®</span>
             </span>
-            <span className="block text-[10px] italic text-gray-300 font-serif">
+            <span className="block text-[10px] italic text-slate-600 font-serif">
               Barefield College of Arts &amp; Sciences
             </span>
           </a>
@@ -456,7 +456,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
               href="https://geography.ua.edu/"
               target="_blank"
               rel="noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 text-gray-300 hover:text-white font-medium transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 text-slate-700 hover:text-[#9E1B32] font-medium transition-colors"
             >
               <span>🌐</span>
               <span>Department of Geography and the Environment</span>
@@ -465,7 +465,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
               href="https://mybama.ua.edu/"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center text-gray-200 hover:text-white font-semibold transition-colors"
+              className="flex items-center text-slate-800 hover:text-[#9E1B32] font-semibold transition-colors bg-white/80 hover:bg-white px-2.5 py-0.5 rounded-full border border-[#9E1B32]/20 shadow-xs"
             >
               <UserCircle className="w-3.5 h-3.5 mr-1" style={{ color: crimsonAccent }} /> myBama Portal
             </a>

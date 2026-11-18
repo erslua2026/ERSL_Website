@@ -13,6 +13,8 @@ export interface ResearchTheme {
   id: string;
   title: string;
   description: string;
+  overviewBody?: string;
+  selectedPublicationIds?: string[];
   keywords: string[];
   image: string; // fallback to URL, Box direct link, or local filename
 }
@@ -153,13 +155,24 @@ export interface DataLayer {
   source?: string;
 }
 
+export interface InstrumentResourceItem {
+  id: string;
+  title: string;
+  url: string;
+  category: 'Manual' | 'Tutorial' | 'SOP' | 'Software' | 'Dataset' | 'Other';
+  visibility: 'public' | 'members';
+  description?: string;
+}
+
 export interface Instrument {
   id: string;
   name: string;
   description: string;
+  detailedDescription?: string;
   category: string;
   image: string;
   manualLink?: string;
+  resources?: InstrumentResourceItem[];
 }
 
 export interface FormerStint {

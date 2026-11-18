@@ -3,7 +3,7 @@ import {
   Plus, Edit, Edit2, Trash2, Calendar, FileText, Search, Download, ExternalLink,
   Mail, Users, Award, ShieldAlert, GraduationCap, Check, HelpCircle,
   FolderGit2, Lock, Eye, AlertCircle, FileCode, CheckCircle2, ChevronRight, Sliders, Play, Info,
-  RefreshCw, X
+  RefreshCw, X, Copy
 } from 'lucide-react';
 
 import { UAHeader } from './components/UAHeader';
@@ -28,6 +28,8 @@ import { defaultSiteConfig, defaultCustomPages } from './data/defaultSiteConfig'
 import { NewsModal } from './components/NewsModal';
 import { BulletinModal } from './components/BulletinModal';
 import { ProjectSubPage } from './components/ProjectSubPage';
+import { ThemeSubPage } from './components/ThemeSubPage';
+import { InstrumentSubPage } from './components/InstrumentSubPage';
 import { CustomPageView } from './components/CustomPageView';
 import { SiteCustomizerModal } from './components/SiteCustomizerModal';
 import { resolveAssetUrl } from './lib/boxUtils';
@@ -305,7 +307,44 @@ export default function App() {
 
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
   const [selectedProjectSubTabId, setSelectedProjectSubTabId] = useState<string | undefined>(undefined);
+  const [selectedThemeDetails, setSelectedThemeDetails] = useState<ResearchTheme | null>(null);
+  const [selectedInstrumentDetails, setSelectedInstrumentDetails] = useState<Instrument | null>(null);
   const [activeThemeFilter, setActiveThemeFilter] = useState<string>('all');
+  const [copiedProjectUrlId, setCopiedProjectUrlId] = useState<string | null>(null);
+  const [standaloneProjectId, setStandaloneProjectId] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('project');
+    } catch {
+      return null;
+    }
+  });
+  const [standaloneSubTabId] = useState<string | undefined>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('subtab') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
+  const openProjectInNewTab = (projectId: string, subTabId?: string) => {
+    const params = new URLSearchParams();
+    params.set('project', projectId);
+    if (subTabId) params.set('subtab', subTabId);
+    const targetUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const exitStandaloneProject = () => {
+    setStandaloneProjectId(null);
+    setSelectedProjectDetails(null);
+    setSelectedProjectSubTabId(undefined);
+    setActiveTab('projects');
+    try {
+      const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', cleanUrl);
+    } catch { }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const normalizeSiteConfig = (raw?: Partial<SiteConfig> | null): SiteConfig => {
     if (!raw || !Array.isArray(raw.tabs)) return defaultSiteConfig;
@@ -314,22 +353,46 @@ export default function App() {
     const needsV3Upgrade = version < 3;
     const needsV4Upgrade = version < 4;
     const needsV5Upgrade = version < 5;
+    const needsV6Upgrade = version < 6;
     const isOldDefaultMission =
       !raw.homeMission?.description ||
       raw.homeMission.description.startsWith('Our research balances extensive field-level tracking');
     const existingIds = new Set(raw.tabs.map(t => t.id));
     const missingDefaults = defaultSiteConfig.tabs.filter(t => !existingIds.has(t.id));
-    const mergedTabs = [...raw.tabs, ...missingDefaults]
+
+    let combinedTabs = [...raw.tabs]
       .filter(tab => tab.id !== 'field')
       .map(tab => {
-        if (!needsV2Upgrade) return tab;
-        if (tab.id === 'research' && tab.label === 'Research Areas') return { ...tab, label: 'Research Themes' };
-        return tab;
+        let updated = tab;
+        if (needsV2Upgrade && updated.id === 'research' && updated.label === 'Research Areas') {
+          updated = { ...updated, label: 'Research Themes' };
+        }
+        if (needsV6Upgrade && updated.id === 'reservoir') {
+          updated = { ...updated, label: 'Project Management', icon: '📊' };
+        }
+        return updated;
       });
+
+    // Ensure 'projects' tab is placed cleanly right after 'research' when missing
+    missingDefaults.forEach(defTab => {
+      if (defTab.id === 'projects') {
+        const resIdx = combinedTabs.findIndex(t => t.id === 'research');
+        if (resIdx >= 0) {
+          combinedTabs = [
+            ...combinedTabs.slice(0, resIdx + 1),
+            defTab,
+            ...combinedTabs.slice(resIdx + 1),
+          ];
+          return;
+        }
+      }
+      combinedTabs.push(defTab);
+    });
+
     return {
       ...defaultSiteConfig,
       ...raw,
-      configVersion: 5,
+      configVersion: 6,
       themeStyle: raw.themeStyle || 'macos-glass',
       showSubheadings: needsV3Upgrade ? true : (raw.showSubheadings ?? true),
       swapHomeColors: needsV3Upgrade ? false : (raw.swapHomeColors ?? false),
@@ -337,7 +400,7 @@ export default function App() {
         raw.memberLayoutMode ||
         (raw.layoutMode && raw.layoutMode !== 'horizontal-top' ? raw.layoutMode : 'vertical-left'),
       subheadingColor: raw.subheadingColor || '#9E1B32',
-      tabs: mergedTabs,
+      tabs: combinedTabs,
       homeSlides: needsV4Upgrade
         ? defaultSiteConfig.homeSlides
         : (Array.isArray(raw.homeSlides) && raw.homeSlides.length > 0 ? raw.homeSlides : defaultSiteConfig.homeSlides),
@@ -714,6 +777,30 @@ export default function App() {
     appendAuditLog('UPDATE_PROJECT_SUBPAGE', updatedProject.title);
   };
 
+  const handleUpdateTheme = (updatedTheme: ResearchTheme) => {
+    const nextThemes = themes.map(t => (t.id === updatedTheme.id ? updatedTheme : t));
+    setThemes(nextThemes);
+    setSelectedThemeDetails(updatedTheme);
+    setFailedImages(prev => {
+      const next = { ...prev };
+      delete next[`theme-${updatedTheme.id}`];
+      delete next[`hero-theme-${updatedTheme.id}`];
+      return next;
+    });
+    try { localStorage.setItem('ersl_themes', JSON.stringify(nextThemes)); } catch { }
+    syncSiteContentToCloud({ themes: nextThemes });
+    appendAuditLog('UPDATE_RESEARCH_THEME', updatedTheme.title);
+  };
+
+  const handleUpdateInstrument = (updatedInst: Instrument) => {
+    const nextInstruments = instruments.map(i => (i.id === updatedInst.id ? updatedInst : i));
+    setInstruments(nextInstruments);
+    setSelectedInstrumentDetails(updatedInst);
+    try { localStorage.setItem('ersl_instruments', JSON.stringify(nextInstruments)); } catch { }
+    syncSiteContentToCloud({ instruments: nextInstruments });
+    appendAuditLog('UPDATE_INSTRUMENT', updatedInst.name);
+  };
+
   const handleSaveBulletin = (saved: BulletinItem) => {
     const exists = bulletins.some(b => b.id === saved.id);
     const next = exists
@@ -1085,6 +1172,7 @@ export default function App() {
     'home',
     'people',
     'research',
+    'projects',
     'publications',
     'instruments',
     'software',
@@ -1475,6 +1563,18 @@ export default function App() {
     if (item.peopleGroup) {
       setPeopleSubTab(item.peopleGroup);
     }
+    if (item.themeId) {
+      const thm = themes.find(t => t.id === item.themeId) || null;
+      setSelectedThemeDetails(thm);
+    } else {
+      setSelectedThemeDetails(null);
+    }
+    if (item.instrumentId) {
+      const inst = instruments.find(i => i.id === item.instrumentId) || null;
+      setSelectedInstrumentDetails(inst);
+    } else {
+      setSelectedInstrumentDetails(null);
+    }
     if (item.projectId) {
       const proj = projects.find(p => p.id === item.projectId) || null;
       setSelectedProjectDetails(proj);
@@ -1557,10 +1657,10 @@ export default function App() {
       {cloudStatus && (
         <div
           className={`fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-xl text-xs font-bold flex items-center gap-2 border ${cloudStatus.type === 'error'
-              ? 'bg-red-900 text-white border-red-500'
-              : cloudStatus.type === 'syncing'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : 'bg-emerald-900 text-white border-emerald-500'
+            ? 'bg-red-900 text-white border-red-500'
+            : cloudStatus.type === 'syncing'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : 'bg-emerald-900 text-white border-emerald-500'
             }`}
         >
           <span>{cloudStatus.text}</span>
@@ -1572,13 +1672,58 @@ export default function App() {
         </div>
       )}
 
-      {/* Configurable Navigation + Content Shell (Horizontal Top for Public, Vertical Left/Right for Members) */}
+      {/* Standalone Shareable Project Portal (?project=<id>) OR Main Website Shell */}
+      {standaloneProjectId ? (() => {
+        const standaloneProj = projects.find(p => p.id === standaloneProjectId) || null;
+        return (
+          <div className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-6">
+            {standaloneProj ? (
+              <ProjectSubPage
+                project={standaloneProj}
+                themes={themes}
+                people={people}
+                currentUser={currentUser}
+                canEdit={Boolean(editMode)}
+                editMode={Boolean(editMode)}
+                isStandalone
+                siteConfig={siteConfig}
+                primaryColor={accentColor}
+                initialSubTabId={standaloneSubTabId}
+                onBack={exitStandaloneProject}
+                onUpdateProject={handleUpdateProject}
+                onLoginClick={() => setShowSSOPopup(true)}
+                onToggleEditMode={() => setEditMode(prev => !prev)}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-10 text-center max-w-lg mx-auto space-y-4">
+                <FolderGit2 className="w-10 h-10 mx-auto text-slate-400" />
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-900">Project Portal Not Found</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    No active research project matched ID &ldquo;{standaloneProjectId}&rdquo;.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={exitStandaloneProject}
+                  className="text-white text-xs font-bold px-5 py-2.5 rounded-lg cursor-pointer"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  &larr; Return to ERSL Lab Website
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })() : (
+      /* Configurable Navigation + Content Shell (Horizontal Top for Public, Vertical Left/Right for Members) */
       <div
         className={`flex-1 flex min-w-0 ${effectiveLayoutMode === 'vertical-left'
-            ? 'flex-col md:flex-row'
-            : effectiveLayoutMode === 'vertical-right'
-              ? 'flex-col md:flex-row-reverse'
-              : 'flex-col'
+          ? 'flex-col md:flex-row'
+          : effectiveLayoutMode === 'vertical-right'
+            ? 'flex-col md:flex-row-reverse'
+            : 'flex-col'
           }`}
       >
         <UAHeader
@@ -1591,6 +1736,8 @@ export default function App() {
             setActiveTab(tab);
             setSelectedProjectDetails(null);
             setSelectedProjectSubTabId(undefined);
+            setSelectedThemeDetails(null);
+            setSelectedInstrumentDetails(null);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onAdminClick={() => setActiveTab('admin')}
@@ -1615,7 +1762,7 @@ export default function App() {
                   </span>
                   <h3 className="text-base font-extrabold text-slate-900 mt-3">Members-Only Workspace</h3>
                   <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                    Public access includes ERSL Home, People, Research Themes, Publications, Instruments, Software, and Datasets. Sign in via myBama / ERSL Portal to access internal lab workspaces.
+                    Public access includes ERSL Home, People, Research Themes, Research Projects, Publications, Instruments, Software, and Datasets. Sign in via myBama / ERSL Portal to access internal lab workspaces.
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-2 pt-1">
@@ -1828,10 +1975,10 @@ export default function App() {
                                 }}
                                 style={{ backgroundColor: accentColor }}
                                 className="hover:opacity-90 text-white font-bold text-xs py-1.5 px-3.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer shrink-0"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Post News / Photo</span>
-                            </button>
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Post News / Photo</span>
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1851,8 +1998,8 @@ export default function App() {
                             onClick={() => setNewsCategoryFilter(tab.id)}
                             style={newsCategoryFilter === tab.id ? { backgroundColor: accentColor } : undefined}
                             className={`px-3 py-1 rounded-full font-bold text-xs transition-all cursor-pointer flex items-center space-x-1 ${newsCategoryFilter === tab.id
-                                ? 'text-white shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                              ? 'text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                               }`}
                           >
                             <span>{tab.icon}</span>
@@ -2037,7 +2184,7 @@ export default function App() {
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   onClick={() => {
-                                    setActiveThemeFilter(activeHeroTheme.id);
+                                    setSelectedThemeDetails(activeHeroTheme);
                                     setSelectedProjectDetails(null);
                                     setActiveTab('research');
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2045,7 +2192,7 @@ export default function App() {
                                   style={{ backgroundColor: accentColor }}
                                   className="hover:opacity-90 text-white font-extrabold text-[11px] tracking-widest uppercase py-2.5 px-4 rounded-lg shadow-xs transition-all cursor-pointer"
                                 >
-                                  Research Themes
+                                  Explore Theme
                                 </button>
                                 <button
                                   onClick={() => setActiveTab('publications')}
@@ -2097,44 +2244,42 @@ export default function App() {
                   </div>
                 )}
 
-                {/* VIEW 2: RESEARCH THEMES & PROJECTS */}
+                {/* VIEW 2A: RESEARCH THEMES (clicking a card opens its dedicated ThemeSubPage) */}
                 {activeTab === 'research' && (() => {
-                  const activeProj = selectedProjectDetails
-                    ? (projects.find(p => p.id === selectedProjectDetails.id) || selectedProjectDetails)
+                  const activeThemeObj = selectedThemeDetails
+                    ? (themes.find(t => t.id === selectedThemeDetails.id) || selectedThemeDetails)
                     : null;
 
-                  if (activeProj) {
+                  if (activeThemeObj) {
                     return (
-                      <ProjectSubPage
-                        project={activeProj}
-                        themes={themes}
-                        people={people}
-                        currentUser={currentUser}
+                      <ThemeSubPage
+                        theme={activeThemeObj}
+                        projects={projects}
+                        publications={publications}
                         canEdit={Boolean(editMode)}
                         primaryColor={accentColor}
-                        initialSubTabId={selectedProjectSubTabId}
-                        onBack={() => {
-                          setSelectedProjectDetails(null);
-                          setSelectedProjectSubTabId(undefined);
+                        resolveThemeImage={(img) => resolveImagePath(img, 'research')}
+                        onBack={() => setSelectedThemeDetails(null)}
+                        onUpdateTheme={handleUpdateTheme}
+                        onOpenProjectNewTab={(projId) => openProjectInNewTab(projId)}
+                        onOpenAllProjects={() => {
+                          setSelectedThemeDetails(null);
+                          setActiveThemeFilter(activeThemeObj.id);
+                          setActiveTab('projects');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        onUpdateProject={handleUpdateProject}
-                        onLoginClick={() => setShowSSOPopup(true)}
                       />
                     );
                   }
-
-                  const visibleProjects = activeThemeFilter === 'all'
-                    ? projects
-                    : projects.filter(p => Array.isArray(p.themeIds) && p.themeIds.includes(activeThemeFilter));
 
                   return (
                     <div className="space-y-8 animate-in fade-in duration-300">
                       <SubPageHeader
                         tabId="research"
                         defaults={{
-                          badge: 'Research Themes & Funded Projects',
-                          title: 'Hydrology, GeoAI & Environmental Remote Sensing Portfolio',
-                          subtitle: 'Five core research themes linked directly to active projects, datasets, events, and resources.',
+                          badge: 'CORE RESEARCH THEMES',
+                          title: 'Hydrology, GeoAI & Environmental Remote Sensing Themes',
+                          subtitle: 'Click any research theme below to explore its scientific overview, linked projects, and curated publications.',
                         }}
                         override={siteConfig.pageHeaders?.research}
                         accentColor={accentColor}
@@ -2142,8 +2287,20 @@ export default function App() {
                         canEdit={isAdmin && editMode}
                         onSave={handleSavePageHeader}
                         actions={
-                          editMode ? (
-                            <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveThemeFilter('all');
+                                setActiveTab('projects');
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="bg-white/15 hover:bg-white/25 text-white border border-white/25 font-bold text-xs py-1.5 px-3 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                            >
+                              <FolderGit2 className="w-3.5 h-3.5" />
+                              <span>Research Projects ({projects.length})</span>
+                            </button>
+                            {editMode && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2151,26 +2308,14 @@ export default function App() {
                                   setEditingItem(null);
                                   setModalOpen(true);
                                 }}
-                                className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-xs cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add Theme</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setModalType('project');
-                                  setEditingItem(null);
-                                  setModalOpen(true);
-                                }}
                                 style={{ color: accentColor }}
                                 className="bg-white hover:bg-red-50 font-bold text-xs py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-xs cursor-pointer"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>Add Project</span>
+                                <span>Add Theme</span>
                               </button>
-                            </div>
-                          ) : undefined
+                            )}
+                          </div>
                         }
                       />
 
@@ -2180,27 +2325,31 @@ export default function App() {
                           <h3 className="text-xs font-extrabold uppercase tracking-widest" style={{ color: subheadingAccent }}>
                             Core Research Categories ({themes.length})
                           </h3>
-                          <span className="text-[11px] text-gray-500">Click any category card below to filter connected projects</span>
+                          <span className="text-[11px] text-gray-500">Click any category card to open its Overview, Projects &amp; Selected Publications</span>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                           {themes.map((theme) => {
-                            const isSelected = activeThemeFilter === theme.id;
                             const linkedProjectsCount = projects.filter(p => Array.isArray(p.themeIds) && p.themeIds.includes(theme.id)).length;
-                            const linkedPubs = publications.filter(pub =>
-                              theme.keywords.some(kw =>
-                                pub.title.toLowerCase().includes(kw.toLowerCase()) ||
-                                pub.abstract?.toLowerCase().includes(kw.toLowerCase()) ||
-                                (pub.keywords && pub.keywords.some((pk: string) => pk.toLowerCase() === kw.toLowerCase()))
-                              )
-                            );
+                            const hasPinned = Array.isArray(theme.selectedPublicationIds) && theme.selectedPublicationIds.length > 0;
+                            const linkedPubsCount = hasPinned
+                              ? theme.selectedPublicationIds!.length
+                              : publications.filter(pub =>
+                                  theme.keywords.some(kw =>
+                                    pub.title.toLowerCase().includes(kw.toLowerCase()) ||
+                                    pub.abstract?.toLowerCase().includes(kw.toLowerCase()) ||
+                                    (pub.keywords && pub.keywords.some((pk: string) => pk.toLowerCase() === kw.toLowerCase()))
+                                  )
+                                ).length;
 
                             return (
                               <div
                                 key={theme.id}
-                                onClick={() => setActiveThemeFilter(isSelected ? 'all' : theme.id)}
-                                className={`bg-white rounded-xl shadow-xs border overflow-hidden flex flex-col justify-between group hover:shadow-md transition-all relative cursor-pointer ${isSelected ? 'ring-2 ring-[#9E1B32] border-[#9E1B32]' : 'border-gray-200'
-                                  }`}
+                                onClick={() => {
+                                  setSelectedThemeDetails(theme);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden flex flex-col justify-between group hover:shadow-md hover:border-[#9E1B32]/50 transition-all relative cursor-pointer"
                               >
                                 {editMode && (
                                   <div
@@ -2255,7 +2404,7 @@ export default function App() {
                                   </div>
 
                                   <div className="p-4 text-left">
-                                    <h4 className="font-extrabold text-sm tracking-tight" style={{ color: subheadingAccent }}>
+                                    <h4 className="font-extrabold text-sm tracking-tight group-hover:underline" style={{ color: subheadingAccent }}>
                                       {theme.title}
                                     </h4>
                                     <p className="text-gray-600 text-xs leading-relaxed mt-1.5 line-clamp-3 text-justify">{theme.description}</p>
@@ -2270,27 +2419,101 @@ export default function App() {
                                       </span>
                                     ))}
                                   </div>
-                                  {linkedPubs.length > 0 && (
-                                    <p className="text-[10px] font-bold text-gray-500">
-                                      📖 {linkedPubs.length} indexed publication{linkedPubs.length !== 1 ? 's' : ''}
-                                    </p>
-                                  )}
+                                  <div className="flex items-center justify-between gap-2 pt-1">
+                                    <span className="text-[10px] font-bold text-gray-500">
+                                      📖 {linkedPubsCount} publication{linkedPubsCount !== 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-[11px] font-extrabold flex items-center gap-0.5" style={{ color: subheadingAccent }}>
+                                      <span>Open Theme Page</span>
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             );
                           })}
                         </div>
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* VIEW 2B: RESEARCH PROJECTS (Separate top-level tab; each project opens as standalone portal in a new tab) */}
+                {activeTab === 'projects' && (() => {
+                  const activeProj = selectedProjectDetails
+                    ? (projects.find(p => p.id === selectedProjectDetails.id) || selectedProjectDetails)
+                    : null;
+
+                  if (activeProj) {
+                    return (
+                      <ProjectSubPage
+                        project={activeProj}
+                        themes={themes}
+                        people={people}
+                        currentUser={currentUser}
+                        canEdit={Boolean(editMode)}
+                        editMode={Boolean(editMode)}
+                        siteConfig={siteConfig}
+                        primaryColor={accentColor}
+                        initialSubTabId={selectedProjectSubTabId}
+                        onBack={() => {
+                          setSelectedProjectDetails(null);
+                          setSelectedProjectSubTabId(undefined);
+                        }}
+                        onUpdateProject={handleUpdateProject}
+                        onLoginClick={() => setShowSSOPopup(true)}
+                        onToggleEditMode={() => setEditMode(prev => !prev)}
+                        onLogout={handleLogout}
+                      />
+                    );
+                  }
+
+                  const visibleProjects = activeThemeFilter === 'all'
+                    ? projects
+                    : projects.filter(p => Array.isArray(p.themeIds) && p.themeIds.includes(activeThemeFilter));
+
+                  return (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                      <SubPageHeader
+                        tabId="projects"
+                        defaults={{
+                          badge: 'FUNDED RESEARCH PORTFOLIO',
+                          title: 'Research Projects & Sponsor Portals',
+                          subtitle: 'Click any project card below to open its standalone, shareable project webpage in a new browser tab.',
+                        }}
+                        override={siteConfig.pageHeaders?.projects}
+                        accentColor={accentColor}
+                        showSubtitle={siteConfig.showSubheadings}
+                        canEdit={isAdmin && editMode}
+                        onSave={handleSavePageHeader}
+                        actions={
+                          editMode ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModalType('project');
+                                setEditingItem(null);
+                                setModalOpen(true);
+                              }}
+                              style={{ color: accentColor }}
+                              className="bg-white hover:bg-red-50 font-bold text-xs py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-xs cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Research Project</span>
+                            </button>
+                          ) : undefined
+                        }
+                      />
 
                       {/* Theme Filter Bar + Connected Research Projects Section */}
                       <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-6 space-y-5 shadow-xs">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-left">
                           <div>
                             <span className="text-[10px] font-extrabold uppercase tracking-widest" style={{ color: subheadingAccent }}>
-                              Project Sub-Webpages ({visibleProjects.length})
+                              Active &amp; Completed Projects ({visibleProjects.length})
                             </span>
                             <h3 className="text-lg font-extrabold text-slate-900 mt-0.5">
-                              Research Projects — Customizable Sub-Pages, Collaborators &amp; Data
+                              Sponsored Research Portals — Open in New Tab or Share Link
                             </h3>
                           </div>
 
@@ -2318,8 +2541,8 @@ export default function App() {
                             onClick={() => setActiveThemeFilter('all')}
                             style={activeThemeFilter === 'all' ? { backgroundColor: accentColor } : undefined}
                             className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition-colors ${activeThemeFilter === 'all'
-                                ? 'text-white'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              ? 'text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                               }`}
                           >
                             All Themes ({projects.length})
@@ -2331,8 +2554,8 @@ export default function App() {
                               onClick={() => setActiveThemeFilter(t.id)}
                               style={activeThemeFilter === t.id ? { backgroundColor: accentColor } : undefined}
                               className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition-colors ${activeThemeFilter === t.id
-                                  ? 'text-white'
-                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                ? 'text-white'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                 }`}
                             >
                               {t.title} ({projects.filter(p => Array.isArray(p.themeIds) && p.themeIds.includes(t.id)).length})
@@ -2346,7 +2569,7 @@ export default function App() {
                             return (
                               <div
                                 key={proj.id}
-                                onClick={() => setSelectedProjectDetails(proj)}
+                                onClick={() => openProjectInNewTab(proj.id)}
                                 style={{ borderLeftColor: accentColor }}
                                 className="bg-slate-50/70 hover:bg-white p-5 rounded-xl border border-gray-200 border-l-4 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all cursor-pointer group relative"
                               >
@@ -2387,8 +2610,8 @@ export default function App() {
                                       {proj.sponsor || proj.agency || 'ERSL Grant'}
                                     </span>
                                     <span className="text-[11px] font-bold flex items-center space-x-1" style={{ color: subheadingAccent }}>
-                                      <span>Open Project Sub-Page</span>
-                                      <ChevronRight className="w-3.5 h-3.5" />
+                                      <span>Open in New Tab</span>
+                                      <ExternalLink className="w-3.5 h-3.5" />
                                     </span>
                                   </div>
 
@@ -2413,13 +2636,33 @@ export default function App() {
                                   </div>
                                 </div>
 
-                                <div className="border-t border-gray-200 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500 font-bold">
-                                  <span className="truncate max-w-[75%]">
-                                    Sub-pages:{' '}
-                                    {proj.subPage?.customSubTabs?.length
-                                      ? proj.subPage.customSubTabs.map(t => t.label).join(' · ')
-                                      : 'Overview · Resources · Events · Datasets'}
-                                  </span>
+                                <div
+                                  className="border-t border-gray-200 pt-2.5 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500 font-bold"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const shareUrl = `${window.location.origin}${window.location.pathname}?project=${encodeURIComponent(proj.id)}`;
+                                      navigator.clipboard?.writeText(shareUrl);
+                                      setCopiedProjectUrlId(proj.id);
+                                      setTimeout(() => setCopiedProjectUrlId(null), 2000);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                                  >
+                                    {copiedProjectUrlId === proj.id ? (
+                                      <>
+                                        <Check className="w-3 h-3 text-emerald-600" />
+                                        <span className="text-emerald-700">Sponsor Link Copied!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3 h-3" />
+                                        <span>Copy Sponsor Link</span>
+                                      </>
+                                    )}
+                                  </button>
+
                                   <span className="uppercase tracking-wider font-extrabold" style={{ color: subheadingAccent }}>
                                     {proj.status || 'Active'}
                                   </span>
@@ -2697,8 +2940,8 @@ export default function App() {
                           <div>
                             <div className="flex justify-between items-center">
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${soft.language === 'Python'
-                                  ? 'bg-blue-50 text-blue-600 border-blue-100'
-                                  : 'bg-purple-50 text-purple-600 border-purple-100'
+                                ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                : 'bg-purple-50 text-purple-600 border-purple-100'
                                 }`}>
                                 {soft.language}
                               </span>
@@ -2816,10 +3059,10 @@ export default function App() {
                               <div className="flex items-center space-x-2.5">
                                 <h4 className="text-sm font-extrabold text-slate-800">{data.name}</h4>
                                 <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${data.availability === 'Public'
-                                    ? 'bg-green-100 text-green-800 border-green-200'
-                                    : data.availability === 'Request'
-                                      ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                      : 'bg-gray-100 text-gray-800 border-gray-200'
+                                  ? 'bg-green-100 text-green-800 border-green-200'
+                                  : data.availability === 'Request'
+                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                    : 'bg-gray-100 text-gray-800 border-gray-200'
                                   }`}>
                                   {data.availability}
                                 </span>
@@ -2873,7 +3116,27 @@ export default function App() {
                 )}
 
                 {/* VIEW 6: INSTRUMENTS & FACILITIES */}
-                {activeTab === 'instruments' && (
+                {activeTab === 'instruments' && (() => {
+                  const activeInstObj = selectedInstrumentDetails
+                    ? (instruments.find(i => i.id === selectedInstrumentDetails.id) || selectedInstrumentDetails)
+                    : null;
+
+                  if (activeInstObj) {
+                    return (
+                      <InstrumentSubPage
+                        instrument={activeInstObj}
+                        currentUser={currentUser}
+                        canEdit={Boolean(editMode)}
+                        primaryColor={accentColor}
+                        resolveInstrumentImage={(img) => resolveImagePath(img, 'instruments')}
+                        onBack={() => setSelectedInstrumentDetails(null)}
+                        onUpdateInstrument={handleUpdateInstrument}
+                        onLoginClick={() => setShowSSOPopup(true)}
+                      />
+                    );
+                  }
+
+                  return (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <SubPageHeader
                       tabId="instruments"
@@ -2911,10 +3174,17 @@ export default function App() {
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
                         {instruments.map((inst) => (
-                          <div key={inst.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col justify-between group hover:shadow-md transition-all relative min-h-[400px] h-full">
+                          <div
+                            key={inst.id}
+                            onClick={() => {
+                              setSelectedInstrumentDetails(inst);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col justify-between group hover:shadow-md hover:border-[#9E1B32]/40 transition-all relative min-h-[400px] h-full cursor-pointer"
+                          >
 
                             {editMode && (
-                              <div className="absolute top-2.5 right-2.5 flex space-x-1.5 z-10">
+                              <div className="absolute top-2.5 right-2.5 flex space-x-1.5 z-10" onClick={e => e.stopPropagation()}>
                                 <button
                                   onClick={() => {
                                     setModalType('instrument');
@@ -2967,12 +3237,12 @@ export default function App() {
                               )}
 
                               <div className="p-5 overflow-hidden">
-                                <h4 className="font-extrabold text-[#9E1B32] text-sm tracking-tight leading-snug line-clamp-1">{inst.name}</h4>
+                                <h4 className="font-extrabold text-[#9E1B32] text-sm tracking-tight leading-snug line-clamp-1 group-hover:underline">{inst.name}</h4>
                                 <p className="text-gray-500 text-[11px] leading-relaxed mt-2 line-clamp-4 text-justify">{inst.description}</p>
 
-                                {/* Dynamic Operating Manual Download Link (Point 1 of outstanding list) */}
+                                {/* Quick Operating Manual Download Link */}
                                 {inst.manualLink && (
-                                  <div className="mt-3.5 pt-3 border-t border-dashed border-gray-100">
+                                  <div className="mt-3.5 pt-3 border-t border-dashed border-gray-100" onClick={e => e.stopPropagation()}>
                                     <a
                                       href={inst.manualLink}
                                       target="_blank"
@@ -2988,11 +3258,14 @@ export default function App() {
                               </div>
                             </div>
 
-                            <div className="p-5 pt-0 border-t border-gray-50 mt-4 flex justify-between items-center text-[9px] text-gray-400 font-bold uppercase tracking-wider">
-                              <span>STATUS: CALIBRATED</span>
+                            <div className="p-5 pt-0 border-t border-gray-50 mt-4 flex justify-between items-center text-[10px] font-bold uppercase tracking-wider">
                               <span className="text-green-600 flex items-center space-x-1">
                                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full inline-block mr-1"></span>
                                 <span>Field Ready</span>
+                              </span>
+                              <span className="text-[#9E1B32] flex items-center gap-0.5 font-extrabold">
+                                <span>Specs &amp; Manuals</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
                               </span>
                             </div>
 
@@ -3002,7 +3275,8 @@ export default function App() {
                     </div>
 
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* VIEW 7: PEOPLE / LAB ROSTER */}
                 {activeTab === 'people' && (
@@ -3115,12 +3389,12 @@ export default function App() {
                                       Array.isArray(person.formerStints) && person.formerStints.length > 0
                                         ? person.formerStints
                                         : [
-                                            {
-                                              role: person.role,
-                                              years: person.formerYears || '',
-                                              topic: person.formerTopic || person.researchFocus || '',
-                                            },
-                                          ].filter(s => s.role || s.years || s.topic);
+                                          {
+                                            role: person.role,
+                                            years: person.formerYears || '',
+                                            topic: person.formerTopic || person.researchFocus || '',
+                                          },
+                                        ].filter(s => s.role || s.years || s.topic);
 
                                     return (
                                       <div
@@ -3531,8 +3805,8 @@ export default function App() {
                               onClick={() => setActiveBulletinFolder(f)}
                               style={activeBulletinFolder === f ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                               className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors cursor-pointer ${activeBulletinFolder === f
-                                  ? 'text-white'
-                                  : 'bg-white text-gray-600 border-gray-200 hover:border-[#9E1B32] hover:text-[#9E1B32]'
+                                ? 'text-white'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-[#9E1B32] hover:text-[#9E1B32]'
                                 }`}
                             >
                               📁 {f}
@@ -3889,16 +4163,21 @@ export default function App() {
                   </div>
                 )}
 
-                {/* VIEW: RESERVOIR PROJECT (private) */}
+                {/* VIEW: PROJECT MANAGEMENT (HOUSES RESERVOIR DELINEATION MATRIX) */}
                 {activeTab === 'reservoir' && (
                   <div>
                     {currentUser ? (
-                      <ReservoirProject currentUser={currentUser} {...getSubHeaderPassProps('reservoir')} />
+                      <ReservoirProject
+                        currentUser={currentUser}
+                        projects={projects}
+                        onOpenProjectNewTab={(projId) => openProjectInNewTab(projId)}
+                        {...getSubHeaderPassProps('reservoir')}
+                      />
                     ) : (
                       <div className="bg-white p-12 rounded-xl border border-gray-100 text-center max-w-lg mx-auto shadow-sm space-y-4">
                         <Lock className="w-12 h-12 mx-auto text-[#9E1B32]" />
                         <p className="text-sm font-bold text-gray-800">Members only</p>
-                        <p className="text-xs text-gray-500">The Reservoir Project tracking matrix is restricted to authorized ERSL lab researchers.</p>
+                        <p className="text-xs text-gray-500">The Project Management workspace and National Reservoir Delineation Matrix are restricted to authorized ERSL lab researchers.</p>
                         <button onClick={() => setShowSSOPopup(true)} className="bg-[#9E1B32] hover:bg-red-800 text-white text-xs font-bold py-2 px-6 rounded cursor-pointer">Log in</button>
                       </div>
                     )}
@@ -4115,6 +4394,7 @@ export default function App() {
           </footer>
         </div>
       </div>
+      )}
 
       {/* SSO Login modal popup */}
       {showSSOPopup && (

@@ -27,6 +27,8 @@ export interface SiteSearchItem {
   searchText: string;
   tab: string;
   tabLabel: string;
+  themeId?: string;
+  instrumentId?: string;
   projectId?: string;
   projectSubTabId?: string;
   peopleGroup?: 'member' | 'collaborator' | 'former';
@@ -145,13 +147,16 @@ export function buildSiteSearchItems({
         id: `srch-theme-${t.id}`,
         title: t.title,
         subtitle: `Research Theme · ${t.keywords.slice(0, 3).join(', ')}`,
-        searchText: [t.title, t.description, ...(t.keywords || [])].filter(Boolean).join(' '),
+        searchText: [t.title, t.description, t.overviewBody, ...(t.keywords || [])].filter(Boolean).join(' '),
         tab: 'research',
         tabLabel: 'Research Themes',
+        themeId: t.id,
       });
     });
+  }
 
-    // 5. Projects + Accessible Project Sub-Pages & Rich Blocks
+  // 5. Projects + Accessible Project Sub-Pages & Rich Blocks
+  if (visibleTabIds.has('projects') || visibleTabIds.has('research') || canSeePrivate) {
     projects.forEach(p => {
       const subPage = {
         ...DEFAULT_PROJECT_SUBPAGE,
@@ -172,8 +177,8 @@ export function buildSiteSearchItems({
         searchText: [p.title, p.agency, p.sponsor, p.details, p.summary, subPage.summary, subPage.piInfo, collabNames]
           .filter(Boolean)
           .join(' '),
-        tab: 'research',
-        tabLabel: 'Projects',
+        tab: 'projects',
+        tabLabel: 'Research Projects',
         projectId: p.id,
       });
 
@@ -203,7 +208,7 @@ export function buildSiteSearchItems({
           title: `${p.title} — ${subTab.label}`,
           subtitle: `Project Sub-Page (${subTab.visibility}) · ${p.agency}`,
           searchText: [p.title, subTab.label, subTab.description, blockTexts].filter(Boolean).join(' '),
-          tab: 'research',
+          tab: 'projects',
           tabLabel: `Project · ${subTab.label}`,
           projectId: p.id,
           projectSubTabId: subTab.id,
@@ -229,7 +234,7 @@ export function buildSiteSearchItems({
             ]
               .filter(Boolean)
               .join(' '),
-            tab: 'research',
+            tab: 'projects',
             tabLabel: `Project · ${subTab.label}`,
             projectId: p.id,
             projectSubTabId: subTab.id,
@@ -301,13 +306,20 @@ export function buildSiteSearchItems({
   // 8. Instruments
   if (visibleTabIds.has('instruments') || canSeePrivate) {
     instruments.forEach(inst => {
+      const resText = (inst.resources || [])
+        .filter(r => r.visibility === 'public' || canSeePrivate)
+        .map(r => `${r.title} ${r.category} ${r.description || ''}`)
+        .join(' ');
       items.push({
         id: `srch-inst-${inst.id}`,
         title: inst.name,
         subtitle: `Instrument · ${inst.category}`,
-        searchText: [inst.name, inst.category, inst.description].filter(Boolean).join(' '),
+        searchText: [inst.name, inst.category, inst.description, inst.detailedDescription, resText]
+          .filter(Boolean)
+          .join(' '),
         tab: 'instruments',
         tabLabel: 'Instruments',
+        instrumentId: inst.id,
       });
     });
   }
