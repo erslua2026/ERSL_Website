@@ -20,10 +20,13 @@ export const ADMIN_EMAILS = [
   'npurushothaman@ua.edu',
 ];
 
-export async function fetchProfile(userId: string): Promise<Profile | null> {
+export async function fetchProfile(
+  userId: string,
+  sessionUser?: { id: string; email?: string; user_metadata?: Record<string, any> } | null
+): Promise<Profile | null> {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
     if (!error && data) {
       const email = (data.email || '').toLowerCase().trim();
       if (ADMIN_EMAILS.includes(email)) {
@@ -35,10 +38,15 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
     console.warn('Profile fetch notice:', e);
   }
 
-  // Fallback: Resolve authenticated user directly from Supabase session
+  // Fallback: Resolve authenticated user directly from active Supabase session without failing to logged-out
   try {
-    const { data: authData } = await supabase.auth.getUser();
-    const user = authData?.user;
+    let user = sessionUser && sessionUser.id === userId ? sessionUser : null;
+    if (!user) {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user && authData.user.id === userId) {
+        user = authData.user;
+      }
+    }
     if (user && user.id === userId) {
       const email = (user.email || '').toLowerCase().trim();
       const isAdmin = ADMIN_EMAILS.includes(email);

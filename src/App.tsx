@@ -159,16 +159,27 @@ export default function App() {
       return existing
         ? {
           ...def,
+          ...existing,
           image: (!existing.image || isOldPlaceholder) ? def.image : existing.image,
           description: existing.description || def.description,
+          keywords: Array.isArray(existing.keywords) ? existing.keywords : (def.keywords || []),
+          selectedPublicationIds: Array.isArray(existing.selectedPublicationIds)
+            ? existing.selectedPublicationIds
+            : def.selectedPublicationIds,
         }
         : def;
     });
-    const customExtras = cleanedRaw.filter(
-      t =>
-        !CORE_THEME_IDS.has(t.id) &&
-        !initialThemes.some(d => d.title.toLowerCase() === (t.title || '').toLowerCase())
-    );
+    const customExtras = cleanedRaw
+      .filter(
+        t =>
+          !CORE_THEME_IDS.has(t.id) &&
+          !initialThemes.some(d => d.title.toLowerCase() === (t.title || '').toLowerCase())
+      )
+      .map(t => ({
+        ...t,
+        keywords: Array.isArray(t.keywords) ? t.keywords : [],
+        selectedPublicationIds: Array.isArray(t.selectedPublicationIds) ? t.selectedPublicationIds : undefined,
+      }));
     return [...mergedCore, ...customExtras];
   };
 
@@ -188,23 +199,25 @@ export default function App() {
   const normalizeProjects = (raw?: Project[] | null): Project[] => {
     if (!Array.isArray(raw) || raw.length === 0) return initialProjects;
     const initById = new Map(initialProjects.map(p => [p.id, p]));
-    return raw.map(p => {
-      const def = initById.get(p.id);
-      const remappedThemeIds = Array.isArray(p.themeIds)
-        ? Array.from(
-          new Set(
-            p.themeIds
-              .map(tid => LEGACY_THEME_ID_REMAP[tid] || tid)
-              .filter(tid => CORE_THEME_IDS.has(tid) || !tid.startsWith('theme-'))
+    return raw
+      .filter(p => p && typeof p === 'object' && p.id)
+      .map(p => {
+        const def = initById.get(p.id);
+        const remappedThemeIds = Array.isArray(p.themeIds)
+          ? Array.from(
+            new Set(
+              p.themeIds
+                .map(tid => LEGACY_THEME_ID_REMAP[tid] || tid)
+                .filter(tid => CORE_THEME_IDS.has(tid) || !tid.startsWith('theme-'))
+            )
           )
-        )
-        : [];
-      return {
-        ...p,
-        themeIds: remappedThemeIds.length > 0 ? remappedThemeIds : (def?.themeIds || []),
-        subPage: p.subPage || def?.subPage,
-      };
-    });
+          : [];
+        return {
+          ...p,
+          themeIds: remappedThemeIds.length > 0 ? remappedThemeIds : (def?.themeIds || []),
+          subPage: p.subPage || def?.subPage,
+        };
+      });
   };
 
   // Database lists with bulletproof fallback error handling
@@ -1025,28 +1038,49 @@ export default function App() {
     if (!currentUser) {
       localStorage.removeItem('ersl_user'); // clear any old fake-SSO session
       setEditMode(false);
-    } else if (currentUser.role === 'Admin') {
-      setEditMode(true);
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
-  // Supabase session -> currentUser (only approved members/admins are treated as logged in)
+  // Supabase session -> currentUser (only approved members/admins; never drops session on transient profile fetch glitches)
   useEffect(() => {
     if (!supabase) return;
-    const apply = async (userId?: string) => {
-      if (!userId) { setCurrentUser(null); return; }
-      const profile = await fetchProfile(userId);
-      if (profile && profile.role !== 'pending') setCurrentUser(profileToUser(profile));
-      else setCurrentUser(null);
+    let active = true;
+    const apply = async (
+      event: string,
+      sessionUser?: { id: string; email?: string; user_metadata?: Record<string, any> } | null
+    ) => {
+      if (!active) return;
+      if (!sessionUser?.id) {
+        if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION' || event === 'INIT') {
+          setCurrentUser(null);
+        }
+        return;
+      }
+      const profile = await fetchProfile(sessionUser.id, sessionUser);
+      if (!active) return;
+      if (profile && profile.role !== 'pending') {
+        const mappedUser = profileToUser(profile);
+        setCurrentUser(prev => {
+          if (!prev || prev.id !== mappedUser.id) {
+            if (mappedUser.role === 'Admin') setEditMode(true);
+          }
+          return mappedUser;
+        });
+      } else if (profile?.role === 'pending') {
+        setCurrentUser(null);
+      }
     };
-    supabase.auth.getSession().then(({ data }) => apply(data.session?.user.id));
+    supabase.auth.getSession().then(({ data }) => apply('INIT', data.session?.user));
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setShowUpdatePasswordModal(true);
       }
-      apply(session?.user.id);
+      apply(event, session?.user);
     });
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

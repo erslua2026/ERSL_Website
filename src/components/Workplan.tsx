@@ -170,7 +170,10 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
     // 1. Load local tasks backup if available
     const localTasks = localStorage.getItem('ersl_tasks');
     if (localTasks) {
-      try { setTasks(JSON.parse(localTasks)); } catch {}
+      try {
+        const parsedLocal = JSON.parse(localTasks);
+        if (Array.isArray(parsedLocal)) setTasks(parsedLocal);
+      } catch {}
     }
 
     // Helper to normalize emails for strict deduplication
@@ -274,7 +277,10 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
         // Fallback to local storage if cloud is not yet seeded
         try {
           const raw = localStorage.getItem('ersl_tasks');
-          if (raw) setTasks(JSON.parse(raw));
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) setTasks(parsed);
+          }
         } catch {}
       }
       if (cloudMatrix?.comments && typeof cloudMatrix.comments === 'object') {
@@ -441,8 +447,12 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
 
   const loadComments = useCallback(async (taskId: string) => {
     // 1. Check local storage
-    const local = localStorage.getItem(`ersl_comments_${taskId}`);
-    const localComments: Comment[] = local ? JSON.parse(local) : [];
+    let localComments: Comment[] = [];
+    try {
+      const local = localStorage.getItem(`ersl_comments_${taskId}`);
+      const parsed = local ? JSON.parse(local) : [];
+      if (Array.isArray(parsed)) localComments = parsed;
+    } catch {}
 
     let remoteComments: Comment[] = [];
     if (supabase) {

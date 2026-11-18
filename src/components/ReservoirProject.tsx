@@ -392,12 +392,18 @@ export const getInitialRoundData = (): RoundRow[] => [
 ];
 
 const sanitizeRounds = (data: any[]): RoundRow[] => {
-  return data.map(r => {
+  if (!Array.isArray(data)) return getInitialRoundData();
+  const validRows = data.filter(
+    r => r && typeof r === 'object' && r.round !== undefined && Array.isArray(r.allocations)
+  );
+  if (validRows.length === 0) return getInitialRoundData();
+
+  return validRows.map(r => {
     const isRoundDelivered = r.deliverCompleted ?? (Number(r.round) <= 3);
     const isRoundCollected = r.collectCompleted ?? (Number(r.round) <= 2);
     const isRoundBackup = r.backupCompleted ?? (Number(r.round) === 1);
 
-    const allocations = (r.allocations || []).map((a: any) => {
+    const allocations = (Array.isArray(r.allocations) ? r.allocations : []).map((a: any) => {
       let deliverStatus: DeliveryStatus = a.deliverStatus;
       if (!deliverStatus) {
         deliverStatus = isRoundDelivered ? 'delivered' : 'not_started';
@@ -454,6 +460,10 @@ const sanitizeRounds = (data: any[]): RoundRow[] => {
 
     return {
       ...r,
+      basinTotalText: r.basinTotalText || '',
+      basinNumericTotal: Number(r.basinNumericTotal) || 0,
+      subBasins: Array.isArray(r.subBasins) ? r.subBasins : [],
+      checkItems: Array.isArray(r.checkItems) ? r.checkItems : [],
       deliverCompleted: isRoundDelivered,
       collectCompleted: isRoundCollected,
       backupCompleted: isRoundBackup,
@@ -723,25 +733,30 @@ export const ReservoirProject: React.FC<
             }
           }
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reservoir_matrix' }, (payload: any) => {
-          if (payload?.new?.rounds && Array.isArray(payload.new.rounds)) {
-            const incoming = sanitizeRounds(payload.new.rounds);
-            if (isMounted) {
-              setRounds(incoming);
-              roundsRef.current = incoming;
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(incoming));
-              } catch {}
-              if (payload.new.active_round) {
-                const act = Number(payload.new.active_round);
-                setExplicitActiveDeliveryRound(act);
-                explicitActiveRoundRef.current = act;
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'reservoir_matrix', filter: 'id=eq.ersl_reservoir_matrix' },
+          (payload: any) => {
+            if (payload?.new?.id !== 'ersl_reservoir_matrix') return;
+            if (payload?.new?.rounds && Array.isArray(payload.new.rounds)) {
+              const incoming = sanitizeRounds(payload.new.rounds);
+              if (isMounted) {
+                setRounds(incoming);
+                roundsRef.current = incoming;
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(incoming));
+                } catch {}
+                if (payload.new.active_round) {
+                  const act = Number(payload.new.active_round);
+                  setExplicitActiveDeliveryRound(act);
+                  explicitActiveRoundRef.current = act;
+                }
+                setCloudSyncStatus('synced');
+                showToast('⚡ Live cloud database update synced!');
               }
-              setCloudSyncStatus('synced');
-              showToast('⚡ Live cloud database update synced!');
             }
           }
-        })
+        )
         .subscribe((status) => {
           if (isMounted) {
             setRealtimeActive(status === 'SUBSCRIBED');
@@ -751,7 +766,7 @@ export const ReservoirProject: React.FC<
       // Background periodic polling & window focus synchronization
       const pollTimer = setInterval(() => {
         if (isMounted) fetchCloudData();
-      }, 10000);
+      }, 30000);
 
       const handleWindowFocus = () => {
         if (isMounted) {
@@ -2715,7 +2730,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.reservoir_matrix;`;
 
                           {/* Sub-basins list */}
                           <div className="space-y-1">
-                            {r.subBasins.map((sb, i) => (
+                            {(r.subBasins || []).map((sb, i) => (
                               <div key={i} className="text-slate-700 text-xs flex items-start gap-1.5">
                                 <span className="text-slate-400">•</span>
                                 <span className="font-medium">{sb}</span>
@@ -2760,7 +2775,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.reservoir_matrix;`;
                             ========================================================================= */}
                         <td className="py-4 px-4 w-72 min-w-[280px] border-r border-slate-200 align-top space-y-2">
                           <div className="space-y-1.5">
-                            {r.allocations.map((a, aIdx) => {
+                            {(r.allocations || []).map((a, aIdx) => {
                               const isMemberHighlighted = filterMember !== 'all' && a.memberName.toLowerCase().includes(filterMember.toLowerCase());
 
                               return (
