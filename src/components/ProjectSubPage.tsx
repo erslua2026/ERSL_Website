@@ -389,11 +389,11 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             className="flex items-center gap-3.5 sm:gap-4 text-left cursor-pointer group min-w-0 flex-1"
             title="Return to ERSL Lab Website"
           >
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/80 shadow-sm overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
               <img
                 src={resolvedLogoSrc}
                 alt="ERSL Lab Logo"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain rounded-full"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const img = e.currentTarget as HTMLImageElement;

@@ -179,28 +179,25 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
 
   const renderLogo = (sizeClass: string) => (
     <div
-      className={`relative flex items-center justify-center ${sizeClass} rounded-full p-0.5 shadow-sm shrink-0`}
-      style={{ background: `linear-gradient(135deg, ${primaryColor}, #f59e0b)` }}
+      className={`relative flex items-center justify-center ${sizeClass} rounded-full overflow-hidden shrink-0`}
     >
-      <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden p-0.5">
-        {logoFailed ? (
-          <div
-            className="w-full h-full rounded-full text-white flex flex-col items-center justify-center text-[10px] font-black leading-tight"
-            style={{ backgroundColor: primaryColor }}
-          >
-            <span>{siteConfig.labShortName || 'ERSL'}</span>
-          </div>
-        ) : (
-          <img
-            src={logoCandidates[logoSrcIndex]}
-            onError={handleLogoError}
-            alt="ERSL Logo"
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-contain rounded-full bg-white"
-            loading="eager"
-          />
-        )}
-      </div>
+      {logoFailed ? (
+        <div
+          className="w-full h-full rounded-full text-white flex flex-col items-center justify-center text-[10px] font-black leading-tight"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <span>{siteConfig.labShortName || 'ERSL'}</span>
+        </div>
+      ) : (
+        <img
+          src={logoCandidates[logoSrcIndex]}
+          onError={handleLogoError}
+          alt="ERSL Logo"
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-contain rounded-full"
+          loading="eager"
+        />
+      )}
     </div>
   );
 
@@ -219,7 +216,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
         >
           <div className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
             <button onClick={() => onTabChange('home')} className="flex items-center gap-2.5 text-left cursor-pointer min-w-0 flex-1">
-              {renderLogo('w-12 h-12 sm:w-14 sm:h-14')}
+              {renderLogo('w-14 h-14 sm:w-16 sm:h-16')}
               <div className="min-w-0 flex-1">
                 <span className="text-[10px] font-black uppercase tracking-wider block truncate" style={{ color: siteConfig.subheadingColor || primaryColor }}>
                   UA Geography · {siteConfig.labShortName}
@@ -314,7 +311,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
             title="Go to ERSL Home"
             className="p-4 flex items-center gap-3 text-left border-b border-gray-200/30 cursor-pointer group"
           >
-            {renderLogo('w-16 h-16')}
+            {renderLogo('w-20 h-20')}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span
