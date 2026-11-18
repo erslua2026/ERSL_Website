@@ -378,19 +378,19 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200 text-left">
-      {/* Standalone Lab Brand & Authorization Strip (shown on ?project=<id> new tab & sponsor links) */}
+      {/* Standalone Lab Brand & Authorization Strip (Crimson Red Lab Banner) */}
       {isStandalone && (
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200 shadow-xs px-4 sm:px-7 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        <div
+          className="rounded-2xl shadow-sm px-4 sm:px-7 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 text-white"
+          style={{ backgroundColor: headerAccent }}
+        >
           <button
             type="button"
             onClick={onBack}
             className="flex items-center gap-3.5 sm:gap-4 text-left cursor-pointer group min-w-0 flex-1"
             title="Return to ERSL Lab Website"
           >
-            <div
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 shadow-xs overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
-              style={{ borderColor: primaryColor }}
-            >
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/80 shadow-sm overflow-hidden bg-white p-1 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
               <img
                 src={resolvedLogoSrc}
                 alt="ERSL Lab Logo"
@@ -406,13 +406,10 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               />
             </div>
             <div className="min-w-0">
-              <span
-                className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider block leading-snug"
-                style={{ color: primaryColor }}
-              >
+              <span className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider block leading-snug text-red-100">
                 {siteConfig?.departmentName || 'Department of Geography & the Environment'} · The University of Alabama
               </span>
-              <h1 className="text-base sm:text-2xl font-black text-slate-900 leading-tight mt-0.5 group-hover:text-[#9E1B32] transition-colors">
+              <h1 className="text-base sm:text-2xl font-black text-white leading-tight mt-0.5 group-hover:underline">
                 {siteConfig?.labFullName || 'Environmental Remote Sensing Laboratory (ERSL)'}
               </h1>
             </div>
@@ -423,8 +420,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               <button
                 type="button"
                 onClick={onLoginClick}
-                className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white cursor-pointer shadow-xs"
-                style={{ backgroundColor: headerAccent }}
+                className="inline-flex items-center gap-1.5 text-xs font-extrabold px-4 py-2 rounded-lg bg-white hover:bg-red-50 cursor-pointer shadow-xs"
+                style={{ color: headerAccent }}
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Member Login</span>
@@ -434,15 +431,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         </div>
       )}
 
-      {/* Top Crimson Project Banner */}
+      {/* Top Clean White Project Title Banner */}
       <div className="rounded-2xl border border-gray-200 shadow-xs overflow-hidden bg-white">
-        <div className="p-5 md:p-6 space-y-3.5 text-white" style={{ backgroundColor: headerAccent }}>
+        <div className="p-5 md:p-6 space-y-3.5 text-slate-900">
           {!isStandalone && (
             <div>
               <button
                 type="button"
                 onClick={onBack}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-gray-200"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Research Projects</span>
@@ -451,28 +448,34 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           )}
 
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-white leading-snug">{project.title}</h2>
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+            <h2 className="text-xl md:text-2xl font-black leading-snug" style={{ color: headerAccent }}>
+              {project.title}
+            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-gray-100">
               <div className="flex flex-wrap items-center gap-2">
                 {linkedThemes.map(t => (
                   <span
                     key={t.id}
-                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25"
+                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-red-50/70 border border-red-200"
+                    style={{ color: headerAccent }}
                   >
                     {t.title}
                   </span>
                 ))}
                 {project.details && (
-                  <span className="text-xs font-semibold text-red-100 ml-1">· {project.details}</span>
+                  <span className="text-xs font-semibold text-slate-600 ml-1">· {project.details}</span>
                 )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
+                <span
+                  className="text-[11px] font-extrabold px-2.5 py-1 rounded-md text-white shadow-2xs"
+                  style={{ backgroundColor: headerAccent }}
+                >
                   {project.agency}
                 </span>
                 {subPage.timeline && (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/20 bg-black/15 text-white/95">
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-slate-200 bg-slate-100 text-slate-800">
                     {subPage.timeline}
                   </span>
                 )}
