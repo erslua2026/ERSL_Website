@@ -144,12 +144,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   const customSubTabs = buildNormalizedSubTabs(project, subPage);
   const collaborators = subPage.collaborators || [];
-  // Use a clean Coastal/Deep Ocean accent (or non-crimson custom color) instead of heavy crimson blocks
-  const customNonCrimson =
-    subPage.headerBgColor && subPage.headerBgColor.toLowerCase() !== '#9e1b32'
-      ? subPage.headerBgColor
-      : '';
-  const headerAccent = customNonCrimson || '#0f4c81';
+  const headerAccent = subPage.headerBgColor || primaryColor;
+  const tabActiveBg = '#0f4c81';
 
   const [activeSubId, setActiveSubId] = useState<string>(customSubTabs[0]?.id || 'overview');
   const [previewRole, setPreviewRole] = useState<PreviewRole>('actual');
@@ -438,18 +434,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         </div>
       )}
 
-      {/* Top Light Editorial Project Banner */}
-      <div
-        className="rounded-2xl border border-slate-200 shadow-xs overflow-hidden bg-gradient-to-br from-white via-slate-50/80 to-sky-50/75"
-        style={{ borderTopWidth: '4px', borderTopColor: headerAccent }}
-      >
-        <div className="p-5 md:p-6 space-y-3.5 text-slate-900">
+      {/* Top Crimson Project Banner */}
+      <div className="rounded-2xl border border-gray-200 shadow-xs overflow-hidden bg-white">
+        <div className="p-5 md:p-6 space-y-3.5 text-white" style={{ backgroundColor: headerAccent }}>
           {!isStandalone && (
             <div>
               <button
                 type="button"
                 onClick={onBack}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200 shadow-2xs"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-white/20"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Research Projects</span>
@@ -458,31 +451,28 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           )}
 
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-slate-900 leading-snug">{project.title}</h2>
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-200/70">
+            <h2 className="text-xl md:text-2xl font-black text-white leading-snug">{project.title}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
               <div className="flex flex-wrap items-center gap-2">
                 {linkedThemes.map(t => (
                   <span
                     key={t.id}
-                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200 shadow-2xs"
+                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25"
                   >
                     {t.title}
                   </span>
                 ))}
                 {project.details && (
-                  <span className="text-xs font-semibold text-slate-500 ml-1">· {project.details}</span>
+                  <span className="text-xs font-semibold text-red-100 ml-1">· {project.details}</span>
                 )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="text-[11px] font-extrabold px-2.5 py-1 rounded-md text-white shadow-2xs"
-                  style={{ backgroundColor: headerAccent }}
-                >
+                <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
                   {project.agency}
                 </span>
                 {subPage.timeline && (
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-sky-200 bg-sky-50 text-sky-900">
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/20 bg-black/15 text-white/95">
                     {subPage.timeline}
                   </span>
                 )}
@@ -513,7 +503,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                   className={`w-full px-3 py-2.5 text-xs font-bold rounded-xl flex items-center justify-between gap-2 transition-colors cursor-pointer text-left ${
                     active ? 'text-white shadow-xs' : 'text-slate-700 hover:bg-slate-100'
                   }`}
-                  style={active ? { backgroundColor: headerAccent } : undefined}
+                  style={active ? { backgroundColor: tabActiveBg } : undefined}
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="shrink-0">{getSubTabIcon(tab.kind)}</span>

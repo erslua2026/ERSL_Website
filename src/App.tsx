@@ -3556,23 +3556,25 @@ export default function App() {
                                       </div>
                                     )}
 
-                                    {/* Left: Uncropped Portrait Column (full face cleanly visible on mobile & desktop) */}
-                                    <div className="w-full md:w-[220px] lg:w-[240px] bg-slate-50/90 relative shrink-0 flex items-center justify-center p-3">
-                                      {person.image && !failedImages[`person-${person.id}`] ? (
-                                        <img
-                                          src={resolveAssetUrl(resolveImagePath(person.image, 'people'))}
-                                          onError={() => {
-                                            setFailedImages(prev => ({ ...prev, [`person-${person.id}`]: true }));
-                                          }}
-                                          alt={person.name}
-                                          className="w-auto max-w-full max-h-64 md:max-h-[250px] h-auto object-contain rounded-xl shadow-xs select-none animate-in fade-in duration-300"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                      ) : (
-                                        <div className="w-full h-48 md:h-full min-h-[190px] bg-red-50 flex flex-col items-center justify-center rounded-xl font-bold text-[#9E1B32] select-none animate-in zoom-in-75">
-                                          <span className="text-4xl">{getCleanInitials(person.name)}</span>
-                                        </div>
-                                      )}
+                                    {/* Left: Fixed 4:5 Portrait Frame that scales proportionally with screen size */}
+                                    <div className="w-full md:w-[210px] lg:w-[230px] bg-slate-50/90 shrink-0 flex items-center justify-center p-3">
+                                      <div className="w-44 sm:w-52 md:w-full aspect-[4/5] rounded-xl overflow-hidden shadow-xs bg-white border border-gray-200/80 relative flex items-center justify-center">
+                                        {person.image && !failedImages[`person-${person.id}`] ? (
+                                          <img
+                                            src={resolveAssetUrl(resolveImagePath(person.image, 'people'))}
+                                            onError={() => {
+                                              setFailedImages(prev => ({ ...prev, [`person-${person.id}`]: true }));
+                                            }}
+                                            alt={person.name}
+                                            className="w-full h-full object-cover object-[50%_22%] select-none animate-in fade-in duration-300"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full bg-red-50 flex flex-col items-center justify-center font-bold text-[#9E1B32] select-none animate-in zoom-in-75">
+                                            <span className="text-4xl">{getCleanInitials(person.name)}</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
 
                                     {/* Right: Info Column (flexible height on mobile so bio & action links never get clipped) */}
