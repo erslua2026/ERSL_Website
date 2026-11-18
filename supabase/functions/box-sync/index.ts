@@ -1,7 +1,12 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
-const ADMIN_EMAILS = ['hliu@ua.edu', 'npurushothaman@ua.edu'];
+const ADMIN_EMAILS = [
+  'hongxing.liu@ua.edu',
+  'hliu@ua.edu',
+  'naveenpurushothaman1098@gmail.com',
+  'npurushothaman@ua.edu',
+];
 
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return true;

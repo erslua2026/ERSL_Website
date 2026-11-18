@@ -25,6 +25,7 @@ export async function fetchProfile(
   sessionUser?: { id: string; email?: string; user_metadata?: Record<string, any> } | null
 ): Promise<Profile | null> {
   if (!supabase) return null;
+  let profileLookupMissing = false;
   try {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
     if (!error && data) {
@@ -33,6 +34,9 @@ export async function fetchProfile(
         data.role = 'admin';
       }
       return data as Profile;
+    }
+    if (!error && !data) {
+      profileLookupMissing = true;
     }
   } catch (e) {
     console.warn('Profile fetch notice:', e);
@@ -58,7 +62,7 @@ export async function fetchProfile(
       };
       // Only create missing row when the lookup cleanly returned null (not on transient network error),
       // and never self-promote non-admin accounts above 'pending'.
-      if (!error && !data) {
+      if (profileLookupMissing) {
         try {
           Promise.resolve(supabase.from('profiles').upsert([fallbackProfile])).catch(() => { });
         } catch { }

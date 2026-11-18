@@ -106,6 +106,8 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
   const openEditOverview = () => {
     setDraftName(instrument.name);
     setDraftCategory(instrument.category);
+    setDraftStatus(instrument.status || 'field-ready');
+    setDraftStatusNote(instrument.statusNote || '');
     setDraftSummary(instrument.description);
     setDraftDetailed(instrument.detailedDescription || instrument.description);
     setDraftImage(instrument.image);
@@ -118,6 +120,8 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
       ...instrument,
       name: draftName.trim() || instrument.name,
       category: draftCategory.trim() || instrument.category,
+      status: draftStatus,
+      statusNote: draftStatus === 'field-ready' ? undefined : (draftStatusNote.trim() || undefined),
       description: draftSummary.trim() || instrument.description,
       detailedDescription: draftDetailed.trim() || draftSummary.trim(),
       image: draftImage.trim(),
@@ -203,9 +207,15 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
               <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white uppercase tracking-wider">
                 {instrument.category}
               </span>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-emerald-300/40 bg-emerald-500/20 text-emerald-100">
-                Calibrated · Field Ready
-              </span>
+              {(() => {
+                const statusMeta = getInstrumentStatusMeta(instrument.status);
+                return (
+                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5 ${statusMeta.headerBadgeClass}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dotClass}`} />
+                    <span>{statusMeta.bannerLabel}</span>
+                  </span>
+                );
+              })()}
               {canEdit && (
                 <button
                   type="button"
@@ -271,6 +281,25 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Status Notice Banner when under repair / calibration / out of service */}
+      {instrument.status && instrument.status !== 'field-ready' && (() => {
+        const statusMeta = getInstrumentStatusMeta(instrument.status);
+        return (
+          <div className={`rounded-xl border px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2 ${statusMeta.alertBoxClass}`}>
+            <div className="flex items-center gap-2 font-bold">
+              <span className={`w-2 h-2 rounded-full ${statusMeta.dotClass}`} />
+              <span>Status: {statusMeta.label}</span>
+              {instrument.statusNote && <span className="font-medium">— {instrument.statusNote}</span>}
+            </div>
+            {canEdit && (
+              <button type="button" onClick={openEditOverview} className="underline font-extrabold cursor-pointer">
+                Update Status
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB 1: OVERVIEW & DETAILED DESCRIPTION */}
       {activeTab === 'overview' && (
@@ -494,7 +523,7 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
               </button>
             </div>
             <form onSubmit={handleSaveOverview} className="p-5 space-y-4 overflow-y-auto text-xs text-left">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="font-bold text-gray-700 block mb-1">Instrument Name</label>
                   <input
@@ -515,7 +544,32 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
                     className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
                   />
                 </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Operational Status</label>
+                  <select
+                    value={draftStatus}
+                    onChange={e => setDraftStatus(e.target.value as InstrumentStatus)}
+                    className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#9E1B32]"
+                  >
+                    {INSTRUMENT_STATUS_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {draftStatus !== 'field-ready' && (
+                <div>
+                  <label className="font-bold text-amber-800 block mb-1">Repair / Status Note (Optional)</label>
+                  <input
+                    type="text"
+                    value={draftStatusNote}
+                    onChange={e => setDraftStatusNote(e.target.value)}
+                    placeholder="e.g., Sensor battery/gimbal under repair until Dec 2026"
+                    className="w-full p-2.5 border border-amber-200 bg-amber-50/40 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="font-bold text-gray-700 block mb-1">Card Summary (Short Preview)</label>

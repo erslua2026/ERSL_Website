@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Edit, Plus, Info, Sparkles, Search, Loader2, Check } from 'lucide-react';
+import { X, Save, Edit, Plus, Sparkles, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
 import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint, ProjectInvestigator } from '../types';
 import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
 import { formatInvestigatorsSummary, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 import { INSTRUMENT_STATUS_OPTIONS } from '../lib/instrumentUtils';
+import { DuplicateMatchResult, findDuplicatePublication } from '../lib/publicationUtils';
 import { BoxUploadButton } from './BoxUploadButton';
 import { ImageUploadField } from './ImageUploadField';
+
+export type DuplicateResolutionAction = 'update' | 'replace' | 'remove-existing';
 
 interface EditModalProps {
   type: 'publication' | 'data-layer' | 'research-theme' | 'project' | 'instrument' | 'person' | 'software' | 'teaching';
   item: any; // null if adding new
   themes?: ResearchTheme[];
+  existingPublications?: Publication[];
   defaultPersonGroup?: 'member' | 'collaborator' | 'former';
   initialPersonGroupOverride?: 'member' | 'collaborator' | 'former';
   onSave: (savedItem: any) => void;
+  onResolvePublicationDuplicate?: (
+    action: DuplicateResolutionAction,
+    duplicateId: string,
+    newItem: Publication
+  ) => void;
   onClose: () => void;
 }
 
@@ -21,15 +30,18 @@ export const EditModal: React.FC<EditModalProps> = ({
   type,
   item,
   themes = [],
+  existingPublications = [],
   defaultPersonGroup = 'member',
   initialPersonGroupOverride,
   onSave,
+  onResolvePublicationDuplicate,
   onClose,
 }) => {
   const [formData, setFormData] = useState<any>({});
   const [doiQuery, setDoiQuery] = useState('');
   const [isFetchingDoi, setIsFetchingDoi] = useState(false);
   const [doiFetchMsg, setDoiFetchMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [duplicatePrompt, setDuplicatePrompt] = useState<DuplicateMatchResult | null>(null);
 
   const extractDoi = (input: string): string | null => {
     const match = input.match(/10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+/);
@@ -294,8 +306,26 @@ export const EditModal: React.FC<EditModalProps> = ({
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
+  const livePublicationDuplicate =
+    type === 'publication'
+      ? findDuplicatePublication(formData, existingPublications, item?.id)
+      : null;
+
+  const buildCandidatePublication = (): Publication => ({
+    ...formData,
+    id: formData.id || `publication-${Date.now()}`,
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (type === 'publication') {
+      const dup = findDuplicatePublication(formData, existingPublications, item?.id);
+      if (dup) {
+        setDuplicatePrompt(dup);
+        return;
+      }
+    }
 
     // For research theme, convert keywords string to array
     if (type === 'research-theme' && typeof formData.keywords === 'string') {
@@ -480,6 +510,32 @@ export const EditModal: React.FC<EditModalProps> = ({
                   </p>
                 )}
               </div>
+
+              {type === 'publication' && livePublicationDuplicate && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-amber-950 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-extrabold text-xs">
+                        Duplicate Publication Detected (Matches existing {livePublicationDuplicate.reason})
+                      </p>
+                      <p className="text-[11px] text-amber-900 mt-0.5 line-clamp-2">
+                        <strong>[{livePublicationDuplicate.existing.year}]</strong> {livePublicationDuplicate.existing.title}
+                      </p>
+                      <p className="text-[10px] text-amber-800 mt-0.5">
+                        Click Save below or choose how to resolve (Update existing or Remove duplicate).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicatePrompt(livePublicationDuplicate)}
+                      className="text-[11px] font-extrabold bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg shrink-0 cursor-pointer"
+                    >
+                      Resolve
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="block font-bold text-gray-700">Publication Title</label>
@@ -1490,6 +1546,119 @@ export const EditModal: React.FC<EditModalProps> = ({
         </form>
 
       </div>
+
+      {/* Duplicate Publication Pop-up Dialog */}
+      {duplicatePrompt && type === 'publication' && (
+        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-4 z-[80] animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-amber-200 max-w-md w-full overflow-hidden text-left animate-in zoom-in-95 duration-150">
+            <div className="bg-amber-600 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <h4 className="font-extrabold text-sm">Duplicate Publication Found</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDuplicatePrompt(null)}
+                className="text-white/80 hover:text-white p-1 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-700 leading-relaxed">
+                This publication matches an existing record by{' '}
+                <strong className="text-amber-800">{duplicatePrompt.reason}</strong>. Would you like to update the existing record or remove the duplicate?
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  Existing Record ({duplicatePrompt.existing.year})
+                </span>
+                <p className="font-extrabold text-slate-900 leading-snug">
+                  {duplicatePrompt.existing.title}
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  {duplicatePrompt.existing.authors} · <span className="italic">{duplicatePrompt.existing.venue}</span>
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candidate = buildCandidatePublication();
+                    if (onResolvePublicationDuplicate) {
+                      onResolvePublicationDuplicate('update', duplicatePrompt.existing.id, candidate);
+                    } else {
+                      onSave({ ...candidate, id: duplicatePrompt.existing.id });
+                    }
+                    setDuplicatePrompt(null);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#9E1B32] hover:bg-red-800 text-white font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Update Existing Record with These Details</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candidate = buildCandidatePublication();
+                    if (onResolvePublicationDuplicate) {
+                      onResolvePublicationDuplicate('remove-existing', duplicatePrompt.existing.id, candidate);
+                    }
+                    setDuplicatePrompt(null);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove Existing Duplicate Record</span>
+                </button>
+
+                {!item && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const candidate = buildCandidatePublication();
+                      if (onResolvePublicationDuplicate) {
+                        onResolvePublicationDuplicate('replace', duplicatePrompt.existing.id, candidate);
+                      } else {
+                        onSave(candidate);
+                      }
+                      setDuplicatePrompt(null);
+                    }}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Replace Duplicate with This New Entry</span>
+                  </button>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSave(buildCandidatePublication());
+                      setDuplicatePrompt(null);
+                    }}
+                    className="py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                  >
+                    Keep Both Anyway
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDuplicatePrompt(null)}
+                    className="py-2 px-3 rounded-lg border border-gray-300 bg-white hover:bg-slate-50 text-slate-700 font-bold cursor-pointer"
+                  >
+                    Back to Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

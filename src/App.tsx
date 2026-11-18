@@ -10,7 +10,7 @@ import { UAHeader } from './components/UAHeader';
 import { UASSO } from './components/UASSO';
 import { BoxExplorer } from './components/BoxExplorer';
 import { AdminDashboard } from './components/AdminDashboard';
-import { EditModal } from './components/EditModal';
+import { EditModal, DuplicateResolutionAction } from './components/EditModal';
 import { SubPageHeader } from './components/SubPageHeader';
 
 import {
@@ -33,6 +33,7 @@ import { InstrumentSubPage } from './components/InstrumentSubPage';
 import { CustomPageView } from './components/CustomPageView';
 import { SiteCustomizerModal } from './components/SiteCustomizerModal';
 import { isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl } from './lib/boxUtils';
+import { getInstrumentStatusMeta } from './lib/instrumentUtils';
 import { LoginModal } from './components/LoginModal';
 import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Workplan } from './components/Workplan';
@@ -1474,16 +1475,57 @@ export default function App() {
     appendAuditLog('ADMIN_REVOKE_USER_ACCESS', `Revoked access authorization for ${userToDelete.name} (${userToDelete.email})`);
   };
 
+  const handleResolvePublicationDuplicate = (
+    action: DuplicateResolutionAction,
+    duplicateId: string,
+    newItem: Publication
+  ) => {
+    const duplicateTarget = publications.find(p => p.id === duplicateId);
+    if (action === 'remove-existing') {
+      const updated = publications.filter(p => p.id !== duplicateId);
+      setPublications(updated);
+      try { localStorage.setItem('ersl_publications', JSON.stringify(updated)); } catch { }
+      syncSiteContentToCloud({ publications: updated });
+      if (duplicateTarget) {
+        appendAuditLog('DELETE_PUBLICATION', `Removed duplicate publication: ${duplicateTarget.title}`);
+      }
+      return;
+    }
+
+    if (action === 'update') {
+      const updated = publications.map(p =>
+        p.id === duplicateId ? { ...newItem, id: duplicateId } : p
+      );
+      setPublications(updated);
+      try { localStorage.setItem('ersl_publications', JSON.stringify(updated)); } catch { }
+      syncSiteContentToCloud({ publications: updated });
+      appendAuditLog('UPDATE_PUBLICATION', `Updated existing publication: ${newItem.title}`);
+    } else if (action === 'replace') {
+      const updated = [newItem, ...publications.filter(p => p.id !== duplicateId)];
+      setPublications(updated);
+      try { localStorage.setItem('ersl_publications', JSON.stringify(updated)); } catch { }
+      syncSiteContentToCloud({ publications: updated });
+      appendAuditLog('UPDATE_PUBLICATION', `Replaced duplicate publication with: ${newItem.title}`);
+    }
+
+    setModalOpen(false);
+    setEditingItem(null);
+    setPersonGroupOverride(undefined);
+  };
+
   // Unified Save handler for EditModal
   const handleModalSave = (savedItem: any) => {
     const isEdit = !!editingItem;
 
     if (modalType === 'publication') {
-      const updated = isEdit ? publications.map(p => p.id === savedItem.id ? savedItem : p) : [savedItem, ...publications];
+      const existsInPubs = isEdit || publications.some(p => p.id === savedItem.id);
+      const updated = existsInPubs
+        ? publications.map(p => p.id === savedItem.id ? savedItem : p)
+        : [savedItem, ...publications];
       setPublications(updated);
       try { localStorage.setItem('ersl_publications', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ publications: updated });
-      appendAuditLog(isEdit ? 'UPDATE_PUBLICATION' : 'ADD_PUBLICATION', savedItem.title);
+      appendAuditLog(existsInPubs ? 'UPDATE_PUBLICATION' : 'ADD_PUBLICATION', savedItem.title);
     } else if (modalType === 'data-layer') {
       const updated = isEdit ? dataLayers.map(d => d.id === savedItem.id ? savedItem : d) : [savedItem, ...dataLayers];
       setDataLayers(updated);
@@ -3564,10 +3606,18 @@ export default function App() {
                             </div>
 
                             <div className="p-5 pt-0 border-t border-gray-50 mt-4 flex justify-between items-center text-[10px] font-bold uppercase tracking-wider">
-                              <span className="text-green-600 flex items-center space-x-1">
-                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full inline-block mr-1"></span>
-                                <span>Field Ready</span>
-                              </span>
+                              {(() => {
+                                const st = getInstrumentStatusMeta(inst.status);
+                                return (
+                                  <span
+                                    className={`${st.textClass} flex items-center space-x-1`}
+                                    title={inst.statusNote || st.label}
+                                  >
+                                    <span className={`w-1.5 h-1.5 ${st.dotClass} rounded-full inline-block mr-1`}></span>
+                                    <span>{st.label}</span>
+                                  </span>
+                                );
+                              })()}
                               <span className="text-[#9E1B32] flex items-center gap-0.5 font-extrabold">
                                 <span>Specs &amp; Manuals</span>
                                 <ChevronRight className="w-3.5 h-3.5" />
@@ -4739,9 +4789,11 @@ export default function App() {
           type={modalType}
           item={editingItem}
           themes={themes}
+          existingPublications={modalType === 'publication' ? publications : undefined}
           defaultPersonGroup={peopleSubTab}
           initialPersonGroupOverride={personGroupOverride}
           onSave={handleModalSave}
+          onResolvePublicationDuplicate={handleResolvePublicationDuplicate}
           onClose={() => {
             setModalOpen(false);
             setEditingItem(null);
