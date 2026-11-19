@@ -4,6 +4,7 @@ import {
   BookOpen,
   Check,
   Copy,
+  Download,
   Edit2,
   ExternalLink,
   FolderGit2,
@@ -14,8 +15,10 @@ import {
   X,
 } from 'lucide-react';
 import { Project, Publication, ResearchTheme } from '../types';
-import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import { openOrDownloadResource, resolveAssetUrl } from '../lib/boxUtils';
+import { decodeHtmlEntities, resolvePublicationLinks } from '../lib/publicationUtils';
 import { ImageUploadField } from './ImageUploadField';
+import { LinkedReferenceText } from './LinkedReferenceText';
 import { parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 
 interface ThemeSubPageProps {
@@ -322,7 +325,7 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
 
               <div className="space-y-3 text-sm text-slate-700 leading-relaxed text-justify">
                 {overviewParagraphs.map((para, idx) => (
-                  <p key={idx}>{para}</p>
+                  <p key={idx}><LinkedReferenceText text={para} /></p>
                 ))}
               </div>
 
@@ -539,67 +542,141 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
-              {displayedPublications.map((pub, idx) => (
+              {displayedPublications.map((pub, idx) => {
+                const links = resolvePublicationLinks(pub);
+                const cleanTitle = decodeHtmlEntities(pub.title);
+                const cleanAuthors = decodeHtmlEntities(pub.authors);
+                const cleanVenue = decodeHtmlEntities(pub.venue);
+                const cleanAbstract = decodeHtmlEntities(pub.abstract);
+                const titleTargetHref = links.primaryHref || links.scholarLookupUrl;
+
+                return (
                 <div
                   key={pub.id}
                   className="p-4 rounded-xl border border-gray-200 bg-slate-50/50 hover:bg-white transition-colors space-y-1.5"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-700">
                         #{idx + 1} · {pub.year}
                       </span>
                       <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-red-200 bg-red-50 text-[#9E1B32]">
                         {pub.type}
                       </span>
+                      {links.doi && (
+                        <a
+                          href={links.doiUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-white border border-gray-200 hover:border-[#9E1B32] inline-flex items-center gap-1 hover:underline"
+                          style={{ color: primaryColor }}
+                        >
+                          <span>DOI: {links.doi}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
                     </div>
-                    {pub.citations > 0 && (
+                    {pub.citations && pub.citations > 0 ? (
                       <span className="text-[11px] font-bold text-slate-500">
                         {pub.citations} citations
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
-                  <h4 className="text-sm font-extrabold text-slate-900 leading-snug">{pub.title}</h4>
-                  <p className="text-xs text-slate-600 font-medium">{pub.authors}</p>
+                  {links.isLocalFile && !links.doiUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => openOrDownloadResource(pub.link, cleanTitle)}
+                      className="text-left text-sm font-extrabold text-slate-900 hover:text-[#9E1B32] hover:underline leading-snug inline-flex items-start gap-1.5 cursor-pointer"
+                    >
+                      <span>{cleanTitle}</span>
+                      <Download className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: primaryColor }} />
+                    </button>
+                  ) : titleTargetHref ? (
+                    <a
+                      href={titleTargetHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-extrabold text-slate-900 hover:text-[#9E1B32] hover:underline leading-snug inline-flex items-start gap-1.5"
+                    >
+                      <span>{cleanTitle}</span>
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: primaryColor }} />
+                    </a>
+                  ) : (
+                    <h4 className="text-sm font-extrabold text-slate-900 leading-snug">{cleanTitle}</h4>
+                  )}
+
+                  <p className="text-xs text-slate-600 font-medium">{cleanAuthors}</p>
                   <p className="text-xs italic font-semibold" style={{ color: primaryColor }}>
-                    {pub.venue}
+                    {cleanVenue}
                   </p>
-                  {pub.abstract && (
+                  {cleanAbstract && (
                     <p className="text-xs text-slate-600 leading-relaxed pt-1 line-clamp-3 text-justify">
-                      {pub.abstract}
+                      {cleanAbstract}
                     </p>
                   )}
 
-                  {(pub.doi || pub.scholarUrl) && (
-                    <div className="pt-2 flex flex-wrap gap-3">
-                      {pub.doi && sanitizeExternalUrl(pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`) && (
-                        <a
-                          href={sanitizeExternalUrl(pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                          style={{ color: primaryColor }}
-                        >
-                          <span>DOI / Full Text</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                      {pub.scholarUrl && sanitizeExternalUrl(pub.scholarUrl) && (
-                        <a
-                          href={sanitizeExternalUrl(pub.scholarUrl)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 hover:underline"
-                        >
-                          <span>Google Scholar</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  )}
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    {links.doiUrl && (
+                      <a
+                        href={links.doiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                        style={{ color: primaryColor }}
+                      >
+                        <span>DOI / Full Text</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    {links.externalUrl && links.externalUrl !== links.doiUrl && (
+                      <a
+                        href={links.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                        style={{ color: primaryColor }}
+                      >
+                        <span>Open Paper Link</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    {links.isLocalFile && (
+                      <button
+                        type="button"
+                        onClick={() => openOrDownloadResource(pub.link, cleanTitle)}
+                        className="text-xs font-bold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                        style={{ color: primaryColor }}
+                      >
+                        <span>Download Attached PDF / File</span>
+                        <Download className="w-3 h-3" />
+                      </button>
+                    )}
+                    {links.scholarUrl ? (
+                      <a
+                        href={links.scholarUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 hover:underline"
+                      >
+                        <span>Google Scholar</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : !links.primaryHref && !links.isLocalFile && links.scholarLookupUrl ? (
+                      <a
+                        href={links.scholarLookupUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 hover:underline"
+                      >
+                        <span>Find on Google Scholar</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -722,6 +799,7 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-2 text-left">
               {filteredPickerPubs.map(pub => {
                 const checked = draftSelectedPubIds.includes(pub.id);
+                const links = resolvePublicationLinks(pub);
                 return (
                   <label
                     key={pub.id}
@@ -735,13 +813,26 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
                       onChange={() => togglePubSelection(pub.id)}
                       className="mt-0.5 accent-[#9E1B32] cursor-pointer"
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-extrabold text-slate-900 leading-snug">
-                        [{pub.year}] {pub.title}
+                        [{pub.year}] {decodeHtmlEntities(pub.title)}
                       </p>
                       <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                        {pub.authors} · {pub.venue}
+                        {decodeHtmlEntities(pub.authors)} · {decodeHtmlEntities(pub.venue)}
                       </p>
+                      {(links.doiUrl || links.externalUrl) && (
+                        <a
+                          href={links.doiUrl || links.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold hover:underline mt-0.5"
+                          style={{ color: primaryColor }}
+                        >
+                          <span>{links.doi ? `DOI: ${links.doi}` : 'Open Paper Link'}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
                     </div>
                   </label>
                 );

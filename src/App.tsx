@@ -35,6 +35,7 @@ import { CustomPageView } from './components/CustomPageView';
 import { SiteCustomizerModal } from './components/SiteCustomizerModal';
 import { isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl } from './lib/boxUtils';
 import { getInstrumentStatusMeta } from './lib/instrumentUtils';
+import { decodeHtmlEntities, resolvePublicationLinks } from './lib/publicationUtils';
 import { LoginModal } from './components/LoginModal';
 import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Workplan } from './components/Workplan';
@@ -3227,8 +3228,11 @@ export default function App() {
                       ) : (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100 text-left">
                           {filteredPublications.map((pub) => {
-                            const isLocalPub = Boolean(pub.link && isSafeDataDocumentUrl(pub.link));
-                            const safePubHref = pub.link ? sanitizeExternalUrl(pub.link) : '';
+                            const pubLinks = resolvePublicationLinks(pub);
+                            const cleanTitle = decodeHtmlEntities(pub.title);
+                            const cleanAuthors = decodeHtmlEntities(pub.authors);
+                            const cleanVenue = decodeHtmlEntities(pub.venue);
+                            const primaryLinkUrl = pubLinks.primaryHref || pubLinks.scholarLookupUrl;
                             return (
                             <div key={pub.id} className="px-4 py-3 flex items-start space-x-3.5 hover:bg-slate-50/50 transition-colors group relative">
 
@@ -3242,51 +3246,74 @@ export default function App() {
                                   <p className="font-extrabold text-[#9E1B32] uppercase tracking-wider text-[9px]">
                                     {pub.type}
                                   </p>
-                                  {isLocalPub ? (
+                                  {pubLinks.doiUrl && (
+                                    <a
+                                      href={pubLinks.doiUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline"
+                                    >
+                                      <span>DOI: {pubLinks.doi}</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                  {pubLinks.externalUrl && pubLinks.externalUrl !== pubLinks.doiUrl && (
+                                    <a
+                                      href={pubLinks.externalUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline"
+                                    >
+                                      <span>Paper Link</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                  {pubLinks.isLocalFile && (
                                     <button
                                       type="button"
-                                      onClick={() => openOrDownloadResource(pub.link, pub.title)}
+                                      onClick={() => openOrDownloadResource(pub.link, cleanTitle)}
                                       className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
                                     >
                                       <span>Attached File</span>
                                       <Download className="w-3 h-3" />
                                     </button>
-                                  ) : safePubHref ? (
+                                  )}
+                                  {!pubLinks.primaryHref && !pubLinks.isLocalFile && pubLinks.scholarLookupUrl && (
                                     <a
-                                      href={safePubHref}
+                                      href={pubLinks.scholarLookupUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline"
+                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:underline"
                                     >
-                                      <span>DOI / Link</span>
+                                      <span>Find on Google Scholar</span>
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
-                                  ) : null}
+                                  )}
                                 </div>
-                                {isLocalPub ? (
+                                {pubLinks.isLocalFile && !pubLinks.primaryHref ? (
                                   <button
                                     type="button"
-                                    onClick={() => openOrDownloadResource(pub.link, pub.title)}
+                                    onClick={() => openOrDownloadResource(pub.link, cleanTitle)}
                                     className="text-left text-xs sm:text-sm font-bold text-slate-800 hover:text-[#9E1B32] hover:underline leading-snug mt-0.5 max-w-4xl cursor-pointer block"
                                   >
-                                    {pub.title}
+                                    {cleanTitle}
                                   </button>
-                                ) : safePubHref ? (
+                                ) : primaryLinkUrl ? (
                                   <a
-                                    href={safePubHref}
+                                    href={primaryLinkUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-xs sm:text-sm font-bold text-slate-800 hover:text-[#9E1B32] hover:underline leading-snug mt-0.5 max-w-4xl block"
                                   >
-                                    {pub.title}
+                                    {cleanTitle}
                                   </a>
                                 ) : (
                                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-snug mt-0.5 max-w-4xl">
-                                    {pub.title}
+                                    {cleanTitle}
                                   </h4>
                                 )}
                                 <p className="text-[11px] sm:text-xs text-slate-500 font-semibold mt-1">
-                                  <strong>{pub.authors}</strong> | <span className="italic">{pub.venue}</span>
+                                  <strong>{cleanAuthors}</strong> | <span className="italic">{cleanVenue}</span>
                                 </p>
                               </div>
 

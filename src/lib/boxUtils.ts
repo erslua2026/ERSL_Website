@@ -54,10 +54,30 @@ export function isSafeDataDocumentUrl(url?: string): boolean {
 }
 
 /**
+ * Resolves external HTTP(S)/relative URLs as well as bare or prefixed DOIs
+ * (e.g. `10.1109/TGRS.2021.3079949` or `doi:10.1109/...`) into safe navigable URLs.
+ */
+export function resolveReferenceUrl(
+  input?: string,
+  options: { allowMailto?: boolean } = {}
+): string {
+  const direct = sanitizeExternalUrl(input, options);
+  if (direct) return direct;
+  if (!input || typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  const doiMatch = trimmed.match(/^(?:doi:\s*)?(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)$/i);
+  if (doiMatch) {
+    const cleanDoi = doiMatch[1].replace(/[.,;)\]]+$/, '');
+    return sanitizeExternalUrl(`https://doi.org/${cleanDoi}`);
+  }
+  return '';
+}
+
+/**
  * Returns true if the URL is either a safe external/relative URL OR a safe uploaded data document/image.
  */
 export function isResolvableResourceUrl(url?: string): boolean {
-  return Boolean(sanitizeExternalUrl(url, { allowMailto: true }) || isSafeDataDocumentUrl(url));
+  return Boolean(resolveReferenceUrl(url, { allowMailto: true }) || isSafeDataDocumentUrl(url));
 }
 
 export function getUploadedFileLabel(url?: string): string {

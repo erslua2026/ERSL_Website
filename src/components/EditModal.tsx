@@ -4,7 +4,8 @@ import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint,
 import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
 import { formatInvestigatorsSummary, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 import { INSTRUMENT_STATUS_OPTIONS } from '../lib/instrumentUtils';
-import { DuplicateMatchResult, findDuplicatePublication } from '../lib/publicationUtils';
+import { DuplicateMatchResult, decodeHtmlEntities, extractNormalizedDoi, findDuplicatePublication } from '../lib/publicationUtils';
+import { resolveReferenceUrl } from '../lib/boxUtils';
 import { BoxUploadButton } from './BoxUploadButton';
 import { ImageUploadField } from './ImageUploadField';
 
@@ -75,13 +76,14 @@ export const EditModal: React.FC<EditModalProps> = ({
 
             setFormData((prev: any) => ({
               ...prev,
-              title: title || prev.title,
-              authors: authorsList || prev.authors,
-              venue: venue || prev.venue,
+              title: decodeHtmlEntities(title) || prev.title,
+              authors: decodeHtmlEntities(authorsList) || prev.authors,
+              venue: decodeHtmlEntities(venue) || prev.venue,
               year: Number(year) || prev.year,
+              doi: cleanDoi.toLowerCase(),
               link: link || prev.link,
               type: isConf ? 'Conference' : 'Peer-Reviewed Article',
-              abstract: itemData.abstract ? itemData.abstract.replace(/<[^>]*>/g, '') : prev.abstract
+              abstract: itemData.abstract ? decodeHtmlEntities(itemData.abstract.replace(/<[^>]*>/g, '')) : prev.abstract
             }));
             setDoiFetchMsg({ type: 'success', text: `✅ Successfully fetched "${title.slice(0, 45)}..." from CrossRef!` });
             setIsFetchingDoi(false);
@@ -119,10 +121,11 @@ export const EditModal: React.FC<EditModalProps> = ({
 
             setFormData((prev: any) => ({
               ...prev,
-              title: title || prev.title,
-              authors: authors || prev.authors,
-              venue: venue || prev.venue,
+              title: decodeHtmlEntities(title) || prev.title,
+              authors: decodeHtmlEntities(authors) || prev.authors,
+              venue: decodeHtmlEntities(venue) || prev.venue,
               year: Number(year) || prev.year,
+              doi: extractNormalizedDoi(w.doi || cleanDoi || link) || prev.doi,
               link: link || prev.link,
               type: isConf ? 'Conference' : 'Peer-Reviewed Article',
             }));
@@ -152,13 +155,14 @@ export const EditModal: React.FC<EditModalProps> = ({
 
             setFormData((prev: any) => ({
               ...prev,
-              title: title || prev.title,
-              authors: authorsList || prev.authors,
-              venue: venue || prev.venue,
+              title: decodeHtmlEntities(title) || prev.title,
+              authors: decodeHtmlEntities(authorsList) || prev.authors,
+              venue: decodeHtmlEntities(venue) || prev.venue,
               year: Number(year) || prev.year,
+              doi: extractNormalizedDoi(itemData.DOI || link) || prev.doi,
               link: link || prev.link,
               type: isConf ? 'Conference' : 'Peer-Reviewed Article',
-              abstract: itemData.abstract ? itemData.abstract.replace(/<[^>]*>/g, '') : prev.abstract
+              abstract: itemData.abstract ? decodeHtmlEntities(itemData.abstract.replace(/<[^>]*>/g, '')) : prev.abstract
             }));
             setDoiFetchMsg({ type: 'success', text: `✅ Successfully fetched "${title.slice(0, 45)}..." from CrossRef registry!` });
             setIsFetchingDoi(false);
@@ -311,20 +315,38 @@ export const EditModal: React.FC<EditModalProps> = ({
       ? findDuplicatePublication(formData, existingPublications, item?.id)
       : null;
 
-  const buildCandidatePublication = (): Publication => ({
-    ...formData,
-    id: formData.id || `publication-${Date.now()}`,
-  });
+  const buildCandidatePublication = (): Publication => {
+    const cleanDoi =
+      extractNormalizedDoi(formData.doi) ||
+      extractNormalizedDoi(formData.link) ||
+      extractNormalizedDoi(formData.title) ||
+      undefined;
+    const rawLink = typeof formData.link === 'string' ? formData.link.trim() : '';
+    const resolvedExternal = rawLink && !rawLink.startsWith('data:') ? resolveReferenceUrl(rawLink) : rawLink;
+    const finalLink = resolvedExternal || (cleanDoi ? `https://doi.org/${cleanDoi}` : '') || rawLink || undefined;
+    return {
+      ...formData,
+      id: formData.id || `publication-${Date.now()}`,
+      title: decodeHtmlEntities(formData.title || '').trim(),
+      authors: decodeHtmlEntities(formData.authors || '').trim(),
+      venue: decodeHtmlEntities(formData.venue || '').trim(),
+      doi: cleanDoi,
+      link: finalLink,
+    };
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (type === 'publication') {
-      const dup = findDuplicatePublication(formData, existingPublications, item?.id);
+      const candidatePub = buildCandidatePublication();
+      const dup = findDuplicatePublication(candidatePub, existingPublications, item?.id);
       if (dup) {
         setDuplicatePrompt(dup);
         return;
       }
+      onSave(candidatePub);
+      return;
     }
 
     // For research theme, convert keywords string to array
@@ -599,6 +621,18 @@ export const EditModal: React.FC<EditModalProps> = ({
                   onChange={handleChange}
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                   required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">DOI (Optional, auto-linked to doi.org)</label>
+                <input
+                  type="text"
+                  name="doi"
+                  placeholder="e.g., 10.1109/TGRS.2021.3079949"
+                  value={formData.doi || ''}
+                  onChange={handleChange}
+                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
               </div>
 

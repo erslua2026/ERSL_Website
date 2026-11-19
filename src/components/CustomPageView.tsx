@@ -9,11 +9,12 @@ import {
   isSafeDataDocumentUrl,
   openOrDownloadResource,
   resolveAssetUrl,
-  sanitizeExternalUrl,
+  resolveReferenceUrl,
   toBoxEmbedUrl,
 } from '../lib/boxUtils';
 import { ImageUploadField } from './ImageUploadField';
 import { BoxUploadButton } from './BoxUploadButton';
+import { LinkedReferenceText } from './LinkedReferenceText';
 
 interface CustomPageViewProps {
   page: CustomPageData;
@@ -372,7 +373,7 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                   <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-2xs">
                     {linkListBlocks.map(block => {
                       const isFile = Boolean(block.url && isSafeDataDocumentUrl(block.url));
-                      const safeUrl = block.url ? sanitizeExternalUrl(block.url) : '';
+                      const safeUrl = block.url ? resolveReferenceUrl(block.url) : '';
                       return (
                         <div key={block.id} className="px-3.5 py-2 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
                           <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
@@ -410,7 +411,7 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                             )}
                             {block.body && (
                               <span className="text-[11px] text-slate-500 truncate max-w-xl">
-                                — {block.body}
+                                — <LinkedReferenceText text={block.body} />
                               </span>
                             )}
                           </div>
@@ -460,7 +461,9 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                         )}
 
                         {block.body && (
-                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">{block.body}</p>
+                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">
+                            <LinkedReferenceText text={block.body} />
+                          </p>
                         )}
 
                         {block.type === 'box-folder' && block.url && isBoxUrl(block.url) && toBoxEmbedUrl(block.url) && (
@@ -478,16 +481,16 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                               <ExternalLink className="w-3.5 h-3.5" />
                               <span>Open / Download Attached File</span>
                             </button>
-                          ) : sanitizeExternalUrl(block.url) ? (
+                          ) : resolveReferenceUrl(block.url) ? (
                             <a
-                              href={sanitizeExternalUrl(block.url)}
+                              href={resolveReferenceUrl(block.url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 text-xs font-bold hover:underline"
                               style={{ color: primaryColor }}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Open {block.type === 'box-folder' ? 'in UA Box' : 'Resource'}</span>
+                              <span>Open {block.type === 'box-folder' ? 'in UA Box' : 'Resource / DOI'}</span>
                             </a>
                           ) : null
                         )}

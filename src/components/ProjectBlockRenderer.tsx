@@ -18,7 +18,8 @@ import {
   Users,
 } from 'lucide-react';
 import { ProjectContentBlock, ProjectContentBlockType } from '../types';
-import { isBoxUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { isBoxUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, resolveReferenceUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import { LinkedReferenceText } from './LinkedReferenceText';
 
 export interface BlockTypeMeta {
   type: ProjectContentBlockType;
@@ -191,7 +192,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
         </div>
         {block.body && (
           <div className="text-xs md:text-sm text-slate-700 leading-relaxed whitespace-pre-line text-justify">
-            {block.body}
+            <LinkedReferenceText text={block.body} />
           </div>
         )}
         {(block.url || block.boxUrl) && (
@@ -205,9 +206,9 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
                 >
                   <FolderGit2 className="w-3.5 h-3.5" /> Open Attached File
                 </button>
-              ) : sanitizeExternalUrl(block.boxUrl) ? (
+              ) : resolveReferenceUrl(block.boxUrl) ? (
                 <a
-                  href={sanitizeExternalUrl(block.boxUrl)}
+                  href={resolveReferenceUrl(block.boxUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
@@ -226,15 +227,15 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Open Attached File
                 </button>
-              ) : sanitizeExternalUrl(block.url) ? (
+              ) : resolveReferenceUrl(block.url) ? (
                 <a
-                  href={sanitizeExternalUrl(block.url)}
+                  href={resolveReferenceUrl(block.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-bold hover:underline inline-flex items-center gap-1"
                   style={{ color: primaryColor }}
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> Related Link
+                  <ExternalLink className="w-3.5 h-3.5" /> Related Link / DOI
                 </a>
               ) : null
             )}
@@ -266,7 +267,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
                 className="flex items-start gap-2 text-xs text-slate-700 bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>{item}</span>
+                <span><LinkedReferenceText text={item} /></span>
               </li>
             ))}
           </ul>
@@ -293,7 +294,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
         <figcaption className="p-3 bg-white border-t border-gray-100 flex items-start justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-800">{block.caption || block.title}</p>
-            {block.body && <p className="text-[11px] text-slate-500 mt-0.5 whitespace-pre-line text-justify">{block.body}</p>}
+            {block.body && <p className="text-[11px] text-slate-500 mt-0.5 whitespace-pre-line text-justify"><LinkedReferenceText text={block.body} /></p>}
           </div>
           {editActions}
         </figcaption>
@@ -321,7 +322,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
         </button>
       );
     }
-    const safePrimary = primaryHref ? sanitizeExternalUrl(primaryHref) : '';
+    const safePrimary = primaryHref ? resolveReferenceUrl(primaryHref) : '';
     if (safePrimary) {
       return (
         <a
@@ -398,9 +399,9 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
                 >
                   <FolderGit2 className="w-3 h-3" /> File
                 </button>
-              ) : sanitizeExternalUrl(secondaryBoxHref) ? (
+              ) : resolveReferenceUrl(secondaryBoxHref) ? (
                 <a
-                  href={sanitizeExternalUrl(secondaryBoxHref)}
+                  href={resolveReferenceUrl(secondaryBoxHref)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[10px] font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2 py-0.5 rounded inline-flex items-center gap-1"
@@ -423,7 +424,9 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
 
           <div>{renderClickableTitle()}</div>
           {block.body && (
-            <p className="text-xs text-slate-600 leading-snug whitespace-pre-line text-justify">{block.body}</p>
+            <p className="text-xs text-slate-600 leading-snug whitespace-pre-line text-justify">
+              <LinkedReferenceText text={block.body} />
+            </p>
           )}
         </div>
 

@@ -154,6 +154,8 @@ export interface Publication {
   type: 'Peer-Reviewed Article' | 'Conference' | 'Other';
   doi?: string;
   link?: string;
+  scholarUrl?: string;
+  citations?: number;
   abstract?: string;
   keywords?: string[];
 }

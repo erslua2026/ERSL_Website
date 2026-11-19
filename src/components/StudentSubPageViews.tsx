@@ -16,7 +16,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ProjectContentBlock } from '../types';
-import { isSafeDataDocumentUrl, openOrDownloadResource, sanitizeExternalUrl } from '../lib/boxUtils';
+import { isSafeDataDocumentUrl, openOrDownloadResource, resolveReferenceUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import { LinkedReferenceText } from './LinkedReferenceText';
 
 interface StudentTodoViewProps {
   blocks: ProjectContentBlock[];
@@ -122,11 +123,10 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-colors ${
-                filter === key
+              className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-colors ${filter === key
                   ? 'text-white'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+                }`}
               style={filter === key ? { backgroundColor: primaryColor } : undefined}
             >
               {lbl}
@@ -166,13 +166,12 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
             const isOverdue = Boolean(item.date && item.date < todayYmd && !item.completed);
             const primaryUrl = item.url || item.boxUrl;
             const isLocalFile = Boolean(primaryUrl && isSafeDataDocumentUrl(primaryUrl));
-            const safeUrl = primaryUrl ? sanitizeExternalUrl(primaryUrl) : '';
+            const safeUrl = primaryUrl ? resolveReferenceUrl(primaryUrl) : '';
             return (
               <div
                 key={item.id}
-                className={`px-3.5 py-2.5 flex items-start justify-between gap-3 transition-colors ${
-                  item.completed ? 'bg-slate-50/70' : 'hover:bg-slate-50/50'
-                }`}
+                className={`px-3.5 py-2.5 flex items-start justify-between gap-3 transition-colors ${item.completed ? 'bg-slate-50/70' : 'hover:bg-slate-50/50'
+                  }`}
               >
                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
                   <button
@@ -192,9 +191,8 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
-                        className={`text-xs sm:text-sm font-bold ${
-                          item.completed ? 'line-through text-slate-400' : 'text-slate-900'
-                        }`}
+                        className={`text-xs sm:text-sm font-bold ${item.completed ? 'line-through text-slate-400' : 'text-slate-900'
+                          }`}
                       >
                         {item.title}
                       </span>
@@ -206,11 +204,10 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
                       )}
                       {item.date && (
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
-                            isOverdue
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${isOverdue
                               ? 'bg-red-50 text-red-700 border-red-200'
                               : 'bg-slate-50 text-slate-600 border-gray-200'
-                          }`}
+                            }`}
                         >
                           <CalendarIcon className="w-2.5 h-2.5" />
                           {item.date}
@@ -239,7 +236,9 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
                       )}
                     </div>
                     {item.body && (
-                      <p className="text-[11px] text-slate-500 leading-snug">{item.body}</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        <LinkedReferenceText text={item.body} />
+                      </p>
                     )}
                   </div>
                 </div>
@@ -333,9 +332,8 @@ export const StudentScheduleView: React.FC<StudentScheduleViewProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('calendar')}
-            className={`px-3 py-1 rounded-md font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-              viewMode === 'calendar' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3 py-1 rounded-md font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${viewMode === 'calendar' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             <CalendarIcon className="w-3.5 h-3.5" style={viewMode === 'calendar' ? { color: primaryColor } : undefined} />
             <span>Calendar View</span>
@@ -343,9 +341,8 @@ export const StudentScheduleView: React.FC<StudentScheduleViewProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('list')}
-            className={`px-3 py-1 rounded-md font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-              viewMode === 'list' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-3 py-1 rounded-md font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
           >
             <List className="w-3.5 h-3.5" style={viewMode === 'list' ? { color: primaryColor } : undefined} />
             <span>Agenda List ({blocks.length})</span>
@@ -420,19 +417,17 @@ export const StudentScheduleView: React.FC<StudentScheduleViewProps> = ({
                 <div
                   key={cell.dateStr}
                   onClick={() => setSelectedDate(cell.dateStr)}
-                  className={`h-24 p-1.5 rounded-lg border flex flex-col justify-start overflow-hidden cursor-pointer transition-all text-left ${
-                    isSelected
+                  className={`h-24 p-1.5 rounded-lg border flex flex-col justify-start overflow-hidden cursor-pointer transition-all text-left ${isSelected
                       ? 'border-[#9E1B32] ring-1 ring-[#9E1B32]/30 bg-red-50/20'
                       : isToday
                         ? 'border-blue-300 bg-blue-50/20'
                         : 'border-gray-200 bg-white hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span
-                      className={`text-[11px] font-bold px-1.5 py-0.2 rounded ${
-                        isToday ? 'bg-[#9E1B32] text-white' : 'text-slate-700'
-                      }`}
+                      className={`text-[11px] font-bold px-1.5 py-0.2 rounded ${isToday ? 'bg-[#9E1B32] text-white' : 'text-slate-700'
+                        }`}
                     >
                       {cell.day}
                     </span>
@@ -459,9 +454,8 @@ export const StudentScheduleView: React.FC<StudentScheduleViewProps> = ({
                           e.stopPropagation();
                           if (canEdit) onEditBlock(ev);
                         }}
-                        className={`text-[9px] font-bold px-1 py-0.5 rounded border truncate ${
-                          EVENT_TYPE_BADGES[ev.category || ''] || 'bg-slate-100 text-slate-800 border-slate-200'
-                        }`}
+                        className={`text-[9px] font-bold px-1 py-0.5 rounded border truncate ${EVENT_TYPE_BADGES[ev.category || ''] || 'bg-slate-100 text-slate-800 border-slate-200'
+                          }`}
                         title={`${ev.startTime ? ev.startTime + ' · ' : ''}${ev.title}`}
                       >
                         {ev.startTime ? `${ev.startTime} ` : ''}{ev.title}
@@ -548,9 +542,8 @@ const ScheduleRow: React.FC<{
         <div className="flex flex-wrap items-center gap-1.5">
           {ev.category && (
             <span
-              className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
-                EVENT_TYPE_BADGES[ev.category] || 'bg-slate-100 text-slate-700 border-gray-200'
-              }`}
+              className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${EVENT_TYPE_BADGES[ev.category] || 'bg-slate-100 text-slate-700 border-gray-200'
+                }`}
             >
               {ev.category}
             </span>
@@ -688,9 +681,8 @@ export const StudentQuestionsView: React.FC<StudentQuestionsViewProps> = ({
             key={key}
             type="button"
             onClick={() => setStatusFilter(key)}
-            className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
-              statusFilter === key ? 'text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
+            className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${statusFilter === key ? 'text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
             style={statusFilter === key ? { backgroundColor: primaryColor } : undefined}
           >
             {lbl}
@@ -707,23 +699,21 @@ export const StudentQuestionsView: React.FC<StudentQuestionsViewProps> = ({
           {visibleQuestions.map(q => {
             const href = q.url || q.boxUrl;
             const isLocal = Boolean(href && isSafeDataDocumentUrl(href));
-            const safeHref = href ? sanitizeExternalUrl(href) : '';
+            const safeHref = href ? resolveReferenceUrl(href) : '';
             return (
               <div
                 key={q.id}
-                className={`rounded-xl border px-3.5 py-2.5 space-y-2 text-xs ${
-                  q.resolved ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-gray-200'
-                }`}
+                className={`rounded-xl border px-3.5 py-2.5 space-y-2 text-xs ${q.resolved ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-gray-200'
+                  }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span
-                        className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
-                          q.resolved
+                        className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${q.resolved
                             ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                             : 'bg-amber-100 text-amber-800 border-amber-200'
-                        }`}
+                          }`}
                       >
                         <HelpCircle className="w-2.5 h-2.5" />
                         {q.resolved ? 'Answered' : 'Open'}
@@ -746,7 +736,11 @@ export const StudentQuestionsView: React.FC<StudentQuestionsViewProps> = ({
                       )}
                     </div>
                     <h4 className="font-extrabold text-sm text-slate-900">{q.title}</h4>
-                    {q.body && <p className="text-xs text-slate-600 whitespace-pre-line">{q.body}</p>}
+                    {q.body && (
+                      <p className="text-xs text-slate-600 whitespace-pre-line">
+                        <LinkedReferenceText text={q.body} />
+                      </p>
+                    )}
                   </div>
 
                   {canEdit && (
@@ -780,7 +774,9 @@ export const StudentQuestionsView: React.FC<StudentQuestionsViewProps> = ({
                     <span className="font-extrabold block text-[10px] uppercase tracking-wider text-emerald-700 mb-0.5">
                       Resolution / Mentor Response
                     </span>
-                    <p className="whitespace-pre-line">{q.answer}</p>
+                    <p className="whitespace-pre-line">
+                      <LinkedReferenceText text={q.answer} />
+                    </p>
                   </div>
                 )}
 
