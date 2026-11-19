@@ -7,7 +7,6 @@ import {
   Calendar,
   Check,
   CheckSquare,
-  ClipboardList,
   Copy,
   Edit2,
   Eye,
@@ -50,6 +49,11 @@ import {
 } from '../lib/projectSubPageUtils';
 import { ProjectBlockRenderer } from './ProjectBlockRenderer';
 import { BlockEditorModal, SubTabEditorModal } from './ProjectSubPageModals';
+import {
+  StudentQuestionsView,
+  StudentScheduleView,
+  StudentTodoView,
+} from './StudentSubPageViews';
 
 interface StudentSubPageProps {
   person: Person;
@@ -98,18 +102,125 @@ function getVisibilityIcon(vis: SubTabVisibility, active: boolean) {
   return <Globe className={`${cls} ${active ? 'text-white/90' : 'text-emerald-600'}`} />;
 }
 
-function defaultBlockTypeForStudentTab(kind?: ProjectCustomSubTab['kind']): ProjectContentBlockType {
+interface StudentQuickAddOption {
+  label: string;
+  blockType: ProjectContentBlockType;
+  category?: string;
+}
+
+interface StudentTabUiConfig {
+  primaryLabel: string;
+  primaryType: ProjectContentBlockType;
+  primaryCategory?: string;
+  secondaryLabel?: string;
+  secondaryType?: ProjectContentBlockType;
+  secondaryCategory?: string;
+  quickAdds: StudentQuickAddOption[];
+  emptyHint: string;
+}
+
+function getStudentTabUiConfig(
+  kind: ProjectCustomSubTab['kind'] | undefined,
+  studentBoxSlug: string
+): StudentTabUiConfig {
   switch (kind) {
-    case 'todo':
-      return 'objectives';
-    case 'resources':
-      return 'link';
-    case 'meeting-notes':
-      return 'meeting-note';
     case 'schedules':
-      return 'event';
+      return {
+        primaryLabel: 'Add Schedule Event',
+        primaryType: 'event',
+        quickAdds: [
+          { label: 'Lab Meeting', blockType: 'event', category: 'Lab Meeting' },
+          { label: 'Course / Exam', blockType: 'event', category: 'Course / Class' },
+          { label: 'Field Survey', blockType: 'event', category: 'Field Survey' },
+          { label: 'Deadline / Talk', blockType: 'event', category: 'Deadline / Talk' },
+        ],
+        emptyHint: 'Click any date on the calendar or use the schedule buttons above to add meetings, classes, field work, or deadlines.',
+      };
+    case 'todo':
+      return {
+        primaryLabel: 'Add Detailed Task',
+        primaryType: 'paragraph',
+        primaryCategory: 'Weekly To-Do',
+        quickAdds: [],
+        emptyHint: 'Use the task box above to add weekly deliverables and track completion progress.',
+      };
+    case 'questions':
+      return {
+        primaryLabel: 'Log Question / Topic',
+        primaryType: 'paragraph',
+        primaryCategory: 'Question',
+        quickAdds: [],
+        emptyHint: 'Log advisor questions, blocker notes, or discussion topics before lab meetings.',
+      };
+    case 'progress':
+      return {
+        primaryLabel: 'Log Progress Update',
+        primaryType: 'paragraph',
+        primaryCategory: 'Progress Update',
+        secondaryLabel: 'Attach Report / File',
+        secondaryType: 'link',
+        secondaryCategory: 'Progress Report',
+        quickAdds: [
+          { label: 'Progress Update', blockType: 'paragraph', category: 'Progress Update' },
+          { label: 'Result Figure / Plot', blockType: 'image', category: 'Results' },
+          { label: 'Milestone Checklist', blockType: 'objectives', category: 'Milestones' },
+          { label: 'Meeting Summary', blockType: 'meeting-note', category: 'Advisor Meeting' },
+          { label: 'Report / Link', blockType: 'link', category: 'Progress Report' },
+        ],
+        emptyHint: `Track research progress updates, preliminary figures, and weekly summaries (uploads save to 07_Students/${studentBoxSlug}).`,
+      };
+    case 'plan':
+    case 'overview':
+    case 'information':
+      return {
+        primaryLabel: 'Add Plan Section',
+        primaryType: 'paragraph',
+        primaryCategory: 'Research Plan',
+        secondaryLabel: 'Add Objectives',
+        secondaryType: 'objectives',
+        secondaryCategory: 'Research Objectives',
+        quickAdds: [
+          { label: 'Research Narrative', blockType: 'paragraph', category: 'Research Plan' },
+          { label: 'Research Objectives', blockType: 'objectives', category: 'Research Objectives' },
+          { label: 'Target Milestone', blockType: 'event', category: 'Milestone' },
+          { label: 'Proposal / Plan Doc', blockType: 'link', category: 'Plan Document' },
+        ],
+        emptyHint: `Outline dissertation/thesis milestones, research objectives, and proposal files (routed to 07_Students/${studentBoxSlug}).`,
+      };
+    case 'meeting-notes':
+      return {
+        primaryLabel: 'Add Meeting Note',
+        primaryType: 'meeting-note',
+        primaryCategory: 'Advisor Meeting',
+        secondaryLabel: 'Attach Slides / Minutes',
+        secondaryType: 'link',
+        secondaryCategory: 'Slides / Minutes',
+        quickAdds: [
+          { label: 'Advisor Meeting', blockType: 'meeting-note', category: 'Advisor Meeting' },
+          { label: 'Action Items', blockType: 'objectives', category: 'Action Items' },
+          { label: 'Slides / Document', blockType: 'link', category: 'Slides' },
+        ],
+        emptyHint: `Record advisor meeting notes, attendees, action items, and presentation slides.`,
+      };
+    case 'resources':
     default:
-      return 'paragraph';
+      return {
+        primaryLabel: 'Add Reference / Link',
+        primaryType: 'link',
+        primaryCategory: 'Paper',
+        secondaryLabel: 'Add Note / Code',
+        secondaryType: 'paragraph',
+        secondaryCategory: 'Reading Note',
+        quickAdds: [
+          { label: 'Reference Paper', blockType: 'link', category: 'Paper' },
+          { label: 'Web Link', blockType: 'link', category: 'Web Link' },
+          { label: 'Dataset', blockType: 'dataset', category: 'Dataset' },
+          { label: 'Code / Tool', blockType: 'software', category: 'Code' },
+          { label: 'Reading Note', blockType: 'paragraph', category: 'Reading Note' },
+          { label: 'Figure / Diagram', blockType: 'image', category: 'Figure' },
+        ],
+        emptyHint: `No items yet. Add papers, web links, datasets, scripts, or files (routed to 07_Students/${studentBoxSlug}).`,
+      };
   }
 }
 
@@ -152,6 +263,12 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
     open: boolean;
     initialType: ProjectContentBlockType;
     existing: ProjectContentBlock | null;
+    initialDefaults?: {
+      date?: string;
+      category?: string;
+      title?: string;
+      priority?: 'low' | 'medium' | 'high';
+    };
   }>({ open: false, initialType: 'paragraph', existing: null });
 
   const access = resolveProjectViewerAccess({
@@ -246,6 +363,95 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
     setBlockModal({ open: false, initialType: 'paragraph', existing: null });
   };
 
+  const handleQuickAddTodo = (task: {
+    title: string;
+    date?: string;
+    priority: 'low' | 'medium' | 'high';
+    category?: string;
+  }) => {
+    if (!activeSubTabObj) return;
+    const newBlock: ProjectContentBlock = {
+      id: `blk-${Date.now()}`,
+      type: 'paragraph',
+      title: task.title,
+      date: task.date,
+      priority: task.priority,
+      completed: false,
+      category: task.category || 'Weekly To-Do',
+    };
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id ? { ...t, blocks: [...t.blocks, newBlock] } : t
+    );
+    commitWorkspaceUpdate(nextTabs);
+  };
+
+  const handleToggleTodo = (block: ProjectContentBlock) => {
+    if (!activeSubTabObj) return;
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id
+        ? {
+            ...t,
+            blocks: t.blocks.map(b =>
+              b.id === block.id ? { ...b, completed: !b.completed } : b
+            ),
+          }
+        : t
+    );
+    commitWorkspaceUpdate(nextTabs);
+  };
+
+  const handleClearCompletedTodos = () => {
+    if (!activeSubTabObj) return;
+    const completedCount = activeSubTabObj.blocks.filter(b => b.completed).length;
+    if (completedCount === 0) return;
+    if (!confirm(`Clear ${completedCount} completed task(s)?`)) return;
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id
+        ? { ...t, blocks: t.blocks.filter(b => !b.completed) }
+        : t
+    );
+    commitWorkspaceUpdate(nextTabs);
+  };
+
+  const handleAddEventForDate = (dateStr: string, defaultCategory?: string) => {
+    setBlockModal({
+      open: true,
+      initialType: 'event',
+      existing: null,
+      initialDefaults: {
+        date: dateStr,
+        category: defaultCategory,
+      },
+    });
+  };
+
+  const handleQuickAddQuestion = (q: { title: string; body?: string; date: string }) => {
+    if (!activeSubTabObj) return;
+    const newBlock: ProjectContentBlock = {
+      id: `blk-${Date.now()}`,
+      type: 'paragraph',
+      title: q.title,
+      body: q.body,
+      date: q.date,
+      resolved: false,
+      category: 'Question',
+    };
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id ? { ...t, blocks: [newBlock, ...t.blocks] } : t
+    );
+    commitWorkspaceUpdate(nextTabs);
+  };
+
+  const handleUpdateQuestionBlock = (updatedBlock: ProjectContentBlock) => {
+    if (!activeSubTabObj) return;
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id
+        ? { ...t, blocks: t.blocks.map(b => (b.id === updatedBlock.id ? updatedBlock : b)) }
+        : t
+    );
+    commitWorkspaceUpdate(nextTabs);
+  };
+
   const handleDeleteBlock = (blockId: string) => {
     if (!activeSubTabObj) return;
     if (!confirm('Remove this entry from the sub-page?')) return;
@@ -290,6 +496,9 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
   const labTitle = siteConfig?.labFullName || 'Environmental Remote Sensing Laboratory';
   const deptName = siteConfig?.departmentName || 'Department of Geography & the Environment · The University of Alabama';
   const portraitSrc = resolveAssetUrl(resolvePersonImage(person.image));
+  const tabKind = activeSubTabObj?.kind;
+  const tabUi = getStudentTabUiConfig(tabKind, studentBoxSlug);
+  const todayYmd = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 text-left">
@@ -587,97 +796,148 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-4 md:p-5 space-y-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100">
-                <div className="space-y-0.5 min-w-0">
-                  <h3 className="text-sm font-extrabold flex items-center gap-2" style={{ color: headerAccent }}>
-                    <ClipboardList className="w-4 h-4 shrink-0" />
-                    <span>{activeSubTabObj?.label}</span>
-                  </h3>
-                  {activeSubTabObj?.description && (
-                    <p className="text-xs text-slate-600">{activeSubTabObj.description}</p>
-                  )}
-                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-4 md:p-5 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100">
+                    <div className="space-y-0.5 min-w-0">
+                      <h3 className="text-sm font-extrabold flex items-center gap-2" style={{ color: headerAccent }}>
+                        {getStudentSubTabIcon(tabKind)}
+                        <span>{activeSubTabObj?.label}</span>
+                      </h3>
+                      {activeSubTabObj?.description && (
+                        <p className="text-xs text-slate-600">{activeSubTabObj.description}</p>
+                      )}
+                    </div>
 
-                {showEditControls && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setBlockModal({ open: true, initialType: 'link', existing: null })}
-                      className="text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
-                      style={{ backgroundColor: headerAccent }}
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Reference / Link / File
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setBlockModal({
-                          open: true,
-                          initialType: defaultBlockTypeForStudentTab(activeSubTabObj?.kind),
-                          existing: null,
-                        })
-                      }
-                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Note / Task
-                    </button>
+                    {showEditControls && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setBlockModal({
+                              open: true,
+                              initialType: tabUi.primaryType,
+                              existing: null,
+                              initialDefaults: {
+                                date: tabKind === 'schedules' ? todayYmd : undefined,
+                                category: tabUi.primaryCategory,
+                              },
+                            })
+                          }
+                          className="text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
+                          style={{ backgroundColor: headerAccent }}
+                        >
+                          <Plus className="w-3.5 h-3.5" /> {tabUi.primaryLabel}
+                        </button>
+                        {tabUi.secondaryLabel && tabUi.secondaryType && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBlockModal({
+                                open: true,
+                                initialType: tabUi.secondaryType!,
+                                existing: null,
+                                initialDefaults: {
+                                  category: tabUi.secondaryCategory,
+                                },
+                              })
+                            }
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> {tabUi.secondaryLabel}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {showEditControls && (
-                <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-xl px-2.5 py-2 text-[11px]">
-                  <span className="font-extrabold text-slate-500 px-1">Quick Add:</span>
-                  {(
-                    [
-                      ['link', 'Paper / Web Link'],
-                      ['paragraph', 'Note / Paragraph'],
-                      ['objectives', 'Checklist / To-Do'],
-                      ['dataset', 'Dataset'],
-                      ['software', 'Code / Tool'],
-                      ['meeting-note', 'Meeting Note'],
-                      ['event', 'Schedule / Event'],
-                      ['image', 'Figure / Photo'],
-                    ] as const
-                  ).map(([blkType, lbl]) => (
-                    <button
-                      key={blkType}
-                      type="button"
-                      onClick={() => setBlockModal({ open: true, initialType: blkType, existing: null })}
-                      className="px-2 py-1 rounded-md bg-white hover:bg-slate-100 border border-gray-200 font-bold text-slate-700 cursor-pointer"
-                    >
-                      + {lbl}
-                    </button>
-                  ))}
-                </div>
-              )}
+                  {showEditControls && tabUi.quickAdds.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-xl px-2.5 py-2 text-[11px]">
+                      <span className="font-extrabold text-slate-500 px-1">
+                        {tabKind === 'schedules' ? 'Quick Schedule:' : 'Quick Add:'}
+                      </span>
+                      {tabUi.quickAdds.map(item => (
+                        <button
+                          key={`${item.blockType}-${item.label}`}
+                          type="button"
+                          onClick={() =>
+                            setBlockModal({
+                              open: true,
+                              initialType: item.blockType,
+                              existing: null,
+                              initialDefaults: {
+                                date: item.blockType === 'event' ? todayYmd : undefined,
+                                category: item.category,
+                              },
+                            })
+                          }
+                          className="px-2 py-1 rounded-md bg-white hover:bg-slate-100 border border-gray-200 font-bold text-slate-700 cursor-pointer"
+                        >
+                          + {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
-              {(!activeSubTabObj?.blocks || activeSubTabObj.blocks.length === 0) ? (
-                <div className="p-6 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-500">
-                  No items in <strong>{activeSubTabObj?.label}</strong> yet.
-                  {showEditControls && ' Use Quick Add above to post reference papers, links, checklists, figures, or files (routed to 07_Students/' + studentBoxSlug + ').'}
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {activeSubTabObj.blocks.map((block, idx) => (
-                    <ProjectBlockRenderer
-                      key={block.id}
-                      block={block}
-                      index={idx}
-                      total={activeSubTabObj.blocks.length}
+                  {tabKind === 'schedules' ? (
+                    <StudentScheduleView
+                      blocks={activeSubTabObj?.blocks || []}
                       canEdit={showEditControls}
                       primaryColor={headerAccent}
-                      embeddedBoxUrl={embeddedBoxUrl}
-                      onToggleEmbed={url => setEmbeddedBoxUrl(prev => (prev === url ? null : url))}
-                      onEdit={blk => setBlockModal({ open: true, initialType: blk.type, existing: blk })}
-                      onDelete={handleDeleteBlock}
-                      onMove={handleMoveBlock}
+                      onAddEventForDate={handleAddEventForDate}
+                      onEditBlock={blk =>
+                        setBlockModal({ open: true, initialType: blk.type, existing: blk })
+                      }
+                      onDeleteBlock={handleDeleteBlock}
                     />
-                  ))}
+                  ) : tabKind === 'todo' ? (
+                    <StudentTodoView
+                      blocks={activeSubTabObj?.blocks || []}
+                      canEdit={showEditControls}
+                      primaryColor={headerAccent}
+                      onQuickAddTodo={handleQuickAddTodo}
+                      onToggleTodo={handleToggleTodo}
+                      onEditBlock={blk =>
+                        setBlockModal({ open: true, initialType: blk.type, existing: blk })
+                      }
+                      onDeleteBlock={handleDeleteBlock}
+                      onClearCompleted={handleClearCompletedTodos}
+                    />
+                  ) : tabKind === 'questions' ? (
+                    <StudentQuestionsView
+                      blocks={activeSubTabObj?.blocks || []}
+                      canEdit={showEditControls}
+                      primaryColor={headerAccent}
+                      onQuickAddQuestion={handleQuickAddQuestion}
+                      onUpdateQuestionBlock={handleUpdateQuestionBlock}
+                      onEditBlock={blk =>
+                        setBlockModal({ open: true, initialType: blk.type, existing: blk })
+                      }
+                      onDeleteBlock={handleDeleteBlock}
+                    />
+                  ) : !activeSubTabObj?.blocks || activeSubTabObj.blocks.length === 0 ? (
+                    <div className="p-6 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-500">
+                      {tabUi.emptyHint}
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {activeSubTabObj.blocks.map((block, idx) => (
+                        <ProjectBlockRenderer
+                          key={block.id}
+                          block={block}
+                          index={idx}
+                          total={activeSubTabObj.blocks.length}
+                          canEdit={showEditControls}
+                          primaryColor={headerAccent}
+                          embeddedBoxUrl={embeddedBoxUrl}
+                          onToggleEmbed={url => setEmbeddedBoxUrl(prev => (prev === url ? null : url))}
+                          onEdit={blk => setBlockModal({ open: true, initialType: blk.type, existing: blk })}
+                          onDelete={handleDeleteBlock}
+                          onMove={handleMoveBlock}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
           )}
         </div>
       </div>
@@ -750,6 +1010,7 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
         <BlockEditorModal
           initialType={blockModal.initialType}
           existing={blockModal.existing}
+          initialDefaults={blockModal.initialDefaults}
           primaryColor={headerAccent}
           uploadDestination={`students/${studentBoxSlug}`}
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}

@@ -434,6 +434,12 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
 interface BlockEditorModalProps {
   initialType: ProjectContentBlockType;
   existing?: ProjectContentBlock | null;
+  initialDefaults?: {
+    date?: string;
+    category?: string;
+    title?: string;
+    priority?: 'low' | 'medium' | 'high';
+  };
   primaryColor: string;
   uploadDestination?: 'projects' | 'datasets' | 'software' | 'general' | `students/${string}`;
   onClose: () => void;
@@ -443,18 +449,21 @@ interface BlockEditorModalProps {
 export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   initialType,
   existing,
+  initialDefaults,
   primaryColor,
   uploadDestination,
   onClose,
   onSave,
 }) => {
   const [type, setType] = useState<ProjectContentBlockType>(existing?.type || initialType);
-  const [title, setTitle] = useState(existing?.title || '');
+  const [title, setTitle] = useState(existing?.title || initialDefaults?.title || '');
   const [body, setBody] = useState(existing?.body || '');
   const [url, setUrl] = useState(existing?.url || '');
   const [boxUrl, setBoxUrl] = useState(existing?.boxUrl || '');
-  const [category, setCategory] = useState(existing?.category || '');
-  const [date, setDate] = useState(existing?.date || '');
+  const [category, setCategory] = useState(existing?.category || initialDefaults?.category || '');
+  const [date, setDate] = useState(existing?.date || initialDefaults?.date || '');
+  const [startTime, setStartTime] = useState(existing?.startTime || '');
+  const [endTime, setEndTime] = useState(existing?.endTime || '');
   const [location, setLocation] = useState(existing?.location || '');
   const [availability, setAvailability] = useState(existing?.availability || 'Public');
   const [attendees, setAttendees] = useState(existing?.attendees || '');
@@ -462,6 +471,16 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [version, setVersion] = useState(existing?.version || '');
   const [caption, setCaption] = useState(existing?.caption || '');
   const [highlight, setHighlight] = useState(Boolean(existing?.highlight));
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
+    existing?.priority || initialDefaults?.priority || 'medium'
+  );
+  const [completed, setCompleted] = useState(Boolean(existing?.completed));
+
+  const isTodoBlock =
+    category.trim() === 'Weekly To-Do' ||
+    initialDefaults?.category === 'Weekly To-Do' ||
+    existing?.completed !== undefined ||
+    existing?.priority !== undefined;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -471,6 +490,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       return;
     }
     onSave({
+      ...(existing || {}),
       id: existing?.id || `blk-${Date.now()}`,
       type,
       title: title.trim(),
@@ -479,6 +499,8 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       boxUrl: boxUrl.trim() || undefined,
       category: category.trim() || undefined,
       date: date.trim() || undefined,
+      startTime: type === 'event' ? (startTime.trim() || undefined) : existing?.startTime,
+      endTime: type === 'event' ? (endTime.trim() || undefined) : existing?.endTime,
       location: location.trim() || undefined,
       availability: type === 'dataset' ? availability : undefined,
       attendees: type === 'meeting-note' ? (attendees.trim() || undefined) : undefined,
@@ -486,6 +508,8 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       version: type === 'software' ? (version.trim() || undefined) : undefined,
       caption: type === 'image' ? (caption.trim() || title.trim()) : undefined,
       highlight: type === 'paragraph' ? highlight : undefined,
+      priority: isTodoBlock ? priority : existing?.priority,
+      completed: isTodoBlock ? completed : existing?.completed,
     });
   };
 
@@ -607,15 +631,70 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           )}
 
           {type === 'event' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3 bg-slate-50 border border-gray-200 rounded-xl p-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Event Date</label>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white" />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Start Time (Optional)</label>
+                  <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white" />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">End Time (Optional)</label>
+                  <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Schedule Type</label>
+                  <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white font-semibold"
+                  >
+                    <option value="">General Event</option>
+                    <option value="Lab Meeting">Lab Meeting</option>
+                    <option value="Course / Class">Course / Exam</option>
+                    <option value="Field Survey">Field Survey</option>
+                    <option value="Deadline / Talk">Deadline / Talk</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Location / Room / Zoom</label>
+                  <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Farrah Hall 208 / Zoom / Field Site" className="w-full p-2 border border-gray-300 rounded-lg bg-white" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isTodoBlock && type !== 'event' && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 border border-gray-200 rounded-xl p-3">
               <div>
-                <label className="font-bold text-gray-700 block mb-1">Event Date</label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" />
+                <label className="font-bold text-gray-700 block mb-1">Target Due Date</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg bg-white" />
               </div>
               <div>
-                <label className="font-bold text-gray-700 block mb-1">Location</label>
-                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Tuscaloosa / Field Site" className="w-full p-2 border border-gray-300 rounded-lg" />
+                <label className="font-bold text-gray-700 block mb-1">Priority</label>
+                <select
+                  value={priority}
+                  onChange={e => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+                  className="w-full p-2 border border-gray-300 rounded-lg bg-white font-semibold"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Normal</option>
+                  <option value="high">High Priority</option>
+                </select>
               </div>
+              <label className="flex items-center gap-2 font-bold text-gray-700 pt-5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completed}
+                  onChange={e => setCompleted(e.target.checked)}
+                />
+                Mark completed
+              </label>
             </div>
           )}
 

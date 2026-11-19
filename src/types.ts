@@ -49,6 +49,13 @@ export interface ProjectContentBlock {
   version?: string;
   caption?: string;
   highlight?: boolean;
+  completed?: boolean;
+  priority?: 'low' | 'medium' | 'high';
+  startTime?: string;
+  endTime?: string;
+  answer?: string;
+  resolved?: boolean;
+  status?: string;
 }
 
 export type ProjectCustomSubTabKind =
@@ -145,6 +152,7 @@ export interface Publication {
   venue: string;
   year: number;
   type: 'Peer-Reviewed Article' | 'Conference' | 'Other';
+  doi?: string;
   link?: string;
   abstract?: string;
   keywords?: string[];
