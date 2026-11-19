@@ -328,6 +328,7 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
       visibility,
       description: description.trim() || undefined,
       blocks: existing?.blocks || [],
+      workplanRounds: existing?.workplanRounds,
     });
   };
 

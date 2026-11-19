@@ -3,9 +3,11 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  BarChart3,
   BookOpen,
   Calendar,
   Check,
+  CheckSquare,
   Code2,
   Copy,
   Database,
@@ -47,6 +49,8 @@ import {
   VISIBILITY_OPTIONS,
 } from '../lib/projectSubPageUtils';
 import { ProjectBlockRenderer } from './ProjectBlockRenderer';
+import { ProjectWorkplanTracker } from './ProjectWorkplanTracker';
+import { ReservoirProject } from './ReservoirProject';
 import {
   BlockEditorModal,
   CollaboratorsModal,
@@ -82,6 +86,10 @@ function getSubTabIcon(kind?: ProjectCustomSubTab['kind']) {
       return <FileText className="w-3.5 h-3.5" />;
     case 'events':
       return <Calendar className="w-3.5 h-3.5" />;
+    case 'reservoir-tracker':
+      return <BarChart3 className="w-3.5 h-3.5" />;
+    case 'workplan-tracker':
+      return <CheckSquare className="w-3.5 h-3.5" />;
     case 'resources':
       return <ExternalLink className="w-3.5 h-3.5" />;
     default:
@@ -282,6 +290,14 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
       ...(projectPatch || {}),
       subPage: nextSubPage,
     });
+  };
+
+  const handleSaveWorkplanTrackerRounds = (nextRounds: NonNullable<ProjectCustomSubTab['workplanRounds']>) => {
+    if (!activeSubTabObj) return;
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id ? { ...t, workplanRounds: nextRounds } : t
+    );
+    commitSubPageUpdate(nextTabs);
   };
 
   // Sub-tab actions
@@ -807,7 +823,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                 )}
               </div>
 
-              {showEditControls && (
+              {showEditControls && activeSubTabObj?.kind !== 'reservoir-tracker' && activeSubTabObj?.kind !== 'workplan-tracker' && (
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -836,7 +852,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           )}
 
           {/* Quick-type pills in edit mode so users can add any block type with 1 click */}
-          {showEditControls && (
+          {showEditControls && activeSubTabObj?.kind !== 'reservoir-tracker' && activeSubTabObj?.kind !== 'workplan-tracker' && (
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-xl p-2.5 text-[11px]">
               <span className="font-extrabold text-slate-500 px-1.5">Quick Add:</span>
               {(
@@ -863,7 +879,39 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </div>
           )}
 
-          {/* Content Blocks Layout */}
+          {/* Specialized Trackers vs Standard Content Blocks */}
+          {activeSubTabObj?.kind === 'reservoir-tracker' ? (
+            currentUser ? (
+              <ReservoirProject
+                currentUser={currentUser}
+                projects={[]}
+                accentColor={headerAccent}
+                embedded
+              />
+            ) : (
+              <div className="p-8 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-500 space-y-3">
+                <p className="font-bold text-slate-700">Sign in as an ERSL Member to open the live Reservoir Project Management Matrix.</p>
+                <button
+                  type="button"
+                  onClick={onLoginClick}
+                  className="text-white text-xs font-bold px-4 py-2 rounded-lg cursor-pointer"
+                  style={{ backgroundColor: headerAccent }}
+                >
+                  ERSL Member Login
+                </button>
+              </div>
+            )
+          ) : activeSubTabObj?.kind === 'workplan-tracker' ? (
+            <ProjectWorkplanTracker
+              rounds={activeSubTabObj.workplanRounds || []}
+              people={people}
+              canEdit={showEditControls || Boolean(currentUser && (isLabMember || isAdmin))}
+              isAdmin={Boolean(isAdmin && showEditControls)}
+              primaryColor={headerAccent}
+              projectTitle={project.title}
+              onChangeRounds={handleSaveWorkplanTrackerRounds}
+            />
+          ) : (
           <div className={isOverviewLayout ? 'grid grid-cols-1 lg:grid-cols-12 gap-6' : 'space-y-4'}>
             <div className={isOverviewLayout ? 'lg:col-span-8 space-y-4' : 'space-y-4'}>
               {(!activeSubTabObj?.blocks || activeSubTabObj.blocks.length === 0) ? (
@@ -1057,6 +1105,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               </div>
             )}
           </div>
+          )}
         </div>
       )}
         </div>

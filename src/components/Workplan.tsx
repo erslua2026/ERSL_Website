@@ -8,9 +8,10 @@ import {
 import { supabase, Profile } from '../lib/supabase';
 import { getCloudData, setCloudData } from '../lib/cloudStore';
 import { initialPeople } from '../data/initialData';
-import type { User } from '../types';
+import type { Person, User } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { openOrDownloadResource, sanitizeExternalUrl } from '../lib/boxUtils';
+import { WORKPLAN_UPDATED_EVENT } from '../lib/workplanUtils';
 
 type Status = 'not_started' | 'in_progress' | 'completed' | 'discuss_with_liu';
 
@@ -126,8 +127,16 @@ const getFileCategory = (att: CommentAttachment): {
   return { isImage, isPdf, isBox, badge, badgeColor };
 };
 
-export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> = ({
+export const Workplan: React.FC<{
+  currentUser: User;
+  peopleRoster?: Person[];
+  embeddedInPeople?: boolean;
+  onOpenMemberTodo?: (target: { id?: string; email?: string; name?: string }) => void;
+} & SubPageHeaderPassProps> = ({
   currentUser,
+  peopleRoster,
+  embeddedInPeople = false,
+  onOpenMemberTodo,
   headerOverride,
   accentColor = '#9E1B32',
   showSubheadings = true,
@@ -185,23 +194,31 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
     // Helper to normalize emails for strict deduplication
     const norm = (str?: string) => (str || '').trim().toLowerCase();
 
-    // 2. Build verified canonical people list starting from initialPeople
+    // 2. Build verified canonical people list starting from peopleRoster / initialPeople
     const peopleByEmail = new Map<string, Profile>();
     const aliases: Record<string, string> = {};
 
-    initialPeople.forEach(p => {
+    const sourceRoster =
+      Array.isArray(peopleRoster) && peopleRoster.length > 0
+        ? peopleRoster.filter(p => (p.group || 'member') === 'member')
+        : initialPeople;
+
+    sourceRoster.forEach(p => {
       const email = norm(p.email || (p.id === 'person-purushothaman' ? 'npurushothaman@ua.edu' : `${p.id}@ua.edu`));
       const profile: Profile = {
         id: p.id,
         name: p.name,
         email: email,
-        role: p.id === 'person-liu' ? 'admin' : 'member'
+        role: p.id === 'person-liu' || p.role?.toLowerCase().includes('director') || p.role?.toLowerCase().includes('professor') ? 'admin' : 'member'
       };
       if (email) {
         peopleByEmail.set(email, profile);
       }
       aliases[p.id] = p.id;
     });
+    aliases['user-liu'] = aliases['user-liu'] || 'person-liu';
+    aliases['user-mandal'] = aliases['user-mandal'] || 'person-mandal';
+    aliases['user-naveen'] = aliases['user-naveen'] || 'person-purushothaman';
 
     // Merge helper that merges incoming profiles by email instead of creating duplicate cards
     const mergeProfile = (incoming: { id?: string; name?: string; email?: string; role?: string }) => {
@@ -311,9 +328,20 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
     } catch (err) {
       console.warn('Workplan load notice:', err);
     }
-  }, [currentUser]);
+  }, [currentUser, peopleRoster]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Listen for Student To-Do edits in same window and refresh live
+  useEffect(() => {
+    const handleWorkplanEvent = () => {
+      if (Date.now() - lastLocalEditAtRef.current > 800) {
+        load();
+      }
+    };
+    window.addEventListener(WORKPLAN_UPDATED_EVENT, handleWorkplanEvent);
+    return () => window.removeEventListener(WORKPLAN_UPDATED_EVENT, handleWorkplanEvent);
+  }, [load]);
 
   // Real-time sync + focus refresh so multiple logged-in members see tasks & comments live
   useEffect(() => {
@@ -453,6 +481,7 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name || currentUser?.email });
       setTasks(mergedTasks);
       setComments(mergedComments);
+      window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
     } catch {}
 
     // Set interactive 1-click Outlook/Gmail email prompt (no client-side email API key)
@@ -493,6 +522,7 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       const mergedTasks = baseTasks.map(t => (t.id === id ? { ...t, ...patch } : t));
       const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
       await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+      window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
     } catch {
       setCloudData('ersl_workplan_matrix', { tasks: updated, comments: commentsRef.current }, { updatedBy: currentUser?.name }).catch(() => {});
     }
@@ -512,6 +542,7 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       const mergedTasks = baseTasks.filter(item => item.id !== t.id);
       const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
       await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+      window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
     } catch {
       setCloudData('ersl_workplan_matrix', { tasks: updated, comments: commentsRef.current }, { updatedBy: currentUser?.name }).catch(() => {});
     }
@@ -584,6 +615,7 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
       const mergedTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : tasksRef.current;
       const mergedComments = mergeCommentMaps(latestCloud?.comments, updatedComments);
       await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
+      window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
     } catch {
       setCloudData('ersl_workplan_matrix', { tasks: tasksRef.current, comments: updatedComments }, { updatedBy: currentUser?.name }).catch(() => {});
     }
@@ -648,98 +680,173 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
     return days;
   }, [currentMonthDate]);
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300 text-left select-none">
-      {/* Top Banner */}
-      <SubPageHeader
-        tabId="workplan"
-        defaults={{
-          badge: 'PRIVATE · LAB WORKSPACE',
-          title: 'Work Plan & Progress Calendar',
-          subtitle: isAdmin
-            ? "Dr. Liu / Admin View: Monitor lab-wide milestones, review each researcher's progress metrics, assign tasks, and share figures/documents."
-            : 'Personal Workspace: Track your research milestones, view feedback from Dr. Liu, and attach papers, plots, and datasets.',
-        }}
-        override={headerOverride}
-        accentColor={accentColor}
-        showSubtitle={showSubheadings}
-        canEdit={canEditHeader || isAdmin}
-        onSave={onSaveHeader}
-      >
-        {/* View Switcher: List vs Calendar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-black/20 p-1 rounded-xl inline-flex items-center space-x-1">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'list' ? 'bg-white text-[#9E1B32] shadow-sm' : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>List View</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('calendar')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'calendar' ? 'bg-white text-[#9E1B32] shadow-sm' : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <CalendarIcon className="w-3.5 h-3.5" />
-              <span>Calendar View</span>
-            </button>
-          </div>
+  const visibleSummaryStats = useMemo(() => {
+    if (isAdmin) return memberStats;
+    const myEmail = (currentUser?.email || '').trim().toLowerCase();
+    const myCanonicalId = currentUser?.id ? (aliasMap[currentUser.id] || currentUser.id) : '';
+    return memberStats.filter(
+      s =>
+        s.profile.id === currentUser?.id ||
+        s.profile.id === myCanonicalId ||
+        (myEmail && s.profile.email?.trim().toLowerCase() === myEmail)
+    );
+  }, [memberStats, isAdmin, currentUser?.id, currentUser?.email, aliasMap]);
 
-          {/* Admin Owner Filter */}
-          {isAdmin && (
-            <div className="bg-white/10 backdrop-blur-xs px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs">
-              <span className="text-red-100 font-semibold">Filter Member:</span>
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300 text-left select-none">
+      {/* Top Banner (Compact Bar inside People Tab vs Standalone SubPageHeader) */}
+      {embeddedInPeople ? (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-xs px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200">
+              Private · {isAdmin ? 'Admin Executive View' : 'Personal Member View'}
+            </span>
+            <h3 className="text-base font-extrabold text-slate-900 mt-1">
+              Work Plan Summary &amp; Linked Member To-Do Tasks
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-slate-100 p-1 rounded-xl inline-flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'list' ? 'bg-white text-[#9E1B32] shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'calendar' ? 'bg-white text-[#9E1B32] shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+                <span>Calendar</span>
+              </button>
+            </div>
+
+            {isAdmin && (
               <select
                 value={filterOwner}
                 onChange={e => setFilterOwner(e.target.value)}
-                className="bg-white text-slate-800 font-bold px-2 py-1 rounded-md text-xs cursor-pointer focus:outline-none"
+                className="bg-white border border-gray-300 text-slate-800 font-bold px-2.5 py-1.5 rounded-lg text-xs cursor-pointer focus:outline-none"
               >
-                <option value="all">👥 All Members ({tasks.length} total tasks)</option>
+                <option value="all">👥 All Members ({tasks.length})</option>
                 {people.map(p => (
                   <option key={p.id} value={p.id}>{p.name || p.email}</option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </SubPageHeader>
-
-      {/* ADMIN ONLY: Clear Executive Summary of Each Team Member's Progress */}
-      {isAdmin && memberStats.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="w-5 h-5 text-[#9E1B32]" />
-              <h3 className="font-extrabold text-slate-900 text-base">Team Member Progress Overview</h3>
+      ) : (
+        <SubPageHeader
+          tabId="workplan"
+          defaults={{
+            badge: 'PRIVATE · LAB WORKSPACE',
+            title: 'Work Plan & Progress Calendar',
+            subtitle: isAdmin
+              ? "Dr. Liu / Admin View: Monitor lab-wide milestones, review each researcher's progress metrics, assign tasks, and share figures/documents."
+              : 'Personal Workspace: Track your research milestones, view feedback from Dr. Liu, and attach papers, plots, and datasets.',
+          }}
+          override={headerOverride}
+          accentColor={accentColor}
+          showSubtitle={showSubheadings}
+          canEdit={canEditHeader || isAdmin}
+          onSave={onSaveHeader}
+        >
+          {/* View Switcher: List vs Calendar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-black/20 p-1 rounded-xl inline-flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'list' ? 'bg-white text-[#9E1B32] shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>List View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'calendar' ? 'bg-white text-[#9E1B32] shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+                <span>Calendar View</span>
+              </button>
             </div>
-            <span className="text-xs text-gray-500 font-medium">
-              {memberStats.length} lab researcher{memberStats.length !== 1 ? 's' : ''} tracked
-            </span>
+
+            {/* Admin Owner Filter */}
+            {isAdmin && (
+              <div className="bg-white/10 backdrop-blur-xs px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs">
+                <span className="text-red-100 font-semibold">Filter Member:</span>
+                <select
+                  value={filterOwner}
+                  onChange={e => setFilterOwner(e.target.value)}
+                  className="bg-white text-slate-800 font-bold px-2 py-1 rounded-md text-xs cursor-pointer focus:outline-none"
+                >
+                  <option value="all">👥 All Members ({tasks.length} total tasks)</option>
+                  {people.map(p => (
+                    <option key={p.id} value={p.id}>{p.name || p.email}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </SubPageHeader>
+      )}
+
+      {/* PRIVATE EXECUTIVE SUMMARY: Per-Member Progress Overview connected directly to Student To-Do List */}
+      {visibleSummaryStats.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-4 md:p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-[#9E1B32]" />
+              <h3 className="font-extrabold text-slate-900 text-sm">
+                {isAdmin ? 'Team Member Work Plan Summary' : 'My Work Plan Progress Summary'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+              {isAdmin && filterOwner !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setFilterOwner('all')}
+                  className="text-[11px] font-bold text-[#9E1B32] hover:underline cursor-pointer"
+                >
+                  Show All Members
+                </button>
+              )}
+              <span>
+                {visibleSummaryStats.length} researcher{visibleSummaryStats.length !== 1 ? 's' : ''} tracked
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {memberStats.map(stat => (
-              <div 
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {visibleSummaryStats.map(stat => (
+              <div
                 key={stat.profile.id}
-                onClick={() => setFilterOwner(stat.profile.id)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer text-left ${
-                  filterOwner === stat.profile.id 
-                    ? 'border-[#9E1B32] bg-red-50/20 shadow-xs ring-1 ring-[#9E1B32]' 
+                onClick={() => isAdmin && setFilterOwner(stat.profile.id)}
+                className={`p-3 rounded-xl border transition-all text-left ${isAdmin ? 'cursor-pointer' : ''} ${
+                  filterOwner === stat.profile.id
+                    ? 'border-[#9E1B32] bg-red-50/20 shadow-xs ring-1 ring-[#9E1B32]'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-slate-50/50'
                 }`}
               >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="truncate">
-                    <p className="font-extrabold text-slate-800 text-sm truncate">{stat.profile.name || stat.profile.email}</p>
+                <div className="flex justify-between items-start gap-2 mb-1.5">
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-slate-800 text-xs sm:text-sm truncate">{stat.profile.name || stat.profile.email}</p>
                     <p className="text-[10px] text-gray-400 truncate">{stat.profile.email}</p>
                   </div>
-                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
                     stat.percent >= 75 ? 'bg-emerald-100 text-emerald-800' :
                     stat.percent >= 40 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'
                   }`}>
@@ -748,9 +855,9 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
                 </div>
 
                 {/* Progress bar */}
-                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mb-3">
-                  <div 
-                    className="bg-[#9E1B32] h-1.5 rounded-full transition-all duration-500" 
+                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mb-2">
+                  <div
+                    className="bg-[#9E1B32] h-1.5 rounded-full transition-all duration-500"
                     style={{ width: `${stat.percent}%` }}
                   ></div>
                 </div>
@@ -775,12 +882,34 @@ export const Workplan: React.FC<{ currentUser: User } & SubPageHeaderPassProps> 
                   </div>
                 </div>
 
-                {stat.overdue > 0 && (
-                  <p className="text-[10px] text-red-600 font-bold mt-2 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                    <span>{stat.overdue} overdue milestone{stat.overdue !== 1 ? 's' : ''}</span>
-                  </p>
-                )}
+                <div className="flex items-center justify-between gap-2 mt-2">
+                  {stat.overdue > 0 ? (
+                    <p className="text-[10px] text-red-600 font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <span>{stat.overdue} overdue</span>
+                    </p>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-semibold">On schedule</span>
+                  )}
+
+                  {onOpenMemberTodo && (
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onOpenMemberTodo({
+                          id: stat.profile.id,
+                          email: stat.profile.email,
+                          name: stat.profile.name,
+                        });
+                      }}
+                      className="text-[10px] font-extrabold text-[#9E1B32] hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <span>To-Do List</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

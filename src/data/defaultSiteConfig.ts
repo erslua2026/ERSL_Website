@@ -25,7 +25,7 @@ export const defaultSiteConfig: SiteConfig = {
   showSubheadings: true,
   swapHomeColors: false,
   themeStyle: 'macos-glass',
-  configVersion: 6,
+  configVersion: 7,
   tabs: [
     { id: 'home', label: 'Home', icon: '🏠', visibility: 'public' },
     { id: 'people', label: 'People', icon: '👥', visibility: 'public' },
@@ -38,8 +38,6 @@ export const defaultSiteConfig: SiteConfig = {
     { id: 'professional', label: 'Professional Dev', icon: '🎓', visibility: 'members' },
     { id: 'teaching', label: 'Teaching', icon: '📖', visibility: 'members' },
     { id: 'bulletins', label: 'Lab Bulletin', icon: '📢', visibility: 'members' },
-    { id: 'workplan', label: 'Work Plan', icon: '✅', visibility: 'members' },
-    { id: 'reservoir', label: 'Project Management', icon: '📊', visibility: 'members' },
     { id: 'box', label: 'Box Workspace', icon: '📁', visibility: 'members' },
   ],
   homeSlides: [

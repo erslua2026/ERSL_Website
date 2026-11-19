@@ -494,11 +494,13 @@ export const ReservoirProject: React.FC<
   {
     currentUser: User;
     projects?: Project[];
+    embedded?: boolean;
     onOpenProjectNewTab?: (projectId: string) => void;
   } & SubPageHeaderPassProps
 > = ({
   currentUser,
   projects = [],
+  embedded = false,
   onOpenProjectNewTab,
   headerOverride,
   accentColor = '#9E1B32',
@@ -1800,7 +1802,7 @@ export const ReservoirProject: React.FC<
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-20 font-sans">
+    <div className={embedded ? 'space-y-4 font-sans text-left' : 'space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-20 font-sans'}>
 
       {/* Floating Toast Notification */}
       {toastMessage && (
@@ -1810,6 +1812,70 @@ export const ReservoirProject: React.FC<
         </div>
       )}
 
+      {embedded ? (
+        <div className="bg-slate-900 text-white rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2.5 border border-slate-800">
+          <div className="min-w-0">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+              ERSL Project Management · Synchronized Matrix
+            </span>
+            <h3 className="text-sm font-black text-white">
+              National Reservoir Delineation Protocol Matrix
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold border border-white/20 bg-black/25 text-white">
+              <Radio className={`w-3 h-3 ${realtimeActive ? 'text-emerald-300 animate-pulse' : 'text-white/70'}`} />
+              <span>{cloudSyncStatus === 'synced' ? 'Cloud Synced' : realtimeActive ? 'Live Realtime' : 'Local'}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !adminMode;
+                setAdminMode(next);
+                localStorage.setItem('ersl_reservoir_admin_mode', String(next));
+                showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
+                isAdmin
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
+                  : 'bg-white/15 hover:bg-white/25 text-white border-white/20'
+              }`}
+            >
+              {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+              <span>{isAdmin ? 'Admin Edit' : 'Member Progress'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold border border-slate-700 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => fetchCloudData(true)}
+              disabled={isCloudFetching}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold border border-slate-700 cursor-pointer disabled:opacity-50"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 text-cyan-400 ${isCloudFetching ? 'animate-spin' : ''}`} />
+              <span>{isCloudFetching ? 'Syncing' : 'Sync'}</span>
+            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenAddRound}
+                style={{ backgroundColor: accentColor }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-white text-[11px] font-extrabold cursor-pointer hover:opacity-90"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Round</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+      <>
       {/* =========================================================================
           TOP BANNER: ERSL PROJECT MANAGEMENT & RESERVOIR DELINEATION MATRIX
           ========================================================================= */}
@@ -1941,6 +2007,8 @@ export const ReservoirProject: React.FC<
           </div>
         )}
       </div>
+      </>
+      )}
 
       <div className="bg-slate-950 rounded-2xl shadow-xl border border-slate-800 p-5 text-white">
         {/* Milestone Summary Metrics (Clickable Tabs) */}

@@ -892,7 +892,10 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
                   ) : tabKind === 'todo' ? (
                     <StudentTodoView
                       blocks={activeSubTabObj?.blocks || []}
-                      canEdit={showEditControls}
+                      person={person}
+                      people={people}
+                      currentUser={currentUser}
+                      canEdit={showEditControls || Boolean(isOwnStudentProfile)}
                       primaryColor={headerAccent}
                       onQuickAddTodo={handleQuickAddTodo}
                       onToggleTodo={handleToggleTodo}

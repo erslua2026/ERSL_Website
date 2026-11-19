@@ -245,12 +245,37 @@ export const SUBTAB_PRESETS: Array<{
     description: 'Field campaigns, workshops, conferences, and milestones.',
   },
   {
+    kind: 'workplan-tracker',
+    defaultLabel: 'Work Plan Progress',
+    defaultVisibility: 'members',
+    description: 'Flexible milestone rounds, team workload allocations, delivery/QC dates, and progress matrix for this project.',
+  },
+  {
+    kind: 'reservoir-tracker',
+    defaultLabel: 'Project Management',
+    defaultVisibility: 'members',
+    description: 'National Reservoir Delineation Protocol Matrix, team sprint allocations, and QA verification.',
+  },
+  {
     kind: 'custom',
     defaultLabel: 'Custom Section',
     defaultVisibility: 'public',
     description: 'Flexible sub-page with any combination of text, links, datasets, or files.',
   },
 ];
+
+const RESERVOIR_MANAGED_PROJECT_IDS = new Set(['proj-8', 'proj-9']);
+const RESERVOIR_MANAGED_TITLE_PATTERNS = [
+  'near-real-time monitoring of key reservoir variables by integrating wide-swath swot altimetry and deep learning techniques',
+  'develop a generic georeferenced reservoir representation for large-scale hydrologic models',
+];
+
+export function isReservoirManagedProject(project?: Project | null): boolean {
+  if (!project) return false;
+  if (RESERVOIR_MANAGED_PROJECT_IDS.has(project.id)) return true;
+  const cleanTitle = (project.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return RESERVOIR_MANAGED_TITLE_PATTERNS.includes(cleanTitle);
+}
 
 export function parseLegacyInvestigators(piInfo?: string, details?: string): ProjectInvestigator[] {
   const raw = (piInfo || details || '').trim();
@@ -293,12 +318,33 @@ export function buildNormalizedSubTabs(
   project: Project,
   subPage: ProjectSubPageData
 ): ProjectCustomSubTab[] {
+  const ensureReservoirManagementTab = (tabs: ProjectCustomSubTab[]): ProjectCustomSubTab[] => {
+    if (!isReservoirManagedProject(project)) return tabs;
+    if (tabs.some(t => t.kind === 'reservoir-tracker' || t.id === 'project-management')) {
+      return tabs;
+    }
+    return [
+      ...tabs,
+      {
+        id: 'project-management',
+        label: 'Project Management',
+        kind: 'reservoir-tracker',
+        visibility: 'members',
+        description:
+          'National Reservoir Delineation Protocol Matrix, sprint allocations, collection tracking, and QA verification.',
+        blocks: [],
+      },
+    ];
+  };
+
   if (Array.isArray(subPage.customSubTabs) && subPage.customSubTabs.length > 0) {
-    return subPage.customSubTabs.map(tab => ({
-      ...tab,
-      visibility: tab.visibility || subPage.tabVisibility?.[tab.id] || 'public',
-      blocks: Array.isArray(tab.blocks) ? tab.blocks : [],
-    }));
+    return ensureReservoirManagementTab(
+      subPage.customSubTabs.map(tab => ({
+        ...tab,
+        visibility: tab.visibility || subPage.tabVisibility?.[tab.id] || 'public',
+        blocks: Array.isArray(tab.blocks) ? tab.blocks : [],
+      }))
+    );
   }
 
   const vis = subPage.tabVisibility || {};
@@ -366,7 +412,7 @@ export function buildNormalizedSubTabs(
     availability: ds.availability || 'Public',
   }));
 
-  return [
+  return ensureReservoirManagementTab([
     {
       id: 'overview',
       label: 'Overview',
@@ -395,7 +441,7 @@ export function buildNormalizedSubTabs(
       visibility: vis.datasets || 'members',
       blocks: datasetBlocks,
     },
-  ];
+  ]);
 }
 
 export type PreviewRole = 'actual' | 'public' | 'collaborator' | 'member' | 'admin';

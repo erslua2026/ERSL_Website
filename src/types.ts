@@ -71,7 +71,42 @@ export type ProjectCustomSubTabKind =
   | 'schedules'
   | 'questions'
   | 'todo'
+  | 'reservoir-tracker'
+  | 'workplan-tracker'
   | 'custom';
+
+export type ProjectTrackerStageStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'qc_checked'
+  | 'reprocessing'
+  | 'verified';
+
+export interface ProjectTrackerAllocation {
+  id: string;
+  memberName: string;
+  targetCount: number;
+  finishedCount: number;
+  deliverDate?: string;
+  collectDate?: string;
+  checkDate?: string;
+  backupDate?: string;
+  status: ProjectTrackerStageStatus;
+  notes?: string;
+}
+
+export interface ProjectTrackerRound {
+  id: string;
+  label: string;
+  scope?: string;
+  dueDate?: string;
+  deliverCompleted?: boolean;
+  collectCompleted?: boolean;
+  checkCompleted?: boolean;
+  backupCompleted?: boolean;
+  notes?: string;
+  allocations: ProjectTrackerAllocation[];
+}
 
 export interface ProjectCustomSubTab {
   id: string;
@@ -80,6 +115,7 @@ export interface ProjectCustomSubTab {
   visibility: SubTabVisibility;
   description?: string;
   blocks: ProjectContentBlock[];
+  workplanRounds?: ProjectTrackerRound[];
 }
 
 export interface ProjectInvestigator {

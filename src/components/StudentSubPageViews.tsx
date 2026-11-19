@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   Calendar as CalendarIcon,
   CheckCircle2,
   ChevronLeft,
@@ -13,14 +14,29 @@ import {
   MapPin,
   MessageSquare,
   Plus,
+  Send,
   Trash2,
 } from 'lucide-react';
-import { ProjectContentBlock } from '../types';
+import type { Person, ProjectContentBlock, User } from '../types';
 import { isSafeDataDocumentUrl, openOrDownloadResource, resolveReferenceUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import {
+  daysUntilDue,
+  fetchWorkplanMatrixSnapshot,
+  matchesPersonWorkplanOwner,
+  saveWorkplanTaskAction,
+  subscribeWorkplanRealtime,
+  WORKPLAN_STATUS_META,
+  WorkplanComment,
+  WorkplanStatus,
+  WorkplanTask,
+} from '../lib/workplanUtils';
 import { LinkedReferenceText } from './LinkedReferenceText';
 
 interface StudentTodoViewProps {
   blocks: ProjectContentBlock[];
+  person?: Person;
+  people?: Person[];
+  currentUser?: User | null;
   canEdit: boolean;
   primaryColor: string;
   onQuickAddTodo: (task: { title: string; date?: string; priority: 'low' | 'medium' | 'high'; category?: string }) => void;
@@ -32,6 +48,9 @@ interface StudentTodoViewProps {
 
 export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
   blocks,
+  person,
+  people = [],
+  currentUser,
   canEdit,
   primaryColor,
   onQuickAddTodo,
@@ -41,128 +60,420 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
   onClearCompleted,
 }) => {
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  const [filter, setFilter] = useState<'all' | 'active' | 'done'>('all');
+  const [filter, setFilter] = useState<'all' | WorkplanStatus>('all');
+  const [allTasks, setAllTasks] = useState<WorkplanTask[]>([]);
+  const [comments, setComments] = useState<Record<string, WorkplanComment[]>>({});
+  const [openChatTaskId, setOpenChatTaskId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
 
-  const todayYmd = new Date().toISOString().slice(0, 10);
-  const completedCount = blocks.filter(b => b.completed).length;
-  const pct = blocks.length > 0 ? Math.round((completedCount / blocks.length) * 100) : 0;
+  const syncWorkplan = useCallback(async () => {
+    const snap = await fetchWorkplanMatrixSnapshot();
+    setAllTasks(snap.tasks);
+    setComments(snap.comments);
+  }, []);
 
-  const filtered = useMemo(() => {
-    const list = blocks.filter(b => {
-      if (filter === 'active') return !b.completed;
-      if (filter === 'done') return Boolean(b.completed);
-      return true;
+  useEffect(() => {
+    syncWorkplan();
+    return subscribeWorkplanRealtime(syncWorkplan);
+  }, [syncWorkplan]);
+
+  const myWorkplanTasks = useMemo(() => {
+    if (!person) return [];
+    return allTasks.filter(t => matchesPersonWorkplanOwner(t.owner_id, person, people));
+  }, [allTasks, person, people]);
+
+  const statusCounts = useMemo(() => {
+    const allItems = [
+      ...myWorkplanTasks.map(t => ({
+        status: t.status,
+        overdue: Boolean(
+          t.status !== 'completed' && daysUntilDue(t.due_date) !== null && (daysUntilDue(t.due_date) as number) < 0
+        ),
+      })),
+      ...blocks.map(b => {
+        const st: WorkplanStatus =
+          (b.status as WorkplanStatus) || (b.completed ? 'completed' : 'not_started');
+        return {
+          status: st,
+          overdue: Boolean(
+            st !== 'completed' && daysUntilDue(b.date) !== null && (daysUntilDue(b.date) as number) < 0
+          ),
+        };
+      }),
+    ];
+    const total = allItems.length;
+    const completed = allItems.filter(i => i.status === 'completed').length;
+    const inProgress = allItems.filter(i => i.status === 'in_progress').length;
+    const discuss = allItems.filter(i => i.status === 'discuss_with_liu').length;
+    const notStarted = allItems.filter(i => i.status === 'not_started').length;
+    const overdue = allItems.filter(i => i.overdue).length;
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, inProgress, discuss, notStarted, overdue, pct };
+  }, [myWorkplanTasks, blocks]);
+
+  const filteredTasks = useMemo(() => {
+    const base =
+      filter === 'all' ? myWorkplanTasks : myWorkplanTasks.filter(t => t.status === filter);
+    return [...base].sort(
+      (a, b) => Number(a.status === 'completed') - Number(b.status === 'completed')
+    );
+  }, [myWorkplanTasks, filter]);
+
+  const filteredLocalBlocks = useMemo(() => {
+    const base = blocks.filter(b => {
+      const st: WorkplanStatus =
+        (b.status as WorkplanStatus) || (b.completed ? 'completed' : 'not_started');
+      if (filter === 'all') return true;
+      return st === filter;
     });
-    return [...list].sort((a, b) => Number(Boolean(a.completed)) - Number(Boolean(b.completed)));
+    return [...base].sort((a, b) => Number(Boolean(a.completed)) - Number(Boolean(b.completed)));
   }, [blocks, filter]);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onQuickAddTodo({
-      title: title.trim(),
-      date: dueDate || undefined,
-      priority,
-      category: 'Weekly To-Do',
-    });
+    if (person) {
+      const newTask: WorkplanTask = {
+        id: `task-${Date.now()}`,
+        owner_id: person.id,
+        title: title.trim(),
+        description: description.trim(),
+        due_date: dueDate || null,
+        status: 'not_started',
+      };
+      const res = await saveWorkplanTaskAction({
+        action: 'add',
+        task: newTask,
+        currentTasks: allTasks,
+        currentComments: comments,
+        updatedBy: currentUser,
+      });
+      setAllTasks(res.tasks);
+      setComments(res.comments);
+    } else {
+      onQuickAddTodo({
+        title: title.trim(),
+        date: dueDate || undefined,
+        priority,
+        category: 'Weekly To-Do',
+      });
+    }
     setTitle('');
+    setDescription('');
     setDueDate('');
     setPriority('medium');
   };
 
-  return (
-    <div className="space-y-3">
-      {/* Inline To-Do Quick Composer */}
-      {canEdit && (
-        <form onSubmit={handleAdd} className="bg-slate-50 border border-gray-200 rounded-xl p-2.5 flex flex-wrap items-center gap-2 text-xs">
-          <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Add a weekly to-do item and press Enter..."
-            className="flex-1 min-w-[200px] px-3 py-1.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
-          />
-          <input
-            type="date"
-            value={dueDate}
-            onChange={e => setDueDate(e.target.value)}
-            title="Target due date (optional)"
-            className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-slate-700"
-          />
-          <select
-            value={priority}
-            onChange={e => setPriority(e.target.value as 'low' | 'medium' | 'high')}
-            className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-slate-700"
-          >
-            <option value="medium">Normal</option>
-            <option value="high">High Priority</option>
-            <option value="low">Low</option>
-          </select>
-          <button
-            type="submit"
-            disabled={!title.trim()}
-            className="px-3.5 py-1.5 rounded-lg text-white font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-            style={{ backgroundColor: primaryColor }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Task
-          </button>
-        </form>
-      )}
+  const handleUpdateWorkplanStatus = async (task: WorkplanTask, status: WorkplanStatus) => {
+    const res = await saveWorkplanTaskAction({
+      action: 'update',
+      taskId: task.id,
+      patch: { status },
+      currentTasks: allTasks,
+      currentComments: comments,
+      updatedBy: currentUser,
+    });
+    setAllTasks(res.tasks);
+    setComments(res.comments);
+  };
 
-      {/* Compact Filter & Completion Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-1.5">
-          {([
-            ['all', `All (${blocks.length})`],
-            ['active', `Active (${blocks.length - completedCount})`],
-            ['done', `Completed (${completedCount})`],
-          ] as const).map(([key, lbl]) => (
+  const handleDeleteWorkplanTask = async (task: WorkplanTask) => {
+    if (!confirm(`Delete work plan task "${task.title}"?`)) return;
+    const res = await saveWorkplanTaskAction({
+      action: 'delete',
+      taskId: task.id,
+      currentTasks: allTasks,
+      currentComments: comments,
+      updatedBy: currentUser,
+    });
+    setAllTasks(res.tasks);
+    setComments(res.comments);
+  };
+
+  const handleSendWorkplanComment = async (taskId: string) => {
+    if (!commentDraft.trim()) return;
+    const newComment: WorkplanComment = {
+      id: `comm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      task_id: taskId,
+      author_id: currentUser?.id,
+      author_name: currentUser?.name || currentUser?.email || person?.name || 'Lab Member',
+      body: commentDraft.trim(),
+      created_at: new Date().toISOString(),
+    };
+    const res = await saveWorkplanTaskAction({
+      action: 'add-comment',
+      taskId,
+      comment: newComment,
+      currentTasks: allTasks,
+      currentComments: comments,
+      updatedBy: currentUser,
+    });
+    setAllTasks(res.tasks);
+    setComments(res.comments);
+    setCommentDraft('');
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* Compact Work-Plan Summary Strip */}
+      <div className="bg-slate-50 border border-gray-200 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-extrabold text-slate-800 mr-1">
+            {statusCounts.completed}/{statusCounts.total} Done ({statusCounts.pct}%)
+          </span>
+          <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden mr-1.5">
+            <div className="h-full transition-all" style={{ width: `${statusCounts.pct}%`, backgroundColor: '#16a34a' }} />
+          </div>
+          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+            Active: {statusCounts.inProgress}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
+            Discuss w/ Liu: {statusCounts.discuss}
+          </span>
+          {statusCounts.overdue > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold inline-flex items-center gap-0.5">
+              <AlertTriangle className="w-3 h-3" /> {statusCounts.overdue} Overdue
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1">
+          {(
+            [
+              ['all', `All (${statusCounts.total})`],
+              ['in_progress', 'In Process'],
+              ['discuss_with_liu', 'Discuss'],
+              ['not_started', 'Not Started'],
+              ['completed', 'Done'],
+            ] as const
+          ).map(([key, lbl]) => (
             <button
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition-colors ${filter === key
+              className={`px-2 py-0.5 rounded-md font-bold cursor-pointer transition-colors ${
+                filter === key
                   ? 'text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
+                  : 'bg-white border border-gray-200 text-slate-600 hover:bg-slate-100'
+              }`}
               style={filter === key ? { backgroundColor: primaryColor } : undefined}
             >
               {lbl}
             </button>
           ))}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-            <div className="w-24 h-2 rounded-full bg-slate-200 overflow-hidden">
-              <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#16a34a' }} />
-            </div>
-            <span>{completedCount}/{blocks.length} Done ({pct}%)</span>
-          </div>
-          {canEdit && completedCount > 0 && (
+          {canEdit && blocks.some(b => b.completed) && (
             <button
               type="button"
               onClick={onClearCompleted}
-              className="text-[11px] font-bold text-slate-500 hover:text-red-600 underline cursor-pointer"
+              className="ml-1 text-[10px] font-bold text-slate-500 hover:text-red-600 underline cursor-pointer"
             >
-              Clear Completed
+              Clear Done Notes
             </button>
           )}
         </div>
       </div>
 
-      {/* Checklist Rows */}
-      {filtered.length === 0 ? (
-        <div className="p-6 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-500">
-          {blocks.length === 0
-            ? 'No weekly to-do tasks yet. Type a task above to start the checklist.'
-            : 'No tasks match the selected filter.'}
+      {/* Ultra-Compact Work-Plan-Connected Task Composer */}
+      {canEdit && (
+        <form onSubmit={handleAdd} className="bg-slate-50 border border-gray-200 rounded-xl p-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <input
+            type="text"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Add work plan task / weekly to-do..."
+            className="flex-1 min-w-[190px] px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+          />
+          {person && (
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Deliverables / note (optional)"
+              className="w-44 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+            />
+          )}
+          <input
+            type="date"
+            value={dueDate}
+            onChange={e => setDueDate(e.target.value)}
+            title="Target due date (optional)"
+            className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-slate-700"
+          />
+          {!person && (
+            <select
+              value={priority}
+              onChange={e => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+              className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-slate-700"
+            >
+              <option value="medium">Normal</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          )}
+          <button
+            type="submit"
+            disabled={!title.trim()}
+            className="px-3 py-1.5 rounded-lg text-white font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </form>
+      )}
+
+      {/* Compact Work-Plan-Style Task Table / Rows */}
+      {filteredTasks.length === 0 && filteredLocalBlocks.length === 0 ? (
+        <div className="p-5 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-500">
+          {statusCounts.total === 0
+            ? 'No work plan tasks or to-do items yet. Add one above to sync directly with the Lab Work Plan Summary.'
+            : 'No tasks match the selected status filter.'}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-          {filtered.map(item => {
+          {filteredTasks.map(task => {
+            const st = WORKPLAN_STATUS_META[task.status || 'not_started'];
+            const dLeft = daysUntilDue(task.due_date);
+            const isOverdue = task.status !== 'completed' && dLeft !== null && dLeft < 0;
+            const taskComments = comments[task.id] || [];
+            const isDone = task.status === 'completed';
+
+            return (
+              <div key={task.id} className={`px-3 py-2 transition-colors ${isOverdue ? 'bg-red-50/25' : isDone ? 'bg-slate-50/60' : 'hover:bg-slate-50/50'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() =>
+                        handleUpdateWorkplanStatus(task, isDone ? 'in_progress' : 'completed')
+                      }
+                      className={`mt-0.5 shrink-0 ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                      title={isDone ? 'Reopen task' : 'Mark completed'}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-slate-400 hover:text-[#9E1B32]" />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
+                        <span className={`text-xs font-extrabold leading-snug ${isDone ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                          {task.title}
+                        </span>
+                        {task.due_date && (
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded border inline-flex items-center gap-1 ${
+                              isOverdue
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : 'bg-slate-50 text-slate-600 border-gray-200'
+                            }`}
+                          >
+                            <CalendarIcon className="w-2.5 h-2.5" />
+                            {task.due_date}
+                            {isOverdue ? ` · Overdue ${Math.abs(dLeft!)}d` : ''}
+                          </span>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                          <LinkedReferenceText text={task.description} />
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <select
+                      disabled={!canEdit}
+                      value={task.status}
+                      onChange={e =>
+                        handleUpdateWorkplanStatus(task, e.target.value as WorkplanStatus)
+                      }
+                      className={`text-[11px] font-bold px-2 py-1 rounded-md border ${st.cls} ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                    >
+                      {(Object.keys(WORKPLAN_STATUS_META) as WorkplanStatus[]).map(k => (
+                        <option key={k} value={k}>
+                          {WORKPLAN_STATUS_META[k].label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => setOpenChatTaskId(openChatTaskId === task.id ? null : task.id)}
+                      className="px-2 py-1 rounded-md border border-gray-200 hover:bg-slate-100 text-[10px] font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                      title="Notes & comments"
+                    >
+                      <MessageSquare className="w-3 h-3 text-[#9E1B32]" />
+                      {taskComments.length > 0 && <span>{taskComments.length}</span>}
+                    </button>
+
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteWorkplanTask(task)}
+                        className="p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer"
+                        title="Delete work plan task"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {openChatTaskId === task.id && (
+                  <div className="mt-2 ml-6 p-2 bg-slate-50 border border-gray-200 rounded-lg space-y-1.5 text-[11px]">
+                    {taskComments.length === 0 ? (
+                      <p className="text-slate-400 italic">No discussion notes yet.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-36 overflow-y-auto">
+                        {taskComments.map(c => (
+                          <div key={c.id} className="bg-white border border-gray-100 rounded px-2 py-1">
+                            <span className="font-bold text-slate-800">{c.author_name}: </span>
+                            <span className="text-slate-700">{c.body}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {canEdit && (
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={commentDraft}
+                          onChange={e => setCommentDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSendWorkplanComment(task.id);
+                            }
+                          }}
+                          placeholder="Add progress note or reply..."
+                          className="flex-1 px-2 py-1 bg-white border border-gray-300 rounded text-[11px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSendWorkplanComment(task.id)}
+                          className="px-2.5 py-1 rounded text-white font-bold inline-flex items-center gap-1 cursor-pointer"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          <Send className="w-3 h-3" /> Send
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {filteredLocalBlocks.map(item => {
+            const todayYmd = new Date().toISOString().slice(0, 10);
             const isOverdue = Boolean(item.date && item.date < todayYmd && !item.completed);
             const primaryUrl = item.url || item.boxUrl;
             const isLocalFile = Boolean(primaryUrl && isSafeDataDocumentUrl(primaryUrl));
@@ -170,10 +481,11 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
             return (
               <div
                 key={item.id}
-                className={`px-3.5 py-2.5 flex items-start justify-between gap-3 transition-colors ${item.completed ? 'bg-slate-50/70' : 'hover:bg-slate-50/50'
-                  }`}
+                className={`px-3 py-2 flex items-center justify-between gap-2 transition-colors ${
+                  item.completed ? 'bg-slate-50/70' : 'hover:bg-slate-50/50'
+                }`}
               >
-                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <div className="flex items-start gap-2 min-w-0 flex-1">
                   <button
                     type="button"
                     disabled={!canEdit}
@@ -188,26 +500,27 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
                     )}
                   </button>
 
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
-                        className={`text-xs sm:text-sm font-bold ${item.completed ? 'line-through text-slate-400' : 'text-slate-900'
-                          }`}
+                        className={`text-xs font-bold ${
+                          item.completed ? 'line-through text-slate-400' : 'text-slate-900'
+                        }`}
                       >
                         {item.title}
                       </span>
-
                       {item.priority === 'high' && !item.completed && (
-                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-red-50 text-[#9E1B32] border border-red-200">
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-red-50 text-[#9E1B32] border border-red-200">
                           High
                         </span>
                       )}
                       {item.date && (
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${isOverdue
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded border inline-flex items-center gap-1 ${
+                            isOverdue
                               ? 'bg-red-50 text-red-700 border-red-200'
                               : 'bg-slate-50 text-slate-600 border-gray-200'
-                            }`}
+                          }`}
                         >
                           <CalendarIcon className="w-2.5 h-2.5" />
                           {item.date}

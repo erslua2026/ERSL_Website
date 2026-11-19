@@ -49,6 +49,7 @@ import { getLastBoxStatus } from './lib/boxSync';
 import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
+import { isReservoirManagedProject } from './lib/projectSubPageUtils';
 
 // Helper to resolve image paths (local folder under public/images/{category} vs base64/URL assets)
 const resolveImagePath = (
@@ -113,11 +114,13 @@ export default function App() {
   // Global States (with LocalStorage persistence for testing)
   // Real login: the user comes from the Supabase session (see effect below), never from localStorage
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [peopleSubTab, setPeopleSubTab] = useState<'member' | 'collaborator' | 'former'>('member');
+  const [peopleSubTab, setPeopleSubTab] = useState<'member' | 'collaborator' | 'former' | 'workplan'>('member');
   const [personGroupOverride, setPersonGroupOverride] = useState<'member' | 'collaborator' | 'former' | undefined>(undefined);
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     const saved = localStorage.getItem('ersl_tab');
+    if (saved === 'reservoir') return 'projects';
+    if (saved === 'workplan') return 'people';
     return saved || 'home';
   });
 
@@ -400,6 +403,7 @@ export default function App() {
     const needsV4Upgrade = version < 4;
     const needsV5Upgrade = version < 5;
     const needsV6Upgrade = version < 6;
+    const needsV7Upgrade = version < 7;
     const isOldDefaultMission =
       !raw.homeMission?.description ||
       raw.homeMission.description.startsWith('Our research balances extensive field-level tracking');
@@ -408,6 +412,7 @@ export default function App() {
 
     let combinedTabs = [...raw.tabs]
       .filter(tab => tab.id !== 'field')
+      .filter(tab => !(needsV7Upgrade && (tab.id === 'reservoir' || tab.id === 'workplan')))
       .map(tab => {
         let updated = tab;
         if (needsV2Upgrade && updated.id === 'research' && updated.label === 'Research Areas') {
@@ -438,7 +443,7 @@ export default function App() {
     return {
       ...defaultSiteConfig,
       ...raw,
-      configVersion: 6,
+      configVersion: 7,
       themeStyle: raw.themeStyle || 'macos-glass',
       showSubheadings: needsV3Upgrade ? true : (raw.showSubheadings ?? true),
       swapHomeColors: needsV3Upgrade ? false : (raw.swapHomeColors ?? false),
@@ -3042,7 +3047,7 @@ export default function App() {
                                     {proj.summary || proj.details}
                                   </p>
 
-                                  {/* Connected Theme Badges */}
+                                  {/* Connected Theme Badges & Integrated Trackers */}
                                   <div className="flex flex-wrap gap-1.5 mt-3">
                                     {projThemes.length > 0 ? projThemes.map(pt => (
                                       <span key={pt.id} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-slate-700 border border-gray-200">
@@ -3051,6 +3056,17 @@ export default function App() {
                                     )) : (
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                                         ⚠️ Assign Research Theme
+                                      </span>
+                                    )}
+                                    {(isReservoirManagedProject(proj) ||
+                                      proj.subPage?.customSubTabs?.some(t => t.kind === 'reservoir-tracker')) && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-[#9E1B32] border border-rose-200">
+                                        📊 Project Management Matrix
+                                      </span>
+                                    )}
+                                    {proj.subPage?.customSubTabs?.some(t => t.kind === 'workplan-tracker') && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                        ✅ Work Plan Tracker
                                       </span>
                                     )}
                                   </div>
@@ -3853,9 +3869,15 @@ export default function App() {
                     <div className="space-y-6">
                       <div className="flex flex-wrap justify-between items-center gap-3">
                         <h3 className="text-sm font-extrabold uppercase tracking-widest" style={{ color: subheadingAccent }}>
-                          {peopleSubTab === 'former' ? 'Former Members' : peopleSubTab === 'collaborator' ? 'Research Collaborators' : 'Active Team Roster'}
+                          {peopleSubTab === 'workplan' && currentUser
+                            ? 'Private Lab Work Plan Summary'
+                            : peopleSubTab === 'former'
+                              ? 'Former Members'
+                              : peopleSubTab === 'collaborator'
+                                ? 'Research Collaborators'
+                                : 'Active Team Roster'}
                         </h3>
-                        {editMode && (
+                        {editMode && peopleSubTab !== 'workplan' && (
                           <div className="flex flex-wrap items-center gap-2">
                             {peopleSubTab === 'former' && people.some(p => (p.group || 'member') === 'member') && (
                               <select
@@ -3914,14 +3936,49 @@ export default function App() {
                             {label} ({people.filter(p => (p.group || 'member') === k).length})
                           </button>
                         ))}
+                        {currentUser && (
+                          <button
+                            type="button"
+                            onClick={() => setPeopleSubTab('workplan')}
+                            className={`px-5 py-2.5 text-sm font-bold -mb-px border-b-2 transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                              peopleSubTab === 'workplan'
+                                ? 'border-[#9E1B32] text-[#9E1B32]'
+                                : 'border-transparent text-gray-500 hover:text-gray-800'
+                            }`}
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Work Plan Summary</span>
+                          </button>
+                        )}
                       </div>
 
+                      {peopleSubTab === 'workplan' && currentUser ? (
+                        <Workplan
+                          currentUser={currentUser}
+                          peopleRoster={people}
+                          embeddedInPeople
+                          onOpenMemberTodo={target => {
+                            const normEmail = (target.email || '').trim().toLowerCase();
+                            const normName = (target.name || '').trim().toLowerCase();
+                            const matched =
+                              people.find(p => p.id === target.id) ||
+                              (normEmail ? people.find(p => p.email?.trim().toLowerCase() === normEmail) : undefined) ||
+                              (normName ? people.find(p => p.name.trim().toLowerCase() === normName) : undefined);
+                            if (matched) {
+                              setSelectedStudentDetails(matched);
+                              setSelectedStudentSubTabId('todo');
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                          }}
+                          {...getSubHeaderPassProps('workplan')}
+                        />
+                      ) : (
                       <div className="space-y-10">
                         {([
                           { key: 'member', title: 'Team' },
                           { key: 'collaborator', title: 'Collaborators' },
                           { key: 'former', title: 'Former Members' },
-                        ] as const).filter(g => g.key === peopleSubTab).map(({ key, title }) => {
+                        ] as const).filter(g => g.key === (peopleSubTab === 'workplan' ? 'member' : peopleSubTab)).map(({ key, title }) => {
                           const group = people.filter(p => (p.group || 'member') === key);
                           if (group.length === 0) return (
                             <div key={key} className="bg-white p-10 rounded-xl border border-dashed border-gray-300 text-center text-sm text-gray-500">
@@ -4230,6 +4287,7 @@ export default function App() {
                           );
                         })}
                       </div>
+                      )}
                     </div>
 
                   </div>
