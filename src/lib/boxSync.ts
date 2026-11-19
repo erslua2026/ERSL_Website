@@ -11,6 +11,7 @@ export type BoxImageCategory =
 
 export type BoxFileDestination =
   | `images/${BoxImageCategory}`
+  | `students/${string}`
   | 'publications'
   | 'datasets'
   | 'teaching'

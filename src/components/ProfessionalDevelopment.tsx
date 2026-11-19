@@ -1028,96 +1028,92 @@ export const ProfessionalDevelopment: React.FC<{ currentUser?: UserType | null }
               </div>
             ) : (
               Object.entries(grouped).map(([categoryName, items]) => (
-                <div key={categoryName} className="space-y-3">
-                  <div className="flex items-center justify-between border-l-4 border-[#9E1B32] pl-3">
-                    <h3 className="text-sm font-extrabold uppercase tracking-wider text-[#9E1B32]">
+                <div key={categoryName} className="space-y-2">
+                  <div className="flex items-center justify-between border-l-4 border-[#9E1B32] pl-2.5">
+                    <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#9E1B32]">
                       {categoryName}
                     </h3>
                     <span className="text-[11px] font-semibold text-gray-400">
                       {items.length} resource{items.length !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {items.map(item => (
-                      <div
-                        key={item.id}
-                        className="bg-white rounded-xl border border-gray-200 p-4 shadow-2xs hover:shadow-md hover:border-red-200 transition-all flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <h4 className="font-bold text-sm text-slate-900 leading-snug">{item.title}</h4>
-                            {isAdmin && (
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => openLinkModal(item)}
-                                  className="p-1 text-gray-400 hover:text-blue-600 cursor-pointer"
-                                  title="Edit link"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteResourceLink(item.id)}
-                                  className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"
-                                  title="Delete link"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-600 leading-relaxed mb-3">{item.description}</p>
-                        </div>
-
-                        <div className="space-y-2.5 pt-2 border-t border-gray-100">
-                          {item.tags && item.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {item.tags.map(t => (
-                                <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                                  #{t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            {item.url && (
-                              isSafeDataDocumentUrl(item.url) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openOrDownloadResource(item.url, item.title)}
-                                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors cursor-pointer"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  <span>Download File</span>
-                                </button>
-                              ) : sanitizeExternalUrl(item.url) ? (
-                                <a
-                                  href={sanitizeExternalUrl(item.url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#9E1B32] text-white hover:bg-red-800 transition-colors"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                  <span>Open Link</span>
-                                </a>
-                              ) : null
-                            )}
-                            {item.boxUrl && sanitizeExternalUrl(item.boxUrl) && (
+                  <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-2xs">
+                    {items.map(item => {
+                      const isLocal = Boolean(item.url && isSafeDataDocumentUrl(item.url));
+                      const safeUrl = item.url ? sanitizeExternalUrl(item.url) : '';
+                      const safeBox = item.boxUrl ? sanitizeExternalUrl(item.boxUrl) : '';
+                      return (
+                        <div
+                          key={item.id}
+                          className="px-3.5 py-2 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                            {isLocal ? (
+                              <button
+                                type="button"
+                                onClick={() => openOrDownloadResource(item.url, item.title)}
+                                className="text-xs sm:text-sm font-extrabold text-[#9E1B32] hover:underline inline-flex items-center gap-1 cursor-pointer text-left"
+                              >
+                                <span>{item.title}</span>
+                                <Download className="w-3 h-3 shrink-0" />
+                              </button>
+                            ) : safeUrl ? (
                               <a
-                                href={sanitizeExternalUrl(item.boxUrl)}
+                                href={safeUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors"
+                                className="text-xs sm:text-sm font-extrabold text-[#9E1B32] hover:underline inline-flex items-center gap-1"
                               >
-                                <FolderGit2 className="w-3.5 h-3.5" />
-                                <span>UA Box</span>
+                                <span>{item.title}</span>
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                              </a>
+                            ) : (
+                              <span className="text-xs sm:text-sm font-extrabold text-slate-900">{item.title}</span>
+                            )}
+                            {safeBox && (
+                              <a
+                                href={safeBox}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100"
+                              >
+                                <FolderGit2 className="w-3 h-3" /> Box
                               </a>
                             )}
+                            {item.description && (
+                              <span className="text-[11px] text-gray-500 truncate max-w-xl">
+                                — {item.description}
+                              </span>
+                            )}
+                            {(item.tags || []).slice(0, 3).map(t => (
+                              <span key={t} className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                                #{t}
+                              </span>
+                            ))}
                           </div>
+                          {isAdmin && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => openLinkModal(item)}
+                                className="p-1 text-gray-400 hover:text-blue-600 cursor-pointer"
+                                title="Edit link"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteResourceLink(item.id)}
+                                className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"
+                                title="Delete link"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))

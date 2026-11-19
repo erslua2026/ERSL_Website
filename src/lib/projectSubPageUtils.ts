@@ -46,19 +46,157 @@ export const VISIBILITY_OPTIONS: VisibilityMeta[] = [
   },
   {
     value: 'members',
-    label: 'ERSL Members & Admins Only',
+    label: 'Members Only (ERSL Lab)',
     shortLabel: 'Members',
     description: 'Restricted to approved ERSL lab members and administrators.',
     pillClass: 'bg-amber-50 text-amber-800 border-amber-200',
   },
   {
     value: 'admin',
-    label: 'Lab Admins Only',
-    shortLabel: 'Admin Only',
-    description: 'Visible strictly to ERSL lab administrators.',
+    label: 'Private (Lab Admins Only)',
+    shortLabel: 'Private',
+    description: 'Visible strictly to Dr. Liu / ERSL lab administrators.',
     pillClass: 'bg-rose-50 text-rose-800 border-rose-200',
   },
 ];
+
+export function getStudentBoxSlug(name?: string): string {
+  const cleaned = (name || 'Student')
+    .replace(/\b(dr|prof|professor)\.?\s+/gi, '')
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || 'Student';
+}
+
+export const STUDENT_SUBTAB_PRESETS: Array<{
+  kind: NonNullable<ProjectCustomSubTab['kind']>;
+  defaultLabel: string;
+  defaultVisibility: SubTabVisibility;
+  description: string;
+}> = [
+  {
+    kind: 'plan',
+    defaultLabel: 'Plan',
+    defaultVisibility: 'members',
+    description: 'Research plan, dissertation/thesis goals, and academic roadmap.',
+  },
+  {
+    kind: 'progress',
+    defaultLabel: 'Progress',
+    defaultVisibility: 'members',
+    description: 'Ongoing research progress, preliminary figures, and milestones.',
+  },
+  {
+    kind: 'schedules',
+    defaultLabel: 'Schedules',
+    defaultVisibility: 'members',
+    description: 'Course schedule, field campaigns, and lab meeting availability.',
+  },
+  {
+    kind: 'questions',
+    defaultLabel: 'Summary of Questions',
+    defaultVisibility: 'members',
+    description: 'Open technical questions and discussion items for Dr. Liu.',
+  },
+  {
+    kind: 'todo',
+    defaultLabel: 'Weekly To-Do List',
+    defaultVisibility: 'members',
+    description: 'Weekly tasks, action items, and short-term deliverables.',
+  },
+  {
+    kind: 'resources',
+    defaultLabel: 'Materials & References',
+    defaultVisibility: 'public',
+    description: 'Reference papers, useful web links, datasets, scripts, and uploaded files.',
+  },
+  {
+    kind: 'meeting-notes',
+    defaultLabel: 'Meeting Notes',
+    defaultVisibility: 'members',
+    description: '1-on-1 advisement meeting notes and feedback logs.',
+  },
+  {
+    kind: 'custom',
+    defaultLabel: 'Custom Section',
+    defaultVisibility: 'members',
+    description: 'Custom student workspace section for materials, links, or notes.',
+  },
+];
+
+export function buildNormalizedStudentSubTabs(
+  person: Person,
+  subPage?: ProjectSubPageData | null
+): ProjectCustomSubTab[] {
+  if (Array.isArray(subPage?.customSubTabs) && subPage.customSubTabs.length > 0) {
+    return subPage.customSubTabs.map(tab => ({
+      ...tab,
+      visibility: tab.visibility || 'members',
+      blocks: Array.isArray(tab.blocks) ? tab.blocks : [],
+    }));
+  }
+
+  return [
+    {
+      id: 'plan',
+      label: 'Plan',
+      kind: 'plan',
+      visibility: 'public',
+      description: 'Research plan, academic objectives, and focus areas.',
+      blocks: [
+        {
+          id: `blk-student-plan-${person.id}`,
+          type: 'paragraph',
+          title: 'Research Focus & Overview',
+          body: [person.researchFocus ? `Focus: ${person.researchFocus}` : '', person.bio || '']
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+    },
+    {
+      id: 'progress',
+      label: 'Progress',
+      kind: 'progress',
+      visibility: 'members',
+      description: 'Preliminary results, figures, and milestone progress.',
+      blocks: [],
+    },
+    {
+      id: 'schedules',
+      label: 'Schedules',
+      kind: 'schedules',
+      visibility: 'members',
+      description: 'Weekly availability, courses, and upcoming conference/field dates.',
+      blocks: [],
+    },
+    {
+      id: 'questions',
+      label: 'Summary of Questions',
+      kind: 'questions',
+      visibility: 'members',
+      description: 'Key questions to review during advisement meetings.',
+      blocks: [],
+    },
+    {
+      id: 'todo',
+      label: 'Weekly To-Do List',
+      kind: 'todo',
+      visibility: 'members',
+      description: 'Current weekly action items and checklist.',
+      blocks: [],
+    },
+    {
+      id: 'resources',
+      label: 'Materials & References',
+      kind: 'resources',
+      visibility: 'public',
+      description: 'Reference papers, datasets, useful web links, and Box materials.',
+      blocks: [],
+    },
+  ];
+}
 
 export function getVisibilityMeta(vis?: SubTabVisibility): VisibilityMeta {
   return VISIBILITY_OPTIONS.find(v => v.value === vis) || VISIBILITY_OPTIONS[0];

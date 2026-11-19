@@ -48,7 +48,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const searchMatches = siteSearch.trim().length > 1
-    ? filterSiteSearchItems(searchableItems, siteSearch, 10)
+    ? filterSiteSearchItems(searchableItems, siteSearch, 15)
     : [];
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -84,6 +84,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
   const visibleTabs: TabConfig[] = siteConfig.tabs.filter(t => {
     if (t.visibility === 'hidden') return false;
     if (t.visibility === 'members' && !currentUser) return false;
+    if (t.visibility === 'admin' && !isAdmin) return false;
     return true;
   });
 
@@ -364,8 +365,8 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
                     <span className="text-sm">{tab.icon || '•'}</span>
                     <span className="truncate">{tab.label}</span>
                   </span>
-                  {tab.visibility === 'members' && (
-                    <Lock className={`w-3 h-3 shrink-0 ${active ? 'text-white/80' : 'text-amber-500'}`} />
+                  {(tab.visibility === 'members' || tab.visibility === 'admin') && (
+                    <Lock className={`w-3 h-3 shrink-0 ${active ? 'text-white/80' : tab.visibility === 'admin' ? 'text-rose-500' : 'text-amber-500'}`} />
                   )}
                 </button>
               );

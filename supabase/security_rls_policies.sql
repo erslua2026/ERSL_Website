@@ -133,7 +133,8 @@ USING (
     'ersl_sec_bulletin_folders',
     'ersl_sec_teaching',
     'ersl_professional_hub',
-    'ersl_professional_posts'
+    'ersl_professional_posts',
+    'ersl_subpage_students'
   )
 );
 
@@ -205,6 +206,7 @@ USING (public.ersl_is_admin());
 -- 4. BOX_FOLDERS TABLE: Public vs Private visibility enforcement
 -- ============================================================================
 ALTER TABLE public.box_folders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.box_folders DROP CONSTRAINT IF EXISTS box_folders_visibility_check;
 
 DROP POLICY IF EXISTS "box_folders_select_policy" ON public.box_folders;
 DROP POLICY IF EXISTS "box_folders_admin_write" ON public.box_folders;
@@ -217,7 +219,8 @@ FOR SELECT
 TO anon, authenticated
 USING (
   visibility = 'public'
-  OR public.ersl_is_approved_member()
+  OR (visibility = 'admin' AND public.ersl_is_admin())
+  OR (visibility IN ('private', 'members') AND public.ersl_is_approved_member())
 );
 
 CREATE POLICY "box_folders_admin_write"

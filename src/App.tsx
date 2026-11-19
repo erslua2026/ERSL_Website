@@ -19,7 +19,7 @@ import {
 } from './data/initialData';
 
 import {
-  User, Role, ResearchTheme, Project, Publication, Software,
+  User, Role, ResearchTheme, Project, ProjectSubPageData, Publication, Software,
   DataLayer, Instrument, Person, BoxFile, AuditLog,
   SiteConfig, CustomPageData, BulletinItem, TabConfig, PageHeaderConfig
 } from './types';
@@ -28,6 +28,7 @@ import { defaultSiteConfig, defaultCustomPages } from './data/defaultSiteConfig'
 import { NewsModal } from './components/NewsModal';
 import { BulletinModal } from './components/BulletinModal';
 import { ProjectSubPage } from './components/ProjectSubPage';
+import { StudentSubPage } from './components/StudentSubPage';
 import { ThemeSubPage } from './components/ThemeSubPage';
 import { InstrumentSubPage } from './components/InstrumentSubPage';
 import { CustomPageView } from './components/CustomPageView';
@@ -321,13 +322,30 @@ export default function App() {
 
   const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
   const [selectedProjectSubTabId, setSelectedProjectSubTabId] = useState<string | undefined>(undefined);
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState<Person | null>(null);
+  const [selectedStudentSubTabId, setSelectedStudentSubTabId] = useState<string | undefined>(undefined);
   const [selectedThemeDetails, setSelectedThemeDetails] = useState<ResearchTheme | null>(null);
   const [selectedInstrumentDetails, setSelectedInstrumentDetails] = useState<Instrument | null>(null);
   const [activeThemeFilter, setActiveThemeFilter] = useState<string>('all');
   const [copiedProjectUrlId, setCopiedProjectUrlId] = useState<string | null>(null);
+  const [studentWorkspaces, setStudentWorkspaces] = useState<Record<string, ProjectSubPageData>>(() => {
+    try {
+      const saved = localStorage.getItem('ersl_subpage_students');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [standaloneProjectId, setStandaloneProjectId] = useState<string | null>(() => {
     try {
       return new URLSearchParams(window.location.search).get('project');
+    } catch {
+      return null;
+    }
+  });
+  const [standaloneStudentId, setStandaloneStudentId] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('student');
     } catch {
       return null;
     }
@@ -353,6 +371,19 @@ export default function App() {
     setSelectedProjectDetails(null);
     setSelectedProjectSubTabId(undefined);
     setActiveTab('projects');
+    try {
+      const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', cleanUrl);
+    } catch { }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const exitStandaloneStudent = () => {
+    setStandaloneStudentId(null);
+    setSelectedStudentDetails(null);
+    setSelectedStudentSubTabId(undefined);
+    setActiveTab('people');
+    setPeopleSubTab('member');
     try {
       const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
       window.history.replaceState({}, '', cleanUrl);
@@ -569,6 +600,7 @@ export default function App() {
       'ersl_sec_teaching',
       'ersl_sec_bulletins',
       'ersl_sec_bulletin_folders',
+      'ersl_subpage_students',
     ];
     const ADMIN_KEYS = ['ersl_sec_auditlogs'];
 
@@ -698,6 +730,11 @@ export default function App() {
         setBulletinFolders(fld);
         try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(fld)); } catch { }
       }
+      const stuCloud = byKey['ersl_subpage_students'] as Record<string, ProjectSubPageData> | undefined;
+      if (stuCloud && typeof stuCloud === 'object' && !Array.isArray(stuCloud) && (showToast || !isRecentlyWritten('ersl_subpage_students'))) {
+        setStudentWorkspaces(stuCloud);
+        try { localStorage.setItem('ersl_subpage_students', JSON.stringify(stuCloud)); } catch { }
+      }
     }
 
     if (effectiveUser?.role === 'Admin' && Array.isArray(byKey['ersl_sec_auditlogs'])) {
@@ -809,6 +846,12 @@ export default function App() {
           if (currentUserRef.current && Array.isArray(value) && value.length > 0) {
             setBulletinFolders(value);
             try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(value)); } catch { }
+          }
+          break;
+        case 'ersl_subpage_students':
+          if (currentUserRef.current && value && typeof value === 'object' && !Array.isArray(value)) {
+            setStudentWorkspaces(value);
+            try { localStorage.setItem('ersl_subpage_students', JSON.stringify(value)); } catch { }
           }
           break;
         case 'ersl_sec_auditlogs':
@@ -970,6 +1013,33 @@ export default function App() {
     try { localStorage.setItem('ersl_instruments', JSON.stringify(nextInstruments)); } catch { }
     syncSiteContentToCloud({ instruments: nextInstruments });
     appendAuditLog('UPDATE_INSTRUMENT', updatedInst.name);
+  };
+
+  const handleUpdateStudentWorkspace = async (personId: string, nextSubPage: ProjectSubPageData) => {
+    lastSectionWriteAtRef.current['ersl_subpage_students'] = Date.now();
+    const nextWorkspaces = { ...studentWorkspaces, [personId]: nextSubPage };
+    setStudentWorkspaces(nextWorkspaces);
+    try { localStorage.setItem('ersl_subpage_students', JSON.stringify(nextWorkspaces)); } catch { }
+
+    const publicOnlySubTabs = (nextSubPage.customSubTabs || []).filter(t => t.visibility === 'public');
+    const publicMirror: ProjectSubPageData = {
+      ...nextSubPage,
+      customSubTabs: publicOnlySubTabs,
+    };
+    const nextPeople = people.map(p => (p.id === personId ? { ...p, subPage: publicMirror } : p));
+    setPeople(nextPeople);
+    try { localStorage.setItem('ersl_people', JSON.stringify(nextPeople)); } catch { }
+
+    const okStu = await setCloudData('ersl_subpage_students', nextWorkspaces, {
+      updatedBy: currentUser?.name || 'Lab Member',
+    });
+    if (isAdmin) {
+      await syncSiteContentToCloud({ people: nextPeople });
+    } else {
+      notifyCloudResult(okStu, 'Student workspace');
+    }
+    const stuName = people.find(p => p.id === personId)?.name || personId;
+    appendAuditLog('UPDATE_STUDENT_WORKSPACE', stuName);
   };
 
   const handleSaveBulletin = (saved: BulletinItem) => {
@@ -1422,6 +1492,7 @@ export default function App() {
     setTeachingList([]);
     setAuditLogs([]);
     setInboxEntries([]);
+    setStudentWorkspaces({});
 
     // Wipe private workspace / admin caches from browser storage on logout
     const PRIVATE_LOCAL_KEYS = [
@@ -1439,6 +1510,7 @@ export default function App() {
       'ersl_prof_links',
       'ersl_professional_posts',
       'ersl_boxfiles',
+      'ersl_subpage_students',
     ];
     try {
       PRIVATE_LOCAL_KEYS.forEach(k => localStorage.removeItem(k));
@@ -1845,6 +1917,7 @@ export default function App() {
     bulletins,
     boxFiles,
     customPages,
+    studentWorkspaces,
   });
 
   const handleNavigateSearch = (item: SiteSearchItem) => {
@@ -1871,6 +1944,14 @@ export default function App() {
     } else {
       setSelectedProjectDetails(null);
       setSelectedProjectSubTabId(undefined);
+    }
+    if (item.studentId) {
+      const stu = people.find(p => p.id === item.studentId) || null;
+      setSelectedStudentDetails(stu);
+      setSelectedStudentSubTabId(item.studentSubTabId);
+    } else {
+      setSelectedStudentDetails(null);
+      setSelectedStudentSubTabId(undefined);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1961,8 +2042,47 @@ export default function App() {
         </div>
       )}
 
-      {/* Standalone Shareable Project Portal (?project=<id>) OR Main Website Shell */}
-      {standaloneProjectId ? (() => {
+      {/* Standalone Shareable Student Portal (?student=<id>) OR Project Portal (?project=<id>) OR Main Website Shell */}
+      {standaloneStudentId ? (() => {
+        const standaloneStu = people.find(p => p.id === standaloneStudentId) || null;
+        return (
+          <div className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-6">
+            {standaloneStu ? (
+              <StudentSubPage
+                person={standaloneStu}
+                workspaceData={studentWorkspaces[standaloneStu.id] || standaloneStu.subPage}
+                people={people}
+                currentUser={currentUser}
+                canEdit={Boolean(editMode)}
+                isStandalone
+                siteConfig={siteConfig}
+                primaryColor={accentColor}
+                initialSubTabId={standaloneSubTabId}
+                resolvePersonImage={(img) => resolveImagePath(img, 'people')}
+                onBack={exitStandaloneStudent}
+                onUpdateWorkspace={handleUpdateStudentWorkspace}
+                onLoginClick={() => setShowSSOPopup(true)}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-10 text-center max-w-lg mx-auto space-y-4">
+                <Users className="w-10 h-10 mx-auto text-slate-400" />
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-900">Student Workspace Not Found</h2>
+                  <p className="text-xs text-slate-500 mt-1">No team member matched ID &ldquo;{standaloneStudentId}&rdquo;.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={exitStandaloneStudent}
+                  className="text-white text-xs font-bold px-5 py-2.5 rounded-lg cursor-pointer"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  &larr; Return to ERSL Lab Website
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })() : standaloneProjectId ? (() => {
         const standaloneProj = projects.find(p => p.id === standaloneProjectId) || null;
         return (
           <div className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-6">
@@ -2022,6 +2142,8 @@ export default function App() {
             setActiveTab(tab);
             setSelectedProjectDetails(null);
             setSelectedProjectSubTabId(undefined);
+            setSelectedStudentDetails(null);
+            setSelectedStudentSubTabId(undefined);
             setSelectedThemeDetails(null);
             setSelectedInstrumentDetails(null);
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3104,47 +3226,68 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100 text-left">
-                          {filteredPublications.map((pub) => (
-                            <div key={pub.id} className="p-5 flex items-start space-x-4 hover:bg-slate-50/30 transition-colors group relative">
+                          {filteredPublications.map((pub) => {
+                            const isLocalPub = Boolean(pub.link && isSafeDataDocumentUrl(pub.link));
+                            const safePubHref = pub.link ? sanitizeExternalUrl(pub.link) : '';
+                            return (
+                            <div key={pub.id} className="px-4 py-3 flex items-start space-x-3.5 hover:bg-slate-50/50 transition-colors group relative">
 
                               {/* Badge indicator */}
-                              <span className="bg-red-50 text-[#9E1B32] font-extrabold text-[10px] px-2.5 py-1 rounded border border-red-100 h-6 shrink-0 shadow-xs">
+                              <span className="bg-red-50 text-[#9E1B32] font-extrabold text-[10px] px-2 py-0.5 rounded border border-red-100 shrink-0 shadow-xs mt-0.5">
                                 {pub.year}
                               </span>
 
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-extrabold text-[#9E1B32] uppercase tracking-wider text-[9px]">
-                                  {pub.type}
-                                </p>
-                                <h4 className="text-sm font-bold text-slate-800 leading-snug mt-1 max-w-4xl">
-                                  {pub.title}
-                                </h4>
-                                <p className="text-xs text-slate-500 font-semibold mt-1.5">
-                                  <strong>{pub.authors}</strong> | <span className="italic">{pub.venue}</span>
-                                </p>
-
-                                {pub.link && (
-                                  isSafeDataDocumentUrl(pub.link) ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-extrabold text-[#9E1B32] uppercase tracking-wider text-[9px]">
+                                    {pub.type}
+                                  </p>
+                                  {isLocalPub ? (
                                     <button
                                       type="button"
                                       onClick={() => openOrDownloadResource(pub.link, pub.title)}
-                                      className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-2 hover:underline cursor-pointer"
+                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
                                     >
-                                      <span>Open Attached Paper / File</span>
-                                      <Download className="w-3.5 h-3.5" />
+                                      <span>Attached File</span>
+                                      <Download className="w-3 h-3" />
                                     </button>
-                                  ) : sanitizeExternalUrl(pub.link) ? (
+                                  ) : safePubHref ? (
                                     <a
-                                      href={sanitizeExternalUrl(pub.link)}
+                                      href={safePubHref}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center space-x-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-2 hover:underline"
+                                      className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-600 hover:underline"
                                     >
-                                      <span>DOI / Full Text Access</span>
-                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      <span>DOI / Link</span>
+                                      <ExternalLink className="w-3 h-3" />
                                     </a>
-                                  ) : null
+                                  ) : null}
+                                </div>
+                                {isLocalPub ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openOrDownloadResource(pub.link, pub.title)}
+                                    className="text-left text-xs sm:text-sm font-bold text-slate-800 hover:text-[#9E1B32] hover:underline leading-snug mt-0.5 max-w-4xl cursor-pointer block"
+                                  >
+                                    {pub.title}
+                                  </button>
+                                ) : safePubHref ? (
+                                  <a
+                                    href={safePubHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs sm:text-sm font-bold text-slate-800 hover:text-[#9E1B32] hover:underline leading-snug mt-0.5 max-w-4xl block"
+                                  >
+                                    {pub.title}
+                                  </a>
+                                ) : (
+                                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-snug mt-0.5 max-w-4xl">
+                                    {pub.title}
+                                  </h4>
                                 )}
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-semibold mt-1">
+                                  <strong>{pub.authors}</strong> | <span className="italic">{pub.venue}</span>
+                                </p>
                               </div>
 
                               {/* Interactive elements on individual record */}
@@ -3172,7 +3315,8 @@ export default function App() {
                               )}
 
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -3633,8 +3777,35 @@ export default function App() {
                   );
                 })()}
 
-                {/* VIEW 7: PEOPLE / LAB ROSTER */}
-                {activeTab === 'people' && (
+                {/* VIEW 7: PEOPLE / LAB ROSTER (Clicking any team member opens their StudentSubPage) */}
+                {activeTab === 'people' && (() => {
+                  const activeStudentObj = selectedStudentDetails
+                    ? (people.find(p => p.id === selectedStudentDetails.id) || selectedStudentDetails)
+                    : null;
+
+                  if (activeStudentObj) {
+                    return (
+                      <StudentSubPage
+                        person={activeStudentObj}
+                        workspaceData={studentWorkspaces[activeStudentObj.id] || activeStudentObj.subPage}
+                        people={people}
+                        currentUser={currentUser}
+                        canEdit={Boolean(editMode)}
+                        siteConfig={siteConfig}
+                        primaryColor={accentColor}
+                        initialSubTabId={selectedStudentSubTabId}
+                        resolvePersonImage={(img) => resolveImagePath(img, 'people')}
+                        onBack={() => {
+                          setSelectedStudentDetails(null);
+                          setSelectedStudentSubTabId(undefined);
+                        }}
+                        onUpdateWorkspace={handleUpdateStudentWorkspace}
+                        onLoginClick={() => setShowSSOPopup(true)}
+                      />
+                    );
+                  }
+
+                  return (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <SubPageHeader
                       tabId="people"
@@ -3868,11 +4039,23 @@ export default function App() {
                               <h3 className="text-lg font-extrabold text-slate-800 border-b-2 border-[#9E1B32] inline-block pb-1">{title}</h3>
                               <div className="grid grid-cols-1 gap-8 text-left">
                                 {group.map((person) => (
-                                  <div key={person.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row overflow-hidden group hover:shadow-md transition-shadow relative min-h-[260px]">
+                                  <div
+                                    key={person.id}
+                                    onClick={() => {
+                                      if (key === 'member') {
+                                        setSelectedStudentDetails(person);
+                                        setSelectedStudentSubTabId(undefined);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      }
+                                    }}
+                                    className={`bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row overflow-hidden group hover:shadow-md transition-shadow relative min-h-[260px] ${
+                                      key === 'member' ? 'cursor-pointer hover:border-[#9E1B32]/40' : ''
+                                    }`}
+                                  >
 
                                     {/* Admin actions */}
                                     {editMode && (
-                                      <div className="absolute top-3 right-3 flex space-x-1.5 z-10">
+                                      <div className="absolute top-3 right-3 flex space-x-1.5 z-10" onClick={e => e.stopPropagation()}>
                                         {key === 'member' && (
                                           <button
                                             type="button"
@@ -3958,8 +4141,8 @@ export default function App() {
                                       </div>
 
                                       {/* Social networks & links */}
-                                      <div className="border-t border-gray-100 pt-3 mt-3 flex justify-between items-center text-xs shrink-0">
-                                        <div className="flex items-center space-x-2.5">
+                                      <div className="border-t border-gray-100 pt-3 mt-3 flex flex-wrap justify-between items-center gap-2 text-xs shrink-0" onClick={e => e.stopPropagation()}>
+                                        <div className="flex flex-wrap items-center gap-2">
                                           {person.email && (
                                             <a
                                               href={`mailto:${person.email}`}
@@ -3970,22 +4153,22 @@ export default function App() {
                                               <span className="font-semibold text-xs pr-1">Email</span>
                                             </a>
                                           )}
-                                          {person.scholar && (
+                                          {person.scholar && sanitizeExternalUrl(person.scholar) && (
                                             <a
-                                              href={person.scholar}
+                                              href={sanitizeExternalUrl(person.scholar)}
                                               target="_blank"
-                                              rel="noreferrer"
+                                              rel="noopener noreferrer"
                                               className="bg-slate-50 hover:bg-blue-50 hover:text-blue-600 border border-gray-200 text-gray-600 py-1.5 px-3 rounded-lg shadow-xs transition-colors flex items-center justify-center"
                                               title="Google Scholar Profile"
                                             >
                                               <span className="font-bold text-[10px] px-1">SCHOLAR</span>
                                             </a>
                                           )}
-                                          {person.linkedin && (
+                                          {person.linkedin && sanitizeExternalUrl(person.linkedin) && (
                                             <a
-                                              href={person.linkedin}
+                                              href={sanitizeExternalUrl(person.linkedin)}
                                               target="_blank"
-                                              rel="noreferrer"
+                                              rel="noopener noreferrer"
                                               className="bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-200 text-gray-600 py-1.5 px-3 rounded-lg shadow-xs transition-colors flex items-center justify-center"
                                               title="LinkedIn Profile"
                                             >
@@ -3994,7 +4177,22 @@ export default function App() {
                                           )}
                                         </div>
 
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:inline">UA GEOGRAPHY</span>
+                                        {key === 'member' ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedStudentDetails(person);
+                                              setSelectedStudentSubTabId(undefined);
+                                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                                            }}
+                                            className="inline-flex items-center gap-1 text-[11px] font-extrabold px-3 py-1.5 rounded-lg bg-red-50/80 hover:bg-[#9E1B32] text-[#9E1B32] hover:text-white border border-red-200 transition-colors cursor-pointer"
+                                          >
+                                            <span>Workspace &amp; Materials</span>
+                                            <ChevronRight className="w-3.5 h-3.5" />
+                                          </button>
+                                        ) : (
+                                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:inline">UA GEOGRAPHY</span>
+                                        )}
                                       </div>
                                     </div>
 
@@ -4008,7 +4206,8 @@ export default function App() {
                     </div>
 
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* VIEW: TEACHING MATERIALS (Point 5) */}
                 {activeTab === 'teaching' && (
@@ -4610,6 +4809,26 @@ export default function App() {
                 {/* CUSTOM ADMIN-CREATED TABS & SUB-WEBPAGES */}
                 {customPages[activeTab] && (() => {
                   const tabMeta = siteConfig.tabs.find(t => t.id === activeTab);
+                  if (tabMeta?.visibility === 'admin' && !isAdmin) {
+                    return (
+                      <div className="bg-white p-10 rounded-xl border border-gray-200 text-center max-w-lg mx-auto shadow-xs space-y-3">
+                        <Lock className="w-10 h-10 mx-auto text-rose-600" />
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-800">Private (Admin Only) Section</h3>
+                          <p className="text-xs text-gray-500 mt-1">Sign in as a lab administrator to access this section.</p>
+                        </div>
+                        {!currentUser && (
+                          <button
+                            onClick={() => setShowSSOPopup(true)}
+                            style={{ backgroundColor: accentColor }}
+                            className="text-white text-xs font-bold py-2 px-5 rounded cursor-pointer"
+                          >
+                            Log in via myBama / ERSL Portal
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
                   if (tabMeta?.visibility === 'members' && !currentUser) {
                     return (
                       <div className="bg-white p-12 rounded-xl border border-gray-200 text-center max-w-lg mx-auto shadow-xs space-y-4">

@@ -51,10 +51,25 @@ export interface ProjectContentBlock {
   highlight?: boolean;
 }
 
+export type ProjectCustomSubTabKind =
+  | 'overview'
+  | 'information'
+  | 'resources'
+  | 'events'
+  | 'datasets'
+  | 'software'
+  | 'meeting-notes'
+  | 'plan'
+  | 'progress'
+  | 'schedules'
+  | 'questions'
+  | 'todo'
+  | 'custom';
+
 export interface ProjectCustomSubTab {
   id: string;
   label: string;
-  kind?: 'overview' | 'information' | 'resources' | 'events' | 'datasets' | 'software' | 'meeting-notes' | 'custom';
+  kind?: ProjectCustomSubTabKind;
   visibility: SubTabVisibility;
   description?: string;
   blocks: ProjectContentBlock[];
@@ -160,7 +175,7 @@ export interface InstrumentResourceItem {
   title: string;
   url: string;
   category: 'Manual' | 'Tutorial' | 'SOP' | 'Software' | 'Dataset' | 'Other';
-  visibility: 'public' | 'members';
+  visibility: 'public' | 'members' | 'admin';
   description?: string;
 }
 
@@ -203,6 +218,7 @@ export interface Person {
   formerTopic?: string;
   currentAffiliation?: string;
   formerStints?: FormerStint[];
+  subPage?: ProjectSubPageData;
 }
 
 export interface BoxFile {
@@ -249,7 +265,7 @@ export interface BulletinItem {
 
 export type LayoutMode = 'vertical-left' | 'vertical-right' | 'horizontal-top' | 'horizontal-compact';
 export type TabPosition = 'start' | 'center' | 'end';
-export type TabVisibility = 'public' | 'members' | 'hidden';
+export type TabVisibility = 'public' | 'members' | 'admin' | 'hidden';
 
 export interface TabConfig {
   id: string;

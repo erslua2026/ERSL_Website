@@ -288,6 +288,12 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
 interface SubTabEditorModalProps {
   existing?: ProjectCustomSubTab | null;
   primaryColor: string;
+  presets?: Array<{
+    kind: NonNullable<ProjectCustomSubTab['kind']>;
+    defaultLabel: string;
+    defaultVisibility: SubTabVisibility;
+    description: string;
+  }>;
   onClose: () => void;
   onSave: (tab: ProjectCustomSubTab) => void;
 }
@@ -295,6 +301,7 @@ interface SubTabEditorModalProps {
 export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
   existing,
   primaryColor,
+  presets = SUBTAB_PRESETS,
   onClose,
   onSave,
 }) => {
@@ -303,7 +310,7 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
   const [visibility, setVisibility] = useState<SubTabVisibility>(existing?.visibility || 'public');
   const [description, setDescription] = useState(existing?.description || '');
 
-  const applyPreset = (preset: (typeof SUBTAB_PRESETS)[number]) => {
+  const applyPreset = (preset: (typeof presets)[number]) => {
     setKind(preset.kind);
     if (!existing) {
       setLabel(preset.defaultLabel);
@@ -341,7 +348,7 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
             <div>
               <label className="font-bold text-gray-700 block mb-1.5">Quick Sub-Page Templates</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {SUBTAB_PRESETS.map(p => (
+                {presets.map(p => (
                   <button
                     key={p.kind}
                     type="button"
@@ -428,6 +435,7 @@ interface BlockEditorModalProps {
   initialType: ProjectContentBlockType;
   existing?: ProjectContentBlock | null;
   primaryColor: string;
+  uploadDestination?: 'projects' | 'datasets' | 'software' | 'general' | `students/${string}`;
   onClose: () => void;
   onSave: (block: ProjectContentBlock) => void;
 }
@@ -436,6 +444,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   initialType,
   existing,
   primaryColor,
+  uploadDestination,
   onClose,
   onSave,
 }) => {
@@ -647,7 +656,10 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                   className="w-full p-2 border border-gray-300 rounded-lg"
                 />
                 <BoxUploadButton
-                  destination={type === 'dataset' ? 'datasets' : type === 'software' ? 'software' : 'projects'}
+                  destination={
+                    uploadDestination ||
+                    (type === 'dataset' ? 'datasets' : type === 'software' ? 'software' : 'projects')
+                  }
                   label="Upload Local Document / Archive / Image"
                   currentValue={boxUrl}
                   onClear={() => setBoxUrl('')}

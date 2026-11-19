@@ -55,6 +55,7 @@ const SECTION_FOLDER_MAP: Record<string, string> = {
   ersl_reservoir_matrix: '03_Datasets_Members',
   ersl_sec_projects: '04_Projects',
   ersl_subpage_projects: '04_Projects',
+  ersl_subpage_students: '07_Students',
   ersl_sec_software: '05_Softwares_And_Guides',
   ersl_sec_instruments: '06_Website_Data_Sync',
   ersl_subpage_instruments: '06_Website_Data_Sync',
@@ -219,6 +220,11 @@ async function resolveUploadFolderId(token: string, destination: string): Promis
     const rootImagesId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '01_Website_Images');
     return ensureFolder(token, rootImagesId, sub);
   }
+  if (destination.startsWith('students/')) {
+    const rawName = destination.slice('students/'.length).replace(/[^A-Za-z0-9._-]/g, '_') || 'General';
+    const rootStudentsId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '07_Students');
+    return ensureFolder(token, rootStudentsId, rawName);
+  }
   const [parentName, childName] = FILE_DESTINATION_MAP[destination] || ['06_Website_Data_Sync', 'Uploads'];
   const parentId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, parentName);
   return childName ? ensureFolder(token, parentId, childName) : parentId;
@@ -337,7 +343,9 @@ Deno.serve(async (req: Request) => {
         decodeBase64(base64Data),
         contentType
       );
-      const isPrivateDest = PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination);
+      const isPrivateDest =
+        PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
+        resolvedDestination.startsWith('students/');
       const links = uploaded?.id
         ? await createSharedLinks(token, uploaded.id, isPrivateDest)
         : { directUrl: null, shareUrl: null };

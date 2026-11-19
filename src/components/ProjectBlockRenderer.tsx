@@ -195,27 +195,48 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
           </div>
         )}
         {(block.url || block.boxUrl) && (
-          <div className="flex flex-wrap gap-3 pt-1">
+          <div className="flex flex-wrap gap-2.5 pt-0.5">
             {block.boxUrl && (
-              <a
-                href={block.boxUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
-              >
-                <FolderGit2 className="w-3.5 h-3.5" /> Open in UA Box
-              </a>
+              isSafeDataDocumentUrl(block.boxUrl) ? (
+                <button
+                  type="button"
+                  onClick={() => openOrDownloadResource(block.boxUrl, block.title)}
+                  className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <FolderGit2 className="w-3.5 h-3.5" /> Open Attached File
+                </button>
+              ) : sanitizeExternalUrl(block.boxUrl) ? (
+                <a
+                  href={sanitizeExternalUrl(block.boxUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
+                >
+                  <FolderGit2 className="w-3.5 h-3.5" /> Open in UA Box
+                </a>
+              ) : null
             )}
             {block.url && (
-              <a
-                href={block.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold hover:underline inline-flex items-center gap-1"
-                style={{ color: primaryColor }}
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Related Link
-              </a>
+              isSafeDataDocumentUrl(block.url) ? (
+                <button
+                  type="button"
+                  onClick={() => openOrDownloadResource(block.url, block.title)}
+                  className="text-xs font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  style={{ color: primaryColor }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Open Attached File
+                </button>
+              ) : sanitizeExternalUrl(block.url) ? (
+                <a
+                  href={sanitizeExternalUrl(block.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold hover:underline inline-flex items-center gap-1"
+                  style={{ color: primaryColor }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Related Link
+                </a>
+              ) : null
             )}
           </div>
         )}
@@ -229,7 +250,7 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
       .map(s => s.trim())
       .filter(Boolean);
     return (
-      <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 space-y-3">
+      <section className="rounded-xl border border-gray-200 bg-white p-3.5 md:p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-2">
             {getBlockIcon(block.type)}
@@ -238,13 +259,13 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
           {editActions}
         </div>
         {lines.length > 0 ? (
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {lines.map((item, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2 text-xs text-slate-700 bg-slate-50 border border-slate-100 p-3 rounded-xl"
+                className="flex items-start gap-2 text-xs text-slate-700 bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                 <span>{item}</span>
               </li>
             ))}
@@ -283,13 +304,47 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
   const boxLink = block.boxUrl || (block.type === 'box-folder' ? block.url : undefined);
   const canEmbedBox = Boolean(boxLink && isBoxUrl(boxLink));
   const isShowingEmbed = Boolean(canEmbedBox && embeddedBoxUrl === boxLink);
+  const primaryHref = block.url || boxLink;
+  const secondaryBoxHref = block.url && boxLink && block.url !== boxLink ? boxLink : undefined;
+
+  const renderClickableTitle = () => {
+    if (primaryHref && isSafeDataDocumentUrl(primaryHref)) {
+      return (
+        <button
+          type="button"
+          onClick={() => openOrDownloadResource(primaryHref, block.title)}
+          className="font-extrabold text-sm text-slate-900 hover:underline inline-flex items-center gap-1.5 text-left cursor-pointer"
+          style={{ color: primaryColor }}
+        >
+          <span>{block.title}</span>
+          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+        </button>
+      );
+    }
+    const safePrimary = primaryHref ? sanitizeExternalUrl(primaryHref) : '';
+    if (safePrimary) {
+      return (
+        <a
+          href={safePrimary}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-extrabold text-sm hover:underline inline-flex items-center gap-1.5"
+          style={{ color: primaryColor }}
+        >
+          <span>{block.title}</span>
+          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+        </a>
+      );
+    }
+    return <h4 className="font-extrabold text-sm text-slate-900">{block.title}</h4>;
+  };
 
   return (
-    <div className="border border-gray-200 rounded-xl p-4 bg-slate-50/70 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
+    <div className="border border-gray-200 rounded-xl px-3.5 py-2.5 bg-slate-50/70 space-y-1.5">
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
               {getBlockIcon(block.type)}
               <span>
                 {block.category ||
@@ -303,110 +358,77 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
                           ? 'Event'
                           : block.type === 'box-folder'
                             ? 'UA Box Folder'
-                            : 'Resource')}
+                            : 'Link')}
               </span>
             </span>
 
             {block.availability && (
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
                 {block.availability}
               </span>
             )}
             {block.language && (
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700">
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700">
                 {block.language}
                 {block.version ? ` v${block.version}` : ''}
               </span>
             )}
             {block.date && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-white px-2 py-0.5 rounded border border-gray-200 text-slate-700">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-white px-1.5 py-0.5 rounded border border-gray-200 text-slate-700">
                 <Calendar className="w-3 h-3" /> {block.date}
               </span>
             )}
             {block.location && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-white px-2 py-0.5 rounded border border-gray-200 text-slate-700">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-white px-1.5 py-0.5 rounded border border-gray-200 text-slate-700">
                 <MapPin className="w-3 h-3" /> {block.location}
               </span>
             )}
             {block.attendees && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-blue-700">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-blue-700">
                 <Users className="w-3 h-3" /> {block.attendees}
               </span>
             )}
+
+            {secondaryBoxHref && (
+              isSafeDataDocumentUrl(secondaryBoxHref) ? (
+                <button
+                  type="button"
+                  onClick={() => openOrDownloadResource(secondaryBoxHref, block.title)}
+                  className="text-[10px] font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2 py-0.5 rounded inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <FolderGit2 className="w-3 h-3" /> File
+                </button>
+              ) : sanitizeExternalUrl(secondaryBoxHref) ? (
+                <a
+                  href={sanitizeExternalUrl(secondaryBoxHref)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2 py-0.5 rounded inline-flex items-center gap-1"
+                >
+                  <FolderGit2 className="w-3 h-3" /> UA Box
+                </a>
+              ) : null
+            )}
+
+            {canEmbedBox && boxLink && (
+              <button
+                type="button"
+                onClick={() => onToggleEmbed(boxLink)}
+                className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer"
+              >
+                {isShowingEmbed ? 'Hide Preview' : 'Embed'}
+              </button>
+            )}
           </div>
 
-          <h4 className="font-extrabold text-sm text-slate-900">{block.title}</h4>
+          <div>{renderClickableTitle()}</div>
           {block.body && (
-            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">{block.body}</p>
+            <p className="text-xs text-slate-600 leading-snug whitespace-pre-line text-justify">{block.body}</p>
           )}
         </div>
 
         {editActions}
       </div>
-
-      {(boxLink || (block.url && block.type !== 'box-folder')) && (
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200/70">
-          {canEmbedBox && boxLink && (
-            <button
-              type="button"
-              onClick={() => onToggleEmbed(boxLink)}
-              className="text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-lg cursor-pointer"
-            >
-              {isShowingEmbed ? 'Hide Box Preview' : 'Preview Box Folder'}
-            </button>
-          )}
-          {boxLink && isSafeDataDocumentUrl(boxLink) ? (
-            <button
-              type="button"
-              onClick={() => openOrDownloadResource(boxLink, block.title)}
-              className="text-xs font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
-            >
-              <FolderGit2 className="w-3.5 h-3.5" />
-              <span>Open / Download Attached File</span>
-            </button>
-          ) : boxLink && sanitizeExternalUrl(boxLink) ? (
-            <a
-              href={sanitizeExternalUrl(boxLink)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-bold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
-            >
-              <FolderGit2 className="w-3.5 h-3.5" />
-              <span>Open in UA Box</span>
-            </a>
-          ) : null}
-          {block.url && block.url !== boxLink && (
-            isSafeDataDocumentUrl(block.url) ? (
-              <button
-                type="button"
-                onClick={() => openOrDownloadResource(block.url, block.title)}
-                className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1 cursor-pointer"
-                style={{ backgroundColor: primaryColor }}
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open / Download Uploaded File</span>
-              </button>
-            ) : sanitizeExternalUrl(block.url) ? (
-              <a
-                href={sanitizeExternalUrl(block.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-bold text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
-                style={{ backgroundColor: primaryColor }}
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>
-                  {block.type === 'software'
-                    ? 'Open Repository / Tool'
-                    : block.type === 'dataset'
-                      ? 'Access Dataset'
-                      : 'Visit Link'}
-                </span>
-              </a>
-            ) : null
-          )}
-        </div>
-      )}
 
       {isShowingEmbed && boxLink && toBoxEmbedUrl(boxLink) && (
         <div className="border border-gray-200 rounded-xl overflow-hidden bg-white mt-2">

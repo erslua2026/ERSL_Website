@@ -91,12 +91,12 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
   const [resTitle, setResTitle] = useState('');
   const [resUrl, setResUrl] = useState('');
   const [resCategory, setResCategory] = useState<InstrumentResourceItem['category']>('Manual');
-  const [resVisibility, setResVisibility] = useState<'public' | 'members'>('public');
+  const [resVisibility, setResVisibility] = useState<'public' | 'members' | 'admin'>('public');
   const [resDesc, setResDesc] = useState('');
 
   const resources = getNormalizedResources(instrument);
   const publicCount = resources.filter(r => r.visibility === 'public').length;
-  const privateCount = resources.filter(r => r.visibility === 'members').length;
+  const privateCount = resources.filter(r => r.visibility !== 'public').length;
 
   const descriptionParagraphs = (instrument.detailedDescription || instrument.description || '')
     .split(/\n{2,}|\n/)
@@ -408,100 +408,109 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               {resources.map(item => {
-                const isPrivate = item.visibility === 'members';
-                const canAccessUrl = !isPrivate || Boolean(currentUser);
+                const isAdminOnly = item.visibility === 'admin';
+                const isMembersOnly = item.visibility === 'members';
+                const canAccessUrl =
+                  item.visibility === 'public' ||
+                  (isAdminOnly ? currentUser?.role === 'Admin' : Boolean(currentUser));
+                const isLocalFile = isSafeDataDocumentUrl(item.url);
+                const safeHref = sanitizeExternalUrl(item.url);
                 return (
                   <div
                     key={item.id}
-                    className={`p-4 rounded-xl border flex flex-col justify-between gap-3 ${
-                      isPrivate ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50/60 border-gray-200'
+                    className={`px-3.5 py-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-2.5 ${
+                      isAdminOnly
+                        ? 'bg-rose-50/40 border-rose-200'
+                        : isMembersOnly
+                          ? 'bg-amber-50/40 border-amber-200'
+                          : 'bg-slate-50/60 border-gray-200'
                     }`}
                   >
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
-                            {item.category}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                              isPrivate
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-700">
+                          {item.category}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            isAdminOnly
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : isMembersOnly
                                 ? 'bg-amber-100 text-amber-800 border border-amber-200'
                                 : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            }`}
-                          >
-                            {isPrivate ? <Lock className="w-2.5 h-2.5" /> : <Globe className="w-2.5 h-2.5" />}
-                            <span>{isPrivate ? 'Private · Members Only' : 'Public'}</span>
-                          </span>
-                        </div>
+                          }`}
+                        >
+                          {item.visibility === 'public' ? <Globe className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
+                          <span>{isAdminOnly ? 'Private (Admin)' : isMembersOnly ? 'Members Only' : 'Public'}</span>
+                        </span>
 
-                        {canEdit && (
-                          <div className="flex items-center gap-1">
+                        {canAccessUrl ? (
+                          isLocalFile ? (
                             <button
                               type="button"
-                              onClick={() => openResourceModal(item)}
-                              className="p-1 bg-white hover:bg-blue-50 text-blue-600 rounded border border-gray-200 cursor-pointer"
-                              title="Edit Resource"
+                              onClick={() => openOrDownloadResource(item.url, item.title)}
+                              className="text-xs sm:text-sm font-extrabold hover:underline inline-flex items-center gap-1 cursor-pointer text-left"
+                              style={{ color: primaryColor }}
                             >
-                              <Edit2 className="w-3 h-3" />
+                              <span>{item.title}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteResource(item)}
-                              className="p-1 bg-white hover:bg-red-50 text-red-600 rounded border border-gray-200 cursor-pointer"
-                              title="Delete Resource"
+                          ) : safeHref ? (
+                            <a
+                              href={safeHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs sm:text-sm font-extrabold hover:underline inline-flex items-center gap-1"
+                              style={{ color: primaryColor }}
                             >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+                              <span>{item.title}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span className="text-xs font-extrabold text-slate-900">{item.title}</span>
+                          )
+                        ) : (
+                          <span className="text-xs sm:text-sm font-extrabold text-slate-700">{item.title}</span>
                         )}
                       </div>
 
-                      <h4 className="text-sm font-extrabold text-slate-900">{item.title}</h4>
                       {item.description && (
-                        <p className="text-xs text-slate-600 leading-relaxed text-justify">
-                          {item.description}
-                        </p>
+                        <p className="text-[11px] text-slate-500 line-clamp-2">{item.description}</p>
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-gray-200/70">
-                      {canAccessUrl ? (
-                        isSafeDataDocumentUrl(item.url) ? (
-                          <button
-                            type="button"
-                            onClick={() => openOrDownloadResource(item.url, item.title)}
-                            className="inline-flex items-center gap-1.5 text-xs font-extrabold hover:underline cursor-pointer"
-                            style={{ color: primaryColor }}
-                          >
-                            <span>Open / Download {item.category}</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </button>
-                        ) : sanitizeExternalUrl(item.url) ? (
-                          <a
-                            href={sanitizeExternalUrl(item.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-extrabold hover:underline"
-                            style={{ color: primaryColor }}
-                          >
-                            <span>Open {item.category}</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Invalid resource URL</span>
-                        )
-                      ) : (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!canAccessUrl && !isAdminOnly && (
                         <button
                           type="button"
                           onClick={onLoginClick}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg cursor-pointer"
                         >
                           <Lock className="w-3 h-3" />
-                          <span>Member Login Required to Access Link</span>
+                          <span>Login</span>
                         </button>
+                      )}
+                      {canEdit && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openResourceModal(item)}
+                            className="p-1 bg-white hover:bg-blue-50 text-blue-600 rounded border border-gray-200 cursor-pointer"
+                            title="Edit Resource"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteResource(item)}
+                            className="p-1 bg-white hover:bg-red-50 text-red-600 rounded border border-gray-200 cursor-pointer"
+                            title="Delete Resource"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -670,11 +679,12 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
                   <label className="font-bold text-gray-700 block mb-1">Access Visibility</label>
                   <select
                     value={resVisibility}
-                    onChange={e => setResVisibility(e.target.value as 'public' | 'members')}
+                    onChange={e => setResVisibility(e.target.value as 'public' | 'members' | 'admin')}
                     className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:outline-none focus:border-[#9E1B32]"
                   >
                     <option value="public">Public (Visible to Anyone)</option>
-                    <option value="members">Private (ERSL Members Only)</option>
+                    <option value="members">Members Only (ERSL Lab)</option>
+                    <option value="admin">Private (Lab Admins Only)</option>
                   </select>
                 </div>
               </div>

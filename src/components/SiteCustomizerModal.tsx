@@ -384,6 +384,7 @@ export const SiteCustomizerModal: React.FC<SiteCustomizerModalProps> = ({
                   >
                     <option value="public">Public</option>
                     <option value="members">Members Only</option>
+                    <option value="admin">Private (Admin Only)</option>
                   </select>
                   <button type="submit" className="sm:col-span-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg p-2 cursor-pointer">
                     Add
@@ -418,6 +419,7 @@ export const SiteCustomizerModal: React.FC<SiteCustomizerModalProps> = ({
                       >
                         <option value="public">🌐 Public</option>
                         <option value="members">🔒 Members Only</option>
+                        <option value="admin">🛡️ Private (Admin)</option>
                         <option value="hidden">🚫 Hidden</option>
                       </select>
                       {tab.isCustom && (

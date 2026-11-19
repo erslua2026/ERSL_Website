@@ -6,6 +6,7 @@ import {
   Instrument,
   Person,
   Project,
+  ProjectSubPageData,
   Publication,
   ResearchTheme,
   SiteConfig,
@@ -15,6 +16,7 @@ import {
 } from '../types';
 import { NewsItem } from '../data/news';
 import {
+  buildNormalizedStudentSubTabs,
   buildNormalizedSubTabs,
   DEFAULT_PROJECT_SUBPAGE,
   resolveProjectViewerAccess,
@@ -31,6 +33,8 @@ export interface SiteSearchItem {
   instrumentId?: string;
   projectId?: string;
   projectSubTabId?: string;
+  studentId?: string;
+  studentSubTabId?: string;
   peopleGroup?: 'member' | 'collaborator' | 'former';
 }
 
@@ -50,6 +54,7 @@ interface BuildSearchParams {
   bulletins: BulletinItem[];
   boxFiles: BoxFile[];
   customPages: Record<string, CustomPageData>;
+  studentWorkspaces?: Record<string, ProjectSubPageData>;
 }
 
 export function buildSiteSearchItems({
@@ -68,13 +73,16 @@ export function buildSiteSearchItems({
   bulletins,
   boxFiles,
   customPages,
+  studentWorkspaces = {},
 }: BuildSearchParams): SiteSearchItem[] {
   const isLoggedIn = Boolean(currentUser);
+  const isAdmin = currentUser?.role === 'Admin';
   const canSeePrivate = isLoggedIn || editMode;
 
   const visibleTabs = siteConfig.tabs.filter(t => {
     if (t.visibility === 'hidden' && !editMode) return false;
     if (t.visibility === 'members' && !canSeePrivate) return false;
+    if (t.visibility === 'admin' && !isAdmin) return false;
     return true;
   });
   const visibleTabIds = new Set(visibleTabs.map(t => t.id));
@@ -173,8 +181,8 @@ export function buildSiteSearchItems({
       items.push({
         id: `srch-proj-${p.id}`,
         title: p.title,
-        subtitle: `Project · ${p.agency}${p.details ? ` · ${p.details}` : ''}`,
-        searchText: [p.title, p.agency, p.sponsor, p.details, p.summary, subPage.summary, subPage.piInfo, collabNames]
+        subtitle: `Project · ${p.agency}${p.period ? ` · ${p.period}` : ''}${p.details ? ` · ${p.details}` : ''}`,
+        searchText: [p.id, p.title, p.agency, p.sponsor, p.period, p.status, p.details, p.summary, subPage.summary, subPage.piInfo, subPage.timeline, subPage.boxFolderUrl, collabNames]
           .filter(Boolean)
           .join(' '),
         tab: 'projects',
@@ -251,7 +259,7 @@ export function buildSiteSearchItems({
         id: `srch-pub-${pub.id}`,
         title: pub.title,
         subtitle: `${pub.authors} (${pub.year}) · ${pub.venue}`,
-        searchText: [pub.title, pub.authors, pub.venue, String(pub.year), pub.type, pub.abstract, ...(pub.keywords || [])]
+        searchText: [pub.title, pub.authors, pub.venue, String(pub.year), pub.type, pub.doi, pub.link, pub.abstract, ...(pub.keywords || [])]
           .filter(Boolean)
           .join(' '),
         tab: 'publications',
@@ -299,7 +307,51 @@ export function buildSiteSearchItems({
         tab: 'people',
         tabLabel: grp === 'collaborator' ? 'Collaborators' : grp === 'former' ? 'Former Members' : 'People',
         peopleGroup: grp,
+        studentId: grp === 'member' ? per.id : undefined,
       });
+
+      // Index Student / Team Member Sub-Pages & Materials
+      if (grp === 'member') {
+        const stuWorkspace = studentWorkspaces[per.id] || per.subPage || DEFAULT_PROJECT_SUBPAGE;
+        const stuAccess = resolveProjectViewerAccess({
+          currentUser,
+          people,
+          collaborators: [],
+          passkeyUnlocked: false,
+          previewRole: editMode && isAdmin ? 'admin' : 'actual',
+        });
+        const stuTabs = buildNormalizedStudentSubTabs(per, stuWorkspace);
+        stuTabs.forEach(sTab => {
+          if (!editMode && !stuAccess.canViewVisibility(sTab.visibility)) return;
+          const blkText = sTab.blocks
+            .map(b => [b.title, b.body, b.category, b.url, b.date].filter(Boolean).join(' '))
+            .join(' ');
+          items.push({
+            id: `srch-stu-sub-${per.id}-${sTab.id}`,
+            title: `${per.name} — ${sTab.label}`,
+            subtitle: `Student Section (${sTab.visibility})`,
+            searchText: [per.name, sTab.label, sTab.description, blkText].filter(Boolean).join(' '),
+            tab: 'people',
+            tabLabel: `Student · ${sTab.label}`,
+            peopleGroup: 'member',
+            studentId: per.id,
+            studentSubTabId: sTab.id,
+          });
+          sTab.blocks.forEach(blk => {
+            items.push({
+              id: `srch-stu-blk-${per.id}-${sTab.id}-${blk.id}`,
+              title: blk.title,
+              subtitle: `${per.name} › ${sTab.label}`,
+              searchText: [blk.title, blk.body, blk.category, blk.url, blk.date, per.name].filter(Boolean).join(' '),
+              tab: 'people',
+              tabLabel: `Student · ${sTab.label}`,
+              peopleGroup: 'member',
+              studentId: per.id,
+              studentSubTabId: sTab.id,
+            });
+          });
+        });
+      }
     });
   }
 
@@ -379,13 +431,14 @@ export function buildSiteSearchItems({
     });
 
     (page.subTabs || []).forEach(sub => {
+      if (sub.visibility === 'admin' && !isAdmin && !editMode) return;
       if (sub.visibility !== 'public' && !canSeePrivate) return;
       (sub.blocks || []).forEach(blk => {
         items.push({
           id: `srch-cblk-${page.tabId}-${sub.id}-${blk.id}`,
           title: blk.title,
           subtitle: `${page.title} › ${sub.label}`,
-          searchText: [blk.title, blk.body, blk.tag, sub.label, page.title].filter(Boolean).join(' '),
+          searchText: [blk.title, blk.body, blk.tag, blk.url, sub.label, page.title].filter(Boolean).join(' '),
           tab: page.tabId,
           tabLabel: page.title,
         });

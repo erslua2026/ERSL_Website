@@ -10,7 +10,7 @@ interface BoxFolder {
   name: string;
   description: string;
   share_url: string;
-  visibility: 'public' | 'private';
+  visibility: 'public' | 'private' | 'members' | 'admin';
 }
 
 export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPassProps> = ({
@@ -25,7 +25,7 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
   const [folders, setFolders] = useState<BoxFolder[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', description: '', share_url: '', visibility: 'private' as 'public' | 'private' });
+  const [form, setForm] = useState({ name: '', description: '', share_url: '', visibility: 'members' as 'public' | 'members' | 'admin' });
 
   const defaultBoxFolders: BoxFolder[] = [
     {
@@ -81,9 +81,23 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     const { error: err } = await supabase!.from('box_folders').insert(form);
-    if (err) setError(err.message);
-    else { setForm({ name: '', description: '', share_url: '', visibility: 'private' }); load(); }
+    if (err) {
+      // Compatibility fallback if Postgres check constraint still restricts visibility to 'public'|'private'
+      if (form.visibility !== 'public') {
+        const retry = await supabase!.from('box_folders').insert({ ...form, visibility: 'private' });
+        if (!retry.error) {
+          setForm({ name: '', description: '', share_url: '', visibility: 'members' });
+          load();
+          return;
+        }
+      }
+      setError(err.message);
+    } else {
+      setForm({ name: '', description: '', share_url: '', visibility: 'members' });
+      load();
+    }
   };
   const remove = async (f: BoxFolder) => {
     if (!confirm(`Remove folder "${f.name}" from the site? (The Box folder itself is not touched.)`)) return;
@@ -92,7 +106,12 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
     load();
   };
 
-  const current = folders.find(f => f.id === active);
+  const visibleFolders = folders.filter(f => {
+    if (f.visibility === 'admin') return isAdmin;
+    if (f.visibility === 'private' || f.visibility === 'members') return Boolean(currentUser);
+    return true;
+  });
+  const current = visibleFolders.find(f => f.id === active);
 
   return (
     <div className="space-y-6 text-left">
@@ -117,35 +136,49 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
             <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full p-2 border border-gray-300 rounded" /></div>
           <div className="md:col-span-4 space-y-1"><label className="font-bold text-gray-700">Box shared link</label>
             <input required type="url" value={form.share_url} onChange={e => setForm({ ...form, share_url: e.target.value })} placeholder="https://ua.box.com/s/..." className="w-full p-2 border border-gray-300 rounded" /></div>
-          <div className="md:col-span-2 space-y-1"><label className="font-bold text-gray-700">Who can see</label>
+          <div className="md:col-span-2 space-y-1"><label className="font-bold text-gray-700">Visibility</label>
             <select value={form.visibility} onChange={e => setForm({ ...form, visibility: e.target.value as any })} className="w-full p-2 border border-gray-300 rounded">
-              <option value="private">Members only</option><option value="public">Public</option></select></div>
+              <option value="public">Public</option>
+              <option value="members">Members Only</option>
+              <option value="admin">Private (Admin Only)</option>
+            </select></div>
           <div className="md:col-span-3"><button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded flex items-center justify-center gap-1 cursor-pointer"><Plus className="w-3.5 h-3.5" /> Add folder</button></div>
-          <div className="md:col-span-12 space-y-1"><label className="font-bold text-gray-700">Description (optional)</label>
-            <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full p-2 border border-gray-300 rounded" /></div>
+          <div className="md:col-span-12 space-y-1"><label className="font-bold text-gray-700">Project / Student Scope & Description (optional)</label>
+            <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="e.g., NASA SERVIR · Hydrology datasets" className="w-full p-2 border border-gray-300 rounded" /></div>
         </form>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {folders.map(f => (
-          <div key={f.id} className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${active === f.id ? 'border-[#9E1B32]' : 'border-gray-100'}`}
-            onClick={() => setActive(f.id)}>
-            <div className="flex items-start justify-between gap-2">
-              <p className="font-extrabold text-sm text-slate-800">📁 {f.name}</p>
-              {f.visibility === 'private' ? <Lock className="w-3.5 h-3.5 text-[#9E1B32]" /> : <Globe className="w-3.5 h-3.5 text-emerald-600" />}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {visibleFolders.map(f => {
+          const badgeCls =
+            f.visibility === 'public'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : f.visibility === 'admin'
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : 'bg-amber-50 text-amber-800 border-amber-200';
+          const badgeLabel = f.visibility === 'public' ? 'Public' : f.visibility === 'admin' ? 'Private' : 'Members';
+          return (
+            <div key={f.id} className={`bg-white rounded-xl border p-3.5 shadow-2xs cursor-pointer hover:shadow-md transition-shadow ${active === f.id ? 'border-[#9E1B32] ring-1 ring-[#9E1B32]/20' : 'border-gray-100'}`}
+              onClick={() => setActive(f.id)}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-extrabold text-xs sm:text-sm text-slate-800 truncate">📁 {f.name}</p>
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border shrink-0 ${badgeCls}`}>
+                  {badgeLabel}
+                </span>
+              </div>
+              {f.description && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{f.description}</p>}
+              <div className="mt-2.5 flex items-center justify-between text-xs">
+                {sanitizeExternalUrl(f.share_url) ? (
+                  <a href={sanitizeExternalUrl(f.share_url)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 font-semibold inline-flex items-center gap-1 hover:underline"><ExternalLink className="w-3 h-3" /> Open in Box</a>
+                ) : (
+                  <span className="text-gray-400 italic">Invalid Box link</span>
+                )}
+                {isAdmin && <button onClick={e => { e.stopPropagation(); remove(f); }} className="text-red-500 p-1 hover:bg-red-50 rounded cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
+              </div>
             </div>
-            {f.description && <p className="text-xs text-gray-500 mt-1">{f.description}</p>}
-            <div className="mt-3 flex items-center justify-between text-xs">
-              {sanitizeExternalUrl(f.share_url) ? (
-                <a href={sanitizeExternalUrl(f.share_url)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 font-semibold inline-flex items-center gap-1 hover:underline"><ExternalLink className="w-3 h-3" /> Open in Box</a>
-              ) : (
-                <span className="text-gray-400 italic">Invalid Box link</span>
-              )}
-              {isAdmin && <button onClick={e => { e.stopPropagation(); remove(f); }} className="text-red-500 p-1 hover:bg-red-50 rounded cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
-            </div>
-          </div>
-        ))}
-        {folders.length === 0 && <div className="md:col-span-3 bg-white p-10 rounded-xl border border-dashed border-gray-300 text-center text-xs text-gray-500">No folders added yet.</div>}
+          );
+        })}
+        {visibleFolders.length === 0 && <div className="md:col-span-3 bg-white p-8 rounded-xl border border-dashed border-gray-300 text-center text-xs text-gray-500">No folders accessible for your account yet.</div>}
       </div>
 
       {current && (
