@@ -25,6 +25,7 @@ import {
   matchesPersonWorkplanOwner,
   saveWorkplanTaskAction,
   subscribeWorkplanRealtime,
+  syncStudentTodoBlocksToWorkplan,
   WORKPLAN_STATUS_META,
   WorkplanComment,
   WorkplanStatus,
@@ -80,10 +81,25 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
     return subscribeWorkplanRealtime(syncWorkplan);
   }, [syncWorkplan]);
 
+  useEffect(() => {
+    if (!person?.id || blocks.length === 0) return;
+    syncStudentTodoBlocksToWorkplan(person.id, blocks, currentUser)
+      .then(updated => {
+        if (updated && updated.length > 0) setAllTasks(updated);
+      })
+      .catch(() => {});
+  }, [person?.id, blocks]);
+
   const myWorkplanTasks = useMemo(() => {
     if (!person) return [];
     return allTasks.filter(t => matchesPersonWorkplanOwner(t.owner_id, person, people));
   }, [allTasks, person, people]);
+
+  const syncedTaskIds = useMemo(() => new Set(allTasks.map(t => t.id)), [allTasks]);
+  const unsyncedBlocks = useMemo(
+    () => blocks.filter(b => !syncedTaskIds.has(b.id)),
+    [blocks, syncedTaskIds]
+  );
 
   const statusCounts = useMemo(() => {
     const allItems = [
@@ -93,7 +109,7 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
           t.status !== 'completed' && daysUntilDue(t.due_date) !== null && (daysUntilDue(t.due_date) as number) < 0
         ),
       })),
-      ...blocks.map(b => {
+      ...unsyncedBlocks.map(b => {
         const st: WorkplanStatus =
           (b.status as WorkplanStatus) || (b.completed ? 'completed' : 'not_started');
         return {
@@ -112,7 +128,7 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
     const overdue = allItems.filter(i => i.overdue).length;
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, inProgress, discuss, notStarted, overdue, pct };
-  }, [myWorkplanTasks, blocks]);
+  }, [myWorkplanTasks, unsyncedBlocks]);
 
   const filteredTasks = useMemo(() => {
     const base =
@@ -123,14 +139,14 @@ export const StudentTodoView: React.FC<StudentTodoViewProps> = ({
   }, [myWorkplanTasks, filter]);
 
   const filteredLocalBlocks = useMemo(() => {
-    const base = blocks.filter(b => {
+    const base = unsyncedBlocks.filter(b => {
       const st: WorkplanStatus =
         (b.status as WorkplanStatus) || (b.completed ? 'completed' : 'not_started');
       if (filter === 'all') return true;
       return st === filter;
     });
     return [...base].sort((a, b) => Number(Boolean(a.completed)) - Number(Boolean(b.completed)));
-  }, [blocks, filter]);
+  }, [unsyncedBlocks, filter]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();

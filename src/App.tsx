@@ -51,6 +51,7 @@ import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
 import { isFinishedProject, isReservoirManagedProject } from './lib/projectSubPageUtils';
+import { STUDENT_WORKSPACES_UPDATED_EVENT } from './lib/workplanUtils';
 
 // Helper to resolve image paths (local folder under public/images/{category} vs base64/URL assets)
 const resolveImagePath = (
@@ -883,6 +884,14 @@ export default function App() {
       }
     };
 
+    const handleStudentWorkspaceSync = (evt: Event) => {
+      const detail = (evt as CustomEvent).detail;
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        setStudentWorkspaces(detail);
+      }
+    };
+    window.addEventListener(STUDENT_WORKSPACES_UPDATED_EVENT, handleStudentWorkspaceSync);
+
     const channel = supabase
       .channel('ersl_site_sections_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservoir_matrix' }, (payload: any) => {
@@ -904,6 +913,7 @@ export default function App() {
 
     return () => {
       mounted = false;
+      window.removeEventListener(STUDENT_WORKSPACES_UPDATED_EVENT, handleStudentWorkspaceSync);
       document.removeEventListener('visibilitychange', handleVisibility);
       supabase?.removeChannel(channel);
     };

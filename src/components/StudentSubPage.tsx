@@ -54,6 +54,12 @@ import {
   StudentScheduleView,
   StudentTodoView,
 } from './StudentSubPageViews';
+import {
+  fetchWorkplanMatrixSnapshot,
+  saveWorkplanTaskAction,
+  todoBlockToWorkplanTask,
+  WorkplanStatus,
+} from '../lib/workplanUtils';
 
 interface StudentSubPageProps {
   person: Person;
@@ -352,6 +358,18 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
 
   const handleSaveBlock = (savedBlock: ProjectContentBlock) => {
     if (!activeSubTabObj) return;
+    if (activeSubTabObj.kind === 'todo') {
+      const wkTask = todoBlockToWorkplanTask(person.id, savedBlock);
+      fetchWorkplanMatrixSnapshot().then(snap =>
+        saveWorkplanTaskAction({
+          action: 'upsert',
+          task: wkTask,
+          currentTasks: snap.tasks,
+          currentComments: snap.comments,
+          updatedBy: currentUser,
+        })
+      ).catch(() => {});
+    }
     const exists = activeSubTabObj.blocks.some(b => b.id === savedBlock.id);
     const nextBlocks = exists
       ? activeSubTabObj.blocks.map(b => (b.id === savedBlock.id ? savedBlock : b))
@@ -377,32 +395,55 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
       date: task.date,
       priority: task.priority,
       completed: false,
+      status: 'not_started',
       category: task.category || 'Weekly To-Do',
     };
     const nextTabs = customSubTabs.map(t =>
       t.id === activeSubTabObj.id ? { ...t, blocks: [...t.blocks, newBlock] } : t
     );
     commitWorkspaceUpdate(nextTabs);
+    fetchWorkplanMatrixSnapshot().then(snap =>
+      saveWorkplanTaskAction({
+        action: 'add',
+        task: todoBlockToWorkplanTask(person.id, newBlock),
+        currentTasks: snap.tasks,
+        currentComments: snap.comments,
+        updatedBy: currentUser,
+      })
+    ).catch(() => {});
   };
 
   const handleToggleTodo = (block: ProjectContentBlock) => {
     if (!activeSubTabObj) return;
+    const nextCompleted = !block.completed;
+    const nextStatus: WorkplanStatus = nextCompleted ? 'completed' : 'in_progress';
     const nextTabs = customSubTabs.map(t =>
       t.id === activeSubTabObj.id
         ? {
             ...t,
             blocks: t.blocks.map(b =>
-              b.id === block.id ? { ...b, completed: !b.completed } : b
+              b.id === block.id ? { ...b, completed: nextCompleted, status: nextStatus } : b
             ),
           }
         : t
     );
     commitWorkspaceUpdate(nextTabs);
+    fetchWorkplanMatrixSnapshot().then(snap =>
+      saveWorkplanTaskAction({
+        action: 'update',
+        taskId: block.id,
+        patch: { status: nextStatus },
+        currentTasks: snap.tasks,
+        currentComments: snap.comments,
+        updatedBy: currentUser,
+      })
+    ).catch(() => {});
   };
 
   const handleClearCompletedTodos = () => {
     if (!activeSubTabObj) return;
-    const completedCount = activeSubTabObj.blocks.filter(b => b.completed).length;
+    const completedBlocks = activeSubTabObj.blocks.filter(b => b.completed);
+    const completedCount = completedBlocks.length;
     if (completedCount === 0) return;
     if (!confirm(`Clear ${completedCount} completed task(s)?`)) return;
     const nextTabs = customSubTabs.map(t =>
@@ -411,6 +452,21 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
         : t
     );
     commitWorkspaceUpdate(nextTabs);
+    fetchWorkplanMatrixSnapshot().then(async snap => {
+      let curTasks = snap.tasks;
+      for (const b of completedBlocks) {
+        if (curTasks.some(t => t.id === b.id)) {
+          const res = await saveWorkplanTaskAction({
+            action: 'delete',
+            taskId: b.id,
+            currentTasks: curTasks,
+            currentComments: snap.comments,
+            updatedBy: currentUser,
+          });
+          curTasks = res.tasks;
+        }
+      }
+    }).catch(() => {});
   };
 
   const handleAddEventForDate = (dateStr: string, defaultCategory?: string) => {
@@ -455,6 +511,17 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
   const handleDeleteBlock = (blockId: string) => {
     if (!activeSubTabObj) return;
     if (!confirm('Remove this entry from the sub-page?')) return;
+    if (activeSubTabObj.kind === 'todo') {
+      fetchWorkplanMatrixSnapshot().then(snap =>
+        saveWorkplanTaskAction({
+          action: 'delete',
+          taskId: blockId,
+          currentTasks: snap.tasks,
+          currentComments: snap.comments,
+          updatedBy: currentUser,
+        })
+      ).catch(() => {});
+    }
     const nextTabs = customSubTabs.map(t =>
       t.id === activeSubTabObj.id
         ? { ...t, blocks: t.blocks.filter(b => b.id !== blockId) }

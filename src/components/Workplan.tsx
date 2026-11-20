@@ -11,7 +11,13 @@ import { initialPeople } from '../data/initialData';
 import type { Person, User } from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { openOrDownloadResource, sanitizeExternalUrl } from '../lib/boxUtils';
-import { WORKPLAN_UPDATED_EVENT } from '../lib/workplanUtils';
+import {
+  isWorkplanLocallyDirty,
+  markWorkplanLocalWrite,
+  mergeStudentTodosIntoTasks,
+  mirrorTaskToStudentWorkspaces,
+  WORKPLAN_UPDATED_EVENT,
+} from '../lib/workplanUtils';
 
 type Status = 'not_started' | 'in_progress' | 'completed' | 'discuss_with_liu';
 
@@ -290,22 +296,37 @@ export const Workplan: React.FC<{
     setPeople(deduplicatedList);
     setAliasMap({ ...aliases });
 
-    // 1. Fetch cloud workplan matrix as authoritative source of truth
+    // 1. Fetch cloud workplan matrix & merge any Student Weekly To-Do items cleanly
     try {
       const { data: cloudMatrix } = await getCloudData<{ tasks: Task[]; comments: Record<string, Comment[]> }>('ersl_workplan_matrix');
-      if (cloudMatrix?.tasks && Array.isArray(cloudMatrix.tasks) && cloudMatrix.tasks.length > 0) {
-        setTasks(cloudMatrix.tasks);
-        try { localStorage.setItem('ersl_tasks', JSON.stringify(cloudMatrix.tasks)); } catch {}
-      } else {
-        // Fallback to local storage if cloud is not yet seeded
-        try {
-          const raw = localStorage.getItem('ersl_tasks');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) setTasks(parsed);
-          }
-        } catch {}
+      let localList: Task[] = [];
+      try {
+        const raw = localStorage.getItem('ersl_tasks');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) localList = parsed;
+        }
+      } catch {}
+
+      const useLocal = isWorkplanLocallyDirty() && localList.length >= 0;
+      const baseList = useLocal
+        ? localList
+        : cloudMatrix?.tasks && Array.isArray(cloudMatrix.tasks)
+          ? cloudMatrix.tasks
+          : localList;
+
+      const { tasks: unifiedTasks, addedAny } = mergeStudentTodosIntoTasks(baseList);
+      setTasks(unifiedTasks);
+      try { localStorage.setItem('ersl_tasks', JSON.stringify(unifiedTasks)); } catch {}
+
+      if (addedAny) {
+        setCloudData(
+          'ersl_workplan_matrix',
+          { tasks: unifiedTasks, comments: cloudMatrix?.comments || commentsRef.current },
+          { updatedBy: currentUser?.name || currentUser?.email }
+        ).catch(() => {});
       }
+
       if (cloudMatrix?.comments && typeof cloudMatrix.comments === 'object') {
         setComments(cloudMatrix.comments);
       }
@@ -467,6 +488,7 @@ export const Workplan: React.FC<{
 
     // Optimistic local add & merge-safe cloud sync (never drops concurrent members' tasks/comments)
     lastLocalEditAtRef.current = Date.now();
+    markWorkplanLocalWrite();
     const nextTasks = [newTask, ...tasks];
     setTasks(nextTasks);
     try {
@@ -508,18 +530,24 @@ export const Workplan: React.FC<{
 
   const update = async (id: string, patch: Partial<Task>) => {
     lastLocalEditAtRef.current = Date.now();
+    markWorkplanLocalWrite();
     const updated = tasks.map(t => t.id === id ? { ...t, ...patch } : t);
     setTasks(updated);
     try { localStorage.setItem('ersl_tasks', JSON.stringify(updated)); } catch {}
+    mirrorTaskToStudentWorkspaces('update', id, patch);
 
     if (activeTaskModal && activeTaskModal.id === id) {
       setActiveTaskModal(prev => prev ? { ...prev, ...patch } : null);
     }
 
+    window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
+
     try {
       const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
       const baseTasks = Array.isArray(latestCloud?.tasks) ? latestCloud!.tasks : updated;
-      const mergedTasks = baseTasks.map(t => (t.id === id ? { ...t, ...patch } : t));
+      const mergedTasks = baseTasks.some(t => t.id === id)
+        ? baseTasks.map(t => (t.id === id ? { ...t, ...patch } : t))
+        : updated;
       const mergedComments = mergeCommentMaps(latestCloud?.comments, commentsRef.current);
       await setCloudData('ersl_workplan_matrix', { tasks: mergedTasks, comments: mergedComments }, { updatedBy: currentUser?.name });
       window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
@@ -531,10 +559,14 @@ export const Workplan: React.FC<{
   const remove = async (t: Task) => {
     if (!confirm(`Delete task "${t.title}"?`)) return;
     lastLocalEditAtRef.current = Date.now();
+    markWorkplanLocalWrite();
     const updated = tasks.filter(item => item.id !== t.id);
     setTasks(updated);
     try { localStorage.setItem('ersl_tasks', JSON.stringify(updated)); } catch {}
+    mirrorTaskToStudentWorkspaces('delete', t.id);
     if (activeTaskModal?.id === t.id) setActiveTaskModal(null);
+
+    window.dispatchEvent(new CustomEvent(WORKPLAN_UPDATED_EVENT));
 
     try {
       const { data: latestCloud } = await getCloudData<{ tasks?: Task[]; comments?: Record<string, Comment[]> }>('ersl_workplan_matrix');
