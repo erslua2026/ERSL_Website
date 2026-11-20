@@ -19,7 +19,7 @@ import { openOrDownloadResource, resolveAssetUrl } from '../lib/boxUtils';
 import { decodeHtmlEntities, resolvePublicationLinks } from '../lib/publicationUtils';
 import { ImageUploadField } from './ImageUploadField';
 import { LinkedReferenceText } from './LinkedReferenceText';
-import { parseLegacyInvestigators } from '../lib/projectSubPageUtils';
+import { isFinishedProject, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
 
 interface ThemeSubPageProps {
   theme: ResearchTheme;
@@ -69,9 +69,13 @@ export const ThemeSubPage: React.FC<ThemeSubPageProps> = ({
     Array.isArray(theme.selectedPublicationIds) ? theme.selectedPublicationIds : []
   );
 
-  const linkedProjects = projects.filter(
+  const rawLinkedProjects = projects.filter(
     p => Array.isArray(p.themeIds) && p.themeIds.includes(theme.id)
   );
+  const linkedProjects = [
+    ...rawLinkedProjects.filter(p => !isFinishedProject(p)),
+    ...rawLinkedProjects.filter(p => isFinishedProject(p)),
+  ];
 
   const autoMatchedPubs = publications.filter(pub =>
     theme.keywords.some(

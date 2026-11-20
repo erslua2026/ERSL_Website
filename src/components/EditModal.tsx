@@ -1400,6 +1400,9 @@ export const EditModal: React.FC<EditModalProps> = ({
                     className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                   >
                     <option value="Active">Active</option>
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="Pending">Pending / Upcoming</option>
+                    <option value="Finished">Finished</option>
                     <option value="Completed">Completed</option>
                   </select>
                 </div>

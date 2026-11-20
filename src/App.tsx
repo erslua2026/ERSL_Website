@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine,
   Plus, Edit, Edit2, Trash2, Calendar, FileText, Search, Download, ExternalLink,
   Mail, Users, Award, ShieldAlert, GraduationCap, Check, HelpCircle,
   FolderGit2, Lock, Eye, AlertCircle, FileCode, CheckCircle2, ChevronRight, Sliders, Play, Info,
@@ -49,7 +50,7 @@ import { getLastBoxStatus } from './lib/boxSync';
 import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
-import { isReservoirManagedProject } from './lib/projectSubPageUtils';
+import { isFinishedProject, isReservoirManagedProject } from './lib/projectSubPageUtils';
 
 // Helper to resolve image paths (local folder under public/images/{category} vs base64/URL assets)
 const resolveImagePath = (
@@ -1674,6 +1675,57 @@ export default function App() {
     setPersonGroupOverride(undefined);
   };
 
+  const handleReorderProject = (
+    projectId: string,
+    direction: 'top' | 'up' | 'down' | 'bottom',
+    groupIds: string[]
+  ) => {
+    const posInGroup = groupIds.indexOf(projectId);
+    if (posInGroup < 0 || groupIds.length < 2) return;
+
+    const fullIdx = projects.findIndex(p => p.id === projectId);
+    if (fullIdx < 0) return;
+
+    let next = [...projects];
+    const [moving] = next.splice(fullIdx, 1);
+
+    if (direction === 'up') {
+      if (posInGroup === 0) return;
+      const targetNeighborId = groupIds[posInGroup - 1];
+      const targetIdx = next.findIndex(p => p.id === targetNeighborId);
+      next.splice(Math.max(0, targetIdx), 0, moving);
+    } else if (direction === 'down') {
+      if (posInGroup >= groupIds.length - 1) return;
+      const targetNeighborId = groupIds[posInGroup + 1];
+      const targetIdx = next.findIndex(p => p.id === targetNeighborId);
+      next.splice(targetIdx >= 0 ? targetIdx + 1 : next.length, 0, moving);
+    } else if (direction === 'top') {
+      if (posInGroup === 0) return;
+      const firstGroupId = groupIds[0];
+      const firstIdx = next.findIndex(p => p.id === firstGroupId);
+      next.splice(firstIdx >= 0 ? firstIdx : 0, 0, moving);
+    } else if (direction === 'bottom') {
+      if (posInGroup >= groupIds.length - 1) return;
+      const lastGroupId = groupIds[groupIds.length - 1];
+      const lastIdx = next.findIndex(p => p.id === lastGroupId);
+      next.splice(lastIdx >= 0 ? lastIdx + 1 : next.length, 0, moving);
+    }
+
+    setProjects(next);
+    try { localStorage.setItem('ersl_projects', JSON.stringify(next)); } catch { }
+    syncSiteContentToCloud({ projects: next });
+    appendAuditLog('REORDER_PROJECTS', `Moved "${moving.title}" (${direction})`);
+  };
+
+  const handleToggleProjectFinished = (proj: Project) => {
+    const nextStatus = isFinishedProject(proj) ? 'Active' : 'Completed';
+    const updated = projects.map(p => (p.id === proj.id ? { ...p, status: nextStatus } : p));
+    setProjects(updated);
+    try { localStorage.setItem('ersl_projects', JSON.stringify(updated)); } catch { }
+    syncSiteContentToCloud({ projects: updated });
+    appendAuditLog('UPDATE_PROJECT', `Marked "${proj.title}" as ${nextStatus}`);
+  };
+
   // Unified Delete handlers
   const handleDeleteItem = (id: string, itemType: string, displayName: string) => {
     if (!confirm(`Are you sure you want to delete "${displayName}" from our records? This action will generate a safety log.`)) {
@@ -2988,41 +3040,102 @@ export default function App() {
                           ))}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
-                          {visibleProjects.map((proj) => {
+                        {(() => {
+                          const activeProjectsList = visibleProjects.filter(p => !isFinishedProject(p));
+                          const finishedProjectsList = visibleProjects.filter(p => isFinishedProject(p));
+                          const activeIds = activeProjectsList.map(p => p.id);
+                          const finishedIds = finishedProjectsList.map(p => p.id);
+
+                          const renderProjectCard = (proj: Project, idx: number, groupIds: string[]) => {
                             const projThemes = themes.filter(t => Array.isArray(proj.themeIds) && proj.themeIds.includes(t.id));
+                            const isFinished = isFinishedProject(proj);
                             return (
                               <div
                                 key={proj.id}
                                 onClick={() => openProjectInNewTab(proj.id)}
-                                style={{ borderLeftColor: accentColor }}
-                                className="bg-slate-50/70 hover:bg-white p-5 rounded-xl border border-gray-200 border-l-4 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all cursor-pointer group relative"
+                                style={{ borderLeftColor: isFinished ? '#64748b' : accentColor }}
+                                className={`p-5 rounded-xl border border-gray-200 border-l-4 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all cursor-pointer group relative ${
+                                  isFinished ? 'bg-slate-100/60 hover:bg-white' : 'bg-slate-50/70 hover:bg-white'
+                                }`}
                               >
                                 {editMode && (
                                   <div
-                                    className="flex items-center gap-1.5 mb-2 justify-end"
+                                    className="flex flex-wrap items-center justify-between gap-1.5 mb-2 pb-1.5 border-b border-gray-200/70"
                                     onClick={e => e.stopPropagation()}
                                   >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setModalType('project');
-                                        setEditingItem(proj);
-                                        setModalOpen(true);
-                                      }}
-                                      className="p-1 bg-white hover:bg-blue-50 text-blue-600 rounded border border-gray-200 cursor-pointer"
-                                      title="Edit Project Metadata"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteItem(proj.id, 'project', proj.title)}
-                                      className="p-1 bg-white hover:bg-red-50 text-red-500 rounded border border-gray-200 cursor-pointer"
-                                      title="Delete Project"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleReorderProject(proj.id, 'top', groupIds)}
+                                        className="p-1 bg-white hover:bg-slate-100 text-slate-700 rounded border border-gray-200 disabled:opacity-30 cursor-pointer"
+                                        title="Move to Top"
+                                      >
+                                        <ArrowUpToLine className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleReorderProject(proj.id, 'up', groupIds)}
+                                        className="p-1 bg-white hover:bg-slate-100 text-slate-700 rounded border border-gray-200 disabled:opacity-30 cursor-pointer"
+                                        title="Move Up"
+                                      >
+                                        <ArrowUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx >= groupIds.length - 1}
+                                        onClick={() => handleReorderProject(proj.id, 'down', groupIds)}
+                                        className="p-1 bg-white hover:bg-slate-100 text-slate-700 rounded border border-gray-200 disabled:opacity-30 cursor-pointer"
+                                        title="Move Down"
+                                      >
+                                        <ArrowDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx >= groupIds.length - 1}
+                                        onClick={() => handleReorderProject(proj.id, 'bottom', groupIds)}
+                                        className="p-1 bg-white hover:bg-slate-100 text-slate-700 rounded border border-gray-200 disabled:opacity-30 cursor-pointer"
+                                        title="Move to Bottom"
+                                      >
+                                        <ArrowDownToLine className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleProjectFinished(proj)}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded border cursor-pointer ${
+                                          isFinished
+                                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-gray-200'
+                                        }`}
+                                        title={isFinished ? 'Move back to Active Projects' : 'Move to Completed / Finished Projects at the end'}
+                                      >
+                                        {isFinished ? 'Mark Active' : 'Mark Finished'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setModalType('project');
+                                          setEditingItem(proj);
+                                          setModalOpen(true);
+                                        }}
+                                        className="p-1 bg-white hover:bg-blue-50 text-blue-600 rounded border border-gray-200 cursor-pointer"
+                                        title="Edit Project Metadata"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteItem(proj.id, 'project', proj.title)}
+                                        className="p-1 bg-white hover:bg-red-50 text-red-500 rounded border border-gray-200 cursor-pointer"
+                                        title="Delete Project"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -3103,14 +3216,51 @@ export default function App() {
                                     <span className="text-gray-400">Open standalone project page &rarr;</span>
                                   )}
 
-                                  <span className="uppercase tracking-wider font-extrabold" style={{ color: subheadingAccent }}>
+                                  <span
+                                    className={`uppercase tracking-wider font-extrabold ${isFinished ? 'text-slate-500' : ''}`}
+                                    style={!isFinished ? { color: subheadingAccent } : undefined}
+                                  >
                                     {proj.status || 'Active'}
                                   </span>
                                 </div>
                               </div>
                             );
-                          })}
-                        </div>
+                          };
+
+                          return (
+                            <div className="space-y-7 text-left">
+                              {activeProjectsList.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                  {activeProjectsList.map((proj, idx) => renderProjectCard(proj, idx, activeIds))}
+                                </div>
+                              )}
+
+                              {(finishedProjectsList.length > 0 || editMode) && (
+                                <div className="pt-4 border-t border-gray-200 space-y-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                                        Project Archive
+                                      </span>
+                                      <h4 className="text-base font-extrabold text-slate-800">
+                                        Completed &amp; Finished Projects ({finishedProjectsList.length})
+                                      </h4>
+                                    </div>
+                                  </div>
+                                  {finishedProjectsList.length === 0 ? (
+                                    <div className="p-5 rounded-xl border border-dashed border-gray-300 bg-slate-50 text-center text-xs text-slate-500">
+                                      No finished projects yet. Click <strong>Mark Finished</strong> on any project card above (or set Status to <strong>Finished</strong> / <strong>Completed</strong>) to list it here at the end.
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                      {finishedProjectsList.map((proj, idx) => renderProjectCard(proj, idx, finishedIds))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

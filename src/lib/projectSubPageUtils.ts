@@ -277,6 +277,11 @@ export function isReservoirManagedProject(project?: Project | null): boolean {
   return RESERVOIR_MANAGED_TITLE_PATTERNS.includes(cleanTitle);
 }
 
+export function isFinishedProject(project?: { status?: string } | null): boolean {
+  const s = (project?.status || '').trim().toLowerCase();
+  return s === 'completed' || s === 'finished' || s === 'archived';
+}
+
 export function parseLegacyInvestigators(piInfo?: string, details?: string): ProjectInvestigator[] {
   const raw = (piInfo || details || '').trim();
   if (!raw) return [];
