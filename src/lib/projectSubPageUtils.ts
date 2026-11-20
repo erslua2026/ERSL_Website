@@ -246,13 +246,13 @@ export const SUBTAB_PRESETS: Array<{
   },
   {
     kind: 'workplan-tracker',
-    defaultLabel: 'Work Plan Progress',
+    defaultLabel: 'Project Management (Custom)',
     defaultVisibility: 'members',
-    description: 'Flexible milestone rounds, team workload allocations, delivery/QC dates, and progress matrix for this project.',
+    description: 'Admin-customizable project management tracker with custom workflow stages, member columns, and statuses.',
   },
   {
     kind: 'reservoir-tracker',
-    defaultLabel: 'Project Management',
+    defaultLabel: 'Reservoir Protocol Matrix',
     defaultVisibility: 'members',
     description: 'National Reservoir Delineation Protocol Matrix, team sprint allocations, and QA verification.',
   },
@@ -323,27 +323,45 @@ export function buildNormalizedSubTabs(
   project: Project,
   subPage: ProjectSubPageData
 ): ProjectCustomSubTab[] {
-  const ensureReservoirManagementTab = (tabs: ProjectCustomSubTab[]): ProjectCustomSubTab[] => {
-    if (!isReservoirManagedProject(project)) return tabs;
-    if (tabs.some(t => t.kind === 'reservoir-tracker' || t.id === 'project-management')) {
+  const ensureProjectManagementTab = (tabs: ProjectCustomSubTab[]): ProjectCustomSubTab[] => {
+    if (isReservoirManagedProject(project)) {
+      if (tabs.some(t => t.kind === 'reservoir-tracker' || t.id === 'project-management')) {
+        return tabs;
+      }
+      return [
+        ...tabs,
+        {
+          id: 'project-management',
+          label: 'Project Management',
+          kind: 'reservoir-tracker',
+          visibility: 'members',
+          description:
+            'National Reservoir Delineation Protocol Matrix, sprint allocations, collection tracking, and QA verification.',
+          blocks: [],
+        },
+      ];
+    }
+
+    if (tabs.some(t => t.kind === 'workplan-tracker' || t.id === 'project-management')) {
       return tabs;
     }
+
     return [
       ...tabs,
       {
         id: 'project-management',
         label: 'Project Management',
-        kind: 'reservoir-tracker',
+        kind: 'workplan-tracker',
         visibility: 'members',
         description:
-          'National Reservoir Delineation Protocol Matrix, sprint allocations, collection tracking, and QA verification.',
+          'Customizable Admin-only project management tracker: configure custom stages, columns, member responsibilities, and status options for this project.',
         blocks: [],
       },
     ];
   };
 
   if (Array.isArray(subPage.customSubTabs) && subPage.customSubTabs.length > 0) {
-    return ensureReservoirManagementTab(
+    return ensureProjectManagementTab(
       subPage.customSubTabs.map(tab => ({
         ...tab,
         visibility: tab.visibility || subPage.tabVisibility?.[tab.id] || 'public',
@@ -417,7 +435,7 @@ export function buildNormalizedSubTabs(
     availability: ds.availability || 'Public',
   }));
 
-  return ensureReservoirManagementTab([
+  return ensureProjectManagementTab([
     {
       id: 'overview',
       label: 'Overview',

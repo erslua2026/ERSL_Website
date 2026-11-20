@@ -3182,16 +3182,15 @@ export default function App() {
                                       </span>
                                     )}
                                     {(isReservoirManagedProject(proj) ||
-                                      proj.subPage?.customSubTabs?.some(t => t.kind === 'reservoir-tracker')) && (
+                                      proj.subPage?.customSubTabs?.some(t => t.kind === 'reservoir-tracker')) ? (
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-[#9E1B32] border border-rose-200">
-                                        📊 Project Management Matrix
+                                        📊 Reservoir Protocol Matrix
                                       </span>
-                                    )}
-                                    {proj.subPage?.customSubTabs?.some(t => t.kind === 'workplan-tracker') && (
+                                    ) : (currentUser || proj.subPage?.customSubTabs?.some(t => t.kind === 'workplan-tracker')) ? (
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                        ✅ Work Plan Tracker
+                                        📊 Project Management (Custom)
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
 

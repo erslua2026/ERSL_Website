@@ -540,7 +540,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               );
             })}
 
-            {showEditControls && (
+            {(showEditControls || (isAdmin && !isShowingPreviewAsOther)) && (
               <button
                 type="button"
                 onClick={() => setSubTabModal({ open: true, existing: null })}
@@ -616,7 +616,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </form>
           )}
 
-          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active; Project Management tabs locked to Admin Only) */}
+          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active, or to Admin on Project Management tabs) */}
           {showEditControls && activeSubTabObj && (
             activeSubTabObj.kind === 'workplan-tracker' || activeSubTabObj.kind === 'reservoir-tracker'
           ) && !isAdmin ? (
@@ -624,7 +624,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               <strong className="text-slate-700 block">Admin-Only Management Tab</strong>
               Only lab administrators can customize or delete Project Management tabs.
             </div>
-          ) : showEditControls && activeSubTabObj && (
+          ) : (showEditControls || (isAdmin && !isShowingPreviewAsOther && (activeSubTabObj?.kind === 'workplan-tracker' || activeSubTabObj?.kind === 'reservoir-tracker'))) && activeSubTabObj && (
             <div className="pt-3 border-t border-gray-100 space-y-2.5 text-xs">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
                 Edit Sub-Page: {activeSubTabObj.label}
@@ -920,7 +920,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               config={activeSubTabObj.workplanConfig}
               people={people}
               currentUser={currentUser}
-              isAdmin={Boolean(isAdmin && currentUser?.role === 'Admin')}
+              isAdmin={Boolean(isAdmin && !isShowingPreviewAsOther)}
               primaryColor={headerAccent}
               projectTitle={project.title}
               onChange={handleSaveWorkplanTracker}
