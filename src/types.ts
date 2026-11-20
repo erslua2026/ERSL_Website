@@ -75,16 +75,41 @@ export type ProjectCustomSubTabKind =
   | 'workplan-tracker'
   | 'custom';
 
-export type ProjectTrackerStageStatus =
-  | 'not_started'
-  | 'in_progress'
-  | 'qc_checked'
-  | 'reprocessing'
-  | 'verified';
+export type ProjectTrackerStageStatus = string;
+
+export interface ProjectTrackerStageColumn {
+  id: string;
+  label: string;
+}
+
+export interface ProjectTrackerStatusOption {
+  id: string;
+  label: string;
+  color: 'slate' | 'blue' | 'amber' | 'purple' | 'emerald' | 'rose';
+}
+
+export interface ProjectTrackerCustomField {
+  id: string;
+  label: string;
+  placeholder?: string;
+}
+
+export interface ProjectTrackerConfig {
+  trackerTitle?: string;
+  itemNoun?: string;
+  trackMode?: 'counts' | 'checklist';
+  unitLabel?: string;
+  showSummaryBar?: boolean;
+  stages: ProjectTrackerStageColumn[];
+  statuses: ProjectTrackerStatusOption[];
+  memberFields: ProjectTrackerCustomField[];
+}
 
 export interface ProjectTrackerAllocation {
   id: string;
   memberName: string;
+  memberEmail?: string;
+  taskTitle?: string;
   targetCount: number;
   finishedCount: number;
   deliverDate?: string;
@@ -93,6 +118,7 @@ export interface ProjectTrackerAllocation {
   backupDate?: string;
   status: ProjectTrackerStageStatus;
   notes?: string;
+  customFields?: Record<string, string>;
 }
 
 export interface ProjectTrackerRound {
@@ -104,6 +130,7 @@ export interface ProjectTrackerRound {
   collectCompleted?: boolean;
   checkCompleted?: boolean;
   backupCompleted?: boolean;
+  stageChecks?: Record<string, boolean>;
   notes?: string;
   allocations: ProjectTrackerAllocation[];
 }
@@ -116,6 +143,7 @@ export interface ProjectCustomSubTab {
   description?: string;
   blocks: ProjectContentBlock[];
   workplanRounds?: ProjectTrackerRound[];
+  workplanConfig?: ProjectTrackerConfig;
 }
 
 export interface ProjectInvestigator {

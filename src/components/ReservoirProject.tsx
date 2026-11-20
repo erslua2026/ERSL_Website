@@ -516,15 +516,19 @@ export const ReservoirProject: React.FC<
   // Dr. Dan Tian is the primary Quality Inspector
   const isDanTian = userEmail.includes('tian') || userName.includes('dan');
 
-  // Toggle for Admin Edit Mode
+  // True Admin check (strictly email admin or Supabase Admin role)
+  const isTrueAdmin = isEmailAdmin || isRoleAdmin;
+
+  // Toggle for Admin Edit Mode (only available to true Admins; members cannot escalate themselves)
   const [adminMode, setAdminMode] = useState<boolean>(() => {
+    if (!isEmailAdmin && !isRoleAdmin) return false;
     const saved = localStorage.getItem('ersl_reservoir_admin_mode');
     if (saved !== null) return saved === 'true';
-    return false;
+    return true;
   });
 
-  const isAdmin = isEmailAdmin || isRoleAdmin || adminMode;
-  // Dan or Admin can manage assignments, add/remove members, and update QC/delivery statuses
+  const isAdmin = isTrueAdmin && adminMode;
+  // Dan or true Admin can manage assignments, add/remove members, and update QC/delivery statuses
   const canManageAssignments = isAdmin || isDanTian;
   const canVerifyQuality = isAdmin || isDanTian;
 
@@ -1827,23 +1831,30 @@ export const ReservoirProject: React.FC<
               <Radio className={`w-3 h-3 ${realtimeActive ? 'text-emerald-300 animate-pulse' : 'text-white/70'}`} />
               <span>{cloudSyncStatus === 'synced' ? 'Cloud Synced' : realtimeActive ? 'Live Realtime' : 'Local'}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                const next = !adminMode;
-                setAdminMode(next);
-                localStorage.setItem('ersl_reservoir_admin_mode', String(next));
-                showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
-              }}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
-                isAdmin
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
-                  : 'bg-white/15 hover:bg-white/25 text-white border-white/20'
-              }`}
-            >
-              {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-              <span>{isAdmin ? 'Admin Edit' : 'Member Progress'}</span>
-            </button>
+            {isTrueAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !adminMode;
+                  setAdminMode(next);
+                  localStorage.setItem('ersl_reservoir_admin_mode', String(next));
+                  showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
+                }}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
+                  isAdmin
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
+                    : 'bg-white/15 hover:bg-white/25 text-white border-white/20'
+                }`}
+              >
+                {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                <span>{isAdmin ? 'Admin Edit' : 'Member View'}</span>
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-white/20 bg-white/10 text-white">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>{canManageAssignments ? 'QC Manager Mode' : 'Member Progress Only'}</span>
+              </span>
+            )}
             <button
               type="button"
               onClick={handleExportCSV}
@@ -1899,33 +1910,40 @@ export const ReservoirProject: React.FC<
               <span>{cloudSyncStatus === 'synced' ? 'Cloud Synced' : realtimeActive ? 'Live Realtime' : 'Local Storage'}</span>
             </span>
 
-            <button
-              type="button"
-              onClick={() => {
-                const next = !adminMode;
-                setAdminMode(next);
-                localStorage.setItem('ersl_reservoir_admin_mode', String(next));
-                showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
-              }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${
-                isAdmin
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
-                  : 'bg-white/15 hover:bg-white/25 text-white border-white/25'
-              }`}
-              title="Click to toggle between Admin Full Editing Mode and Member Progress Mode"
-            >
-              {isAdmin ? (
-                <>
-                  <ShieldCheck className="w-4 h-4 text-emerald-100" />
-                  <span>Admin Mode: Full Edit</span>
-                </>
-              ) : (
-                <>
-                  <UserCheck className="w-4 h-4 text-white" />
-                  <span>Member Mode: Progress Only</span>
-                </>
-              )}
-            </button>
+            {isTrueAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !adminMode;
+                  setAdminMode(next);
+                  localStorage.setItem('ersl_reservoir_admin_mode', String(next));
+                  showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${
+                  isAdmin
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400'
+                    : 'bg-white/15 hover:bg-white/25 text-white border-white/25'
+                }`}
+                title="Click to toggle between Admin Full Editing Mode and Member Progress Mode"
+              >
+                {isAdmin ? (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-emerald-100" />
+                    <span>Admin Mode: Full Edit</span>
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="w-4 h-4 text-white" />
+                    <span>Member View</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-white/25 bg-white/15 text-white">
+                <UserCheck className="w-4 h-4 text-white" />
+                <span>{canManageAssignments ? 'QC Manager Mode' : 'Member Mode: Progress Only'}</span>
+              </span>
+            )}
 
             <button
               onClick={handleExportCSV}

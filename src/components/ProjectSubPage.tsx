@@ -46,6 +46,7 @@ import {
   parseLegacyInvestigators,
   PreviewRole,
   resolveProjectViewerAccess,
+  SUBTAB_PRESETS,
   VISIBILITY_OPTIONS,
 } from '../lib/projectSubPageUtils';
 import { ProjectBlockRenderer } from './ProjectBlockRenderer';
@@ -292,10 +293,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     });
   };
 
-  const handleSaveWorkplanTrackerRounds = (nextRounds: NonNullable<ProjectCustomSubTab['workplanRounds']>) => {
+  const handleSaveWorkplanTracker = (
+    nextRounds: NonNullable<ProjectCustomSubTab['workplanRounds']>,
+    nextConfig: NonNullable<ProjectCustomSubTab['workplanConfig']>
+  ) => {
     if (!activeSubTabObj) return;
     const nextTabs = customSubTabs.map(t =>
-      t.id === activeSubTabObj.id ? { ...t, workplanRounds: nextRounds } : t
+      t.id === activeSubTabObj.id
+        ? { ...t, workplanRounds: nextRounds, workplanConfig: nextConfig }
+        : t
     );
     commitSubPageUpdate(nextTabs);
   };
@@ -610,8 +616,15 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             </form>
           )}
 
-          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active) */}
+          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active; Project Management tabs locked to Admin Only) */}
           {showEditControls && activeSubTabObj && (
+            activeSubTabObj.kind === 'workplan-tracker' || activeSubTabObj.kind === 'reservoir-tracker'
+          ) && !isAdmin ? (
+            <div className="pt-3 border-t border-gray-100 text-[11px] text-slate-500 bg-slate-50 rounded-xl p-2.5">
+              <strong className="text-slate-700 block">Admin-Only Management Tab</strong>
+              Only lab administrators can customize or delete Project Management tabs.
+            </div>
+          ) : showEditControls && activeSubTabObj && (
             <div className="pt-3 border-t border-gray-100 space-y-2.5 text-xs">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
                 Edit Sub-Page: {activeSubTabObj.label}
@@ -904,12 +917,13 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           ) : activeSubTabObj?.kind === 'workplan-tracker' ? (
             <ProjectWorkplanTracker
               rounds={activeSubTabObj.workplanRounds || []}
+              config={activeSubTabObj.workplanConfig}
               people={people}
-              canEdit={showEditControls || Boolean(currentUser && (isLabMember || isAdmin))}
-              isAdmin={Boolean(isAdmin && showEditControls)}
+              currentUser={currentUser}
+              isAdmin={Boolean(isAdmin && currentUser?.role === 'Admin')}
               primaryColor={headerAccent}
               projectTitle={project.title}
-              onChangeRounds={handleSaveWorkplanTrackerRounds}
+              onChange={handleSaveWorkplanTracker}
             />
           ) : (
           <div className={isOverviewLayout ? 'grid grid-cols-1 lg:grid-cols-12 gap-6' : 'space-y-4'}>
@@ -1167,6 +1181,11 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         <SubTabEditorModal
           existing={subTabModal.existing}
           primaryColor={headerAccent}
+          presets={
+            isAdmin
+              ? SUBTAB_PRESETS
+              : SUBTAB_PRESETS.filter(p => p.kind !== 'workplan-tracker' && p.kind !== 'reservoir-tracker')
+          }
           onClose={() => setSubTabModal({ open: false, existing: null })}
           onSave={handleSaveSubTab}
         />
