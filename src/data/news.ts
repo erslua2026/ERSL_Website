@@ -9,6 +9,7 @@ export interface NewsItem {
   category?: NewsCategory;
   image?: string; // URL, Box direct static link, or base64 data URI
   imageCaption?: string;
+  displaySize?: 'auto' | 'compact' | 'wide' | 'full';
 }
 
 // Public news shown on the home page. Newest first.

@@ -26,6 +26,9 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
   const [link, setLink] = useState(item?.link || '');
   const [image, setImage] = useState(item?.image || '');
   const [imageCaption, setImageCaption] = useState(item?.imageCaption || '');
+  const [displaySize, setDisplaySize] = useState<'auto' | 'compact' | 'wide' | 'full'>(
+    item?.displaySize || 'auto'
+  );
   const [error, setError] = useState('');
 
   const applyTemplate = (cat: NewsCategory) => {
@@ -69,6 +72,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
       link: link.trim() || undefined,
       image: image.trim() || undefined,
       imageCaption: imageCaption.trim() || undefined,
+      displaySize,
     };
 
     onSave(savedItem);
@@ -178,13 +182,30 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
               Summary / Content <span className="text-red-500">*</span>
             </label>
             <textarea
-              rows={3}
+              rows={5}
               value={summary}
               onChange={e => setSummary(e.target.value)}
               placeholder="Describe the research milestone, publication findings, or field campaign..."
               className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#9E1B32] leading-relaxed"
               required
             />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Longer stories automatically expand on the Home News grid and can also be opened in full via the Overview popup.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-extrabold text-slate-700 mb-1">Card Width / Display Size</label>
+            <select
+              value={displaySize}
+              onChange={e => setDisplaySize(e.target.value as 'auto' | 'compact' | 'wide' | 'full')}
+              className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white font-semibold focus:outline-none focus:border-[#9E1B32]"
+            >
+              <option value="auto">Auto (Expands automatically to fit content length)</option>
+              <option value="compact">Standard Card (1 column)</option>
+              <option value="wide">Wide Feature (2 columns)</option>
+              <option value="full">Full-Width Banner (Full row)</option>
+            </select>
           </div>
 
           {/* News Image (Upload, Clipboard Paste, or URL) */}

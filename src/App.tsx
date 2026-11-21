@@ -503,6 +503,7 @@ export default function App() {
   });
   const [newsModalOpen, setNewsModalOpen] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
+  const [viewingNewsItem, setViewingNewsItem] = useState<NewsItem | null>(null);
   const [newsCategoryFilter, setNewsCategoryFilter] = useState<string>('all');
   const [editingHomeSection, setEditingHomeSection] = useState<'mission' | 'news-header' | 'footer' | null>(null);
   const [homeEditDraft, setHomeEditDraft] = useState<SiteConfig | null>(null);
@@ -2660,8 +2661,8 @@ export default function App() {
                         ))}
                       </div>
 
-                      {/* News Grid with Photo Support */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* News Grid with Adaptive Content Sizing & Popup Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                         {news
                           .filter(n => newsCategoryFilter === 'all' || (n.category || 'general') === newsCategoryFilter)
                           .map((n) => {
@@ -2675,17 +2676,35 @@ export default function App() {
                             };
                             const badge = badgeStyles[cat] || badgeStyles.general;
                             const resolvedPhoto = resolveAssetUrl(n.image);
+                            const summaryLen = (n.summary || '').trim().length;
+                            const colSpanClass =
+                              n.displaySize === 'full'
+                                ? 'md:col-span-3'
+                                : n.displaySize === 'wide'
+                                  ? 'md:col-span-2'
+                                  : n.displaySize === 'compact'
+                                    ? ''
+                                    : summaryLen > 550
+                                      ? 'md:col-span-3'
+                                      : summaryLen > 260
+                                        ? 'md:col-span-2'
+                                        : '';
 
                             return (
-                              <article key={n.id} className="border border-gray-100 rounded-xl overflow-hidden bg-slate-50/70 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between text-left group relative">
+                              <article
+                                key={n.id}
+                                onClick={() => setViewingNewsItem(n)}
+                                className={`${colSpanClass} border border-gray-100 rounded-xl overflow-hidden bg-slate-50/70 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between text-left group relative cursor-pointer`}
+                                title="Click to open full story popup"
+                              >
                                 <div>
                                   {resolvedPhoto && !failedImages[`news-${n.id}`] && (
-                                    <div className="h-36 bg-slate-200 overflow-hidden relative">
+                                    <div className="bg-slate-100 overflow-hidden relative max-h-60 flex items-center justify-center">
                                       <img
                                         src={resolvedPhoto}
                                         alt={n.imageCaption || n.title}
                                         onError={() => setFailedImages(prev => ({ ...prev, [`news-${n.id}`]: true }))}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                        className="w-full max-h-60 object-cover group-hover:scale-105 transition-transform duration-500"
                                         referrerPolicy="no-referrer"
                                       />
                                       {n.imageCaption && (
@@ -2709,47 +2728,56 @@ export default function App() {
                                     <h3 className="font-extrabold text-slate-800 text-sm leading-snug group-hover:text-[#9E1B32] transition-colors">
                                       {n.title}
                                     </h3>
-                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line line-clamp-4 text-justify">
+                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line text-justify">
                                       {n.summary}
                                     </p>
                                   </div>
                                 </div>
 
-                                <div className="mx-4 mb-3 mt-1 pt-2.5 border-t border-gray-100 flex items-center justify-between">
-                                  {n.link ? (
-                                    n.link.startsWith('#') ? (
-                                      <button
-                                        onClick={() => setActiveTab(n.link!.replace('#', ''))}
-                                        style={{ color: subheadingAccent }}
-                                        className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
-                                      >
-                                        <span>Explore tab →</span>
-                                      </button>
-                                    ) : isSafeDataDocumentUrl(n.link) ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => openOrDownloadResource(n.link, n.title)}
-                                        style={{ color: subheadingAccent }}
-                                        className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
-                                      >
-                                        <span>Open Attachment →</span>
-                                      </button>
-                                    ) : sanitizeExternalUrl(n.link) ? (
-                                      <a
-                                        href={sanitizeExternalUrl(n.link)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ color: subheadingAccent }}
-                                        className="text-xs font-bold hover:underline flex items-center gap-1"
-                                      >
-                                        <span>Read more →</span>
-                                      </a>
-                                    ) : (
-                                      <span className="text-[10px] text-gray-400 italic">Lab update</span>
-                                    )
-                                  ) : (
-                                    <span className="text-[10px] text-gray-400 italic">Lab update</span>
-                                  )}
+                                <div
+                                  className="mx-4 mb-3 mt-1 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingNewsItem(n)}
+                                      className="text-xs font-bold text-slate-600 hover:text-[#9E1B32] inline-flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Overview Popup</span>
+                                    </button>
+                                    {n.link && (
+                                      n.link.startsWith('#') ? (
+                                        <button
+                                          onClick={() => setActiveTab(n.link!.replace('#', ''))}
+                                          style={{ color: subheadingAccent }}
+                                          className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
+                                        >
+                                          <span>Explore tab →</span>
+                                        </button>
+                                      ) : isSafeDataDocumentUrl(n.link) ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openOrDownloadResource(n.link, n.title)}
+                                          style={{ color: subheadingAccent }}
+                                          className="text-xs font-bold hover:underline cursor-pointer flex items-center gap-1"
+                                        >
+                                          <span>Open Attachment →</span>
+                                        </button>
+                                      ) : sanitizeExternalUrl(n.link) ? (
+                                        <a
+                                          href={sanitizeExternalUrl(n.link)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{ color: subheadingAccent }}
+                                          className="text-xs font-bold hover:underline flex items-center gap-1"
+                                        >
+                                          <span>Read more →</span>
+                                        </a>
+                                      ) : null
+                                    )}
+                                  </div>
 
                                   {(currentUser || isAdmin || editMode) && (
                                     <div className="flex items-center space-x-1">
@@ -5517,6 +5545,141 @@ export default function App() {
           }}
         />
       )}
+
+      {/* News Story Overview Popup Modal */}
+      {viewingNewsItem && (() => {
+        const badgeStyles: Record<string, { label: string; icon: string; cls: string }> = {
+          publication: { label: 'Publication', icon: '🎓', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+          achievement: { label: 'Achievement', icon: '🏆', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+          field: { label: 'Field Campaign', icon: '🚁', cls: 'bg-sky-50 text-sky-800 border-sky-200' },
+          blog: { label: 'Lab Blog', icon: '✍️', cls: 'bg-purple-50 text-purple-800 border-purple-200' },
+          general: { label: 'Announcement', icon: '📢', cls: 'bg-slate-100 text-slate-700 border-slate-200' },
+        };
+        const badge = badgeStyles[viewingNewsItem.category || 'general'] || badgeStyles.general;
+        const resolvedPhoto = resolveAssetUrl(viewingNewsItem.image);
+        return (
+          <div
+            className="fixed inset-0 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+            onClick={() => setViewingNewsItem(null)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 text-white flex items-center justify-between gap-3" style={{ backgroundColor: accentColor }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base">{badge.icon}</span>
+                  <span className="text-xs font-extrabold uppercase tracking-wider truncate">
+                    {badge.label} &middot; {new Date(viewingNewsItem.date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingNewsItem(null)}
+                  className="text-white/85 hover:text-white bg-white/15 hover:bg-white/25 p-1.5 rounded-full cursor-pointer shrink-0"
+                  aria-label="Close overview"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="max-h-[80vh] overflow-y-auto p-5 sm:p-6 space-y-4">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-snug">
+                  {viewingNewsItem.title}
+                </h3>
+
+                {resolvedPhoto && !failedImages[`news-${viewingNewsItem.id}`] && (
+                  <div className="bg-slate-50 border border-gray-100 rounded-xl overflow-hidden flex flex-col items-center">
+                    <img
+                      src={resolvedPhoto}
+                      alt={viewingNewsItem.imageCaption || viewingNewsItem.title}
+                      onError={() => setFailedImages(prev => ({ ...prev, [`news-${viewingNewsItem.id}`]: true }))}
+                      className="w-full max-h-[380px] object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                    {viewingNewsItem.imageCaption && (
+                      <p className="w-full px-3 py-1.5 bg-slate-100 text-[11px] text-slate-600 text-center border-t border-gray-100">
+                        {viewingNewsItem.imageCaption}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line text-justify">
+                  {viewingNewsItem.summary}
+                </p>
+
+                <div className="pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {viewingNewsItem.link && (
+                      viewingNewsItem.link.startsWith('#') ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const targetTab = viewingNewsItem.link!.replace('#', '');
+                            setViewingNewsItem(null);
+                            setActiveTab(targetTab);
+                          }}
+                          style={{ backgroundColor: accentColor }}
+                          className="text-white text-xs font-bold px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer"
+                        >
+                          Explore Section &rarr;
+                        </button>
+                      ) : isSafeDataDocumentUrl(viewingNewsItem.link) ? (
+                        <button
+                          type="button"
+                          onClick={() => openOrDownloadResource(viewingNewsItem.link, viewingNewsItem.title)}
+                          style={{ backgroundColor: accentColor }}
+                          className="text-white text-xs font-bold px-4 py-2 rounded-lg hover:opacity-90 inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download Attachment</span>
+                        </button>
+                      ) : sanitizeExternalUrl(viewingNewsItem.link) ? (
+                        <a
+                          href={sanitizeExternalUrl(viewingNewsItem.link)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ backgroundColor: accentColor }}
+                          className="text-white text-xs font-bold px-4 py-2 rounded-lg hover:opacity-90 inline-flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open Full Reference Link</span>
+                        </a>
+                      ) : null
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {(currentUser || isAdmin || editMode) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = viewingNewsItem;
+                          setViewingNewsItem(null);
+                          setEditingNewsItem(target);
+                          setNewsModalOpen(true);
+                        }}
+                        className="px-3.5 py-2 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit Story</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setViewingNewsItem(null)}
+                      className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* News & Announcements Modal */}
       {newsModalOpen && (
