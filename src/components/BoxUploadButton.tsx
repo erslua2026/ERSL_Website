@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ClipboardPaste,
@@ -6,8 +6,10 @@ import {
   FileCheck2,
   FileText,
   FolderOpen,
+  Globe,
   Link2,
   Loader2,
+  Lock,
   RefreshCw,
   Trash2,
   UploadCloud,
@@ -21,6 +23,7 @@ import {
   ENTITY_CATEGORY_ROOTS,
   formatBoxFileSize,
   getBoxFileShareLinks,
+  getExpectedBoxFolderPath,
   listBoxFolderContents,
   uploadDocumentWithBoxFallback,
 } from '../lib/boxSync';
@@ -83,29 +86,55 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
   const [folderHistory, setFolderHistory] = useState<Array<{ folderId: string; path: string }>>([]);
   const [linkingFileId, setLinkingFileId] = useState<string | null>(null);
 
+  const defaultPrivacy = Boolean(
+    entityContext?.isPrivate ??
+      (destination === 'workplan' ||
+        destination === 'bulletins' ||
+        destination === 'teaching' ||
+        destination.startsWith('people/') ||
+        destination.startsWith('students/') ||
+        destination.startsWith('projects/'))
+  );
+  const [uploadAsPrivate, setUploadAsPrivate] = useState<boolean>(defaultPrivacy);
+
+  useEffect(() => {
+    setUploadAsPrivate(defaultPrivacy);
+  }, [defaultPrivacy]);
+
   const effectiveUploadDestination = (
     entityContext?.category && (entityContext.itemName || entityContext.itemId)
       ? `${entityContext.category}/${buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')}`
       : destination
   ) as Exclude<BoxFileDestination, `images/${BoxImageCategory}`>;
 
+  const inferredCat = inferCategoryFromDestination(effectiveUploadDestination, entityContext);
+  const targetBoxPathPreview = inferredCat
+    ? getExpectedBoxFolderPath(
+        inferredCat,
+        entityContext?.itemName || inferredCat,
+        entityContext?.itemId || 'Item',
+        uploadAsPrivate
+      )
+    : `06_Website_Data_Sync/${destination}`;
+
   const processFile = async (file: File) => {
     setUploading(true);
     setStatusMsg(null);
     try {
       const res = await uploadDocumentWithBoxFallback(file, effectiveUploadDestination, {
-        isPrivate: entityContext?.isPrivate,
+        isPrivate: uploadAsPrivate,
       });
       onUploaded(res.url, res.fileName);
       setStatusMsg({
         type: 'ok',
         text: res.uploadedToBox
-          ? `Uploaded to UA Box (${ENTITY_CATEGORY_ROOTS[inferCategoryFromDestination(effectiveUploadDestination, entityContext) || 'projects']}): ${file.name}`
-          : `Attached locally & ready to save: ${file.name}`,
+          ? `Uploaded to UA Box (${uploadAsPrivate ? 'Private' : 'Public'} · ${targetBoxPathPreview}): ${file.name}`
+          : `Attached locally & ready to save (${uploadAsPrivate ? 'Private' : 'Public'}): ${file.name}`,
       });
       if (pickerOpen) {
         loadBoxFolder({
           category: pickerCategory,
+          isPrivate: uploadAsPrivate,
           folderName: entityContext?.itemName
             ? buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')
             : undefined,
@@ -128,6 +157,7 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
     category?: BoxEntityCategory;
     folderName?: string;
     folderPath?: string;
+    isPrivate?: boolean;
     pushHistory?: boolean;
   }) => {
     setPickerLoading(true);
@@ -137,6 +167,7 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
       category: opts.category,
       folderName: opts.folderName,
       folderPath: opts.folderPath,
+      isPrivate: opts.isPrivate ?? uploadAsPrivate,
     });
     setPickerLoading(false);
 
@@ -171,7 +202,7 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
 
   const handleAttachBoxFile = async (entry: BoxFolderEntry) => {
     setLinkingFileId(entry.id);
-    const linkRes = await getBoxFileShareLinks(entry.id, Boolean(entityContext?.isPrivate));
+    const linkRes = await getBoxFileShareLinks(entry.id, uploadAsPrivate);
     setLinkingFileId(null);
     const chosenUrl =
       linkRes.shareUrl || linkRes.directUrl || entry.shareUrl || entry.directUrl || '';
@@ -267,6 +298,41 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
         dragging ? 'bg-red-50/50 border-[#9E1B32]' : 'bg-slate-50 border-slate-200'
       }`}
     >
+      {/* Explicit Box Privacy & Folder Target Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-gray-200/80 text-[10px]">
+        <span className="inline-flex items-center gap-1.5 font-mono text-slate-600 truncate">
+          {uploadAsPrivate ? (
+            <Lock className="w-3 h-3 text-amber-700 shrink-0" />
+          ) : (
+            <Globe className="w-3 h-3 text-emerald-700 shrink-0" />
+          )}
+          <span className="font-bold text-slate-700">Box Target:</span>
+          <span className="truncate">{targetBoxPathPreview}</span>
+        </span>
+        <div className="inline-flex items-center rounded-md border border-gray-300 bg-white overflow-hidden shrink-0">
+          <button
+            type="button"
+            onClick={() => setUploadAsPrivate(false)}
+            className={`px-2 py-0.5 font-bold inline-flex items-center gap-1 cursor-pointer ${
+              !uploadAsPrivate ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Save to 01_Public folder with open shared link"
+          >
+            <Globe className="w-2.5 h-2.5" /> Public
+          </button>
+          <button
+            type="button"
+            onClick={() => setUploadAsPrivate(true)}
+            className={`px-2 py-0.5 font-bold inline-flex items-center gap-1 cursor-pointer ${
+              uploadAsPrivate ? 'bg-amber-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Save to 02_Private_Members folder with restricted access"
+          >
+            <Lock className="w-2.5 h-2.5" /> Private
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <label className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white cursor-pointer transition-colors">
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}

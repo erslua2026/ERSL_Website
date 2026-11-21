@@ -35,30 +35,30 @@ const BOX_ROOT_FOLDER_ID = Deno.env.get('BOX_ROOT_FOLDER_ID') ?? '436999117457';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-// Explicit allowlist mapping ERSL portal keys to ERSL_Website_Storage folders
+// Explicit allowlist mapping ERSL portal JSON state keys cleanly into 06_Website_Data_Sync/JSON_Backups
 const SECTION_FOLDER_MAP: Record<string, string> = {
-  ersl_sec_datalayers: 'Datasets',
-  ersl_sec_publications: '02_Datasets_Public',
-  ersl_sec_themes: '02_Datasets_Public',
-  ersl_subpage_themes: '02_Datasets_Public',
+  ersl_sec_datalayers: '06_Website_Data_Sync',
+  ersl_sec_publications: '06_Website_Data_Sync',
+  ersl_sec_themes: '06_Website_Data_Sync',
+  ersl_subpage_themes: '06_Website_Data_Sync',
   ersl_sec_home: '06_Website_Data_Sync',
-  ersl_sec_research: '02_Datasets_Public',
-  ersl_sec_people: 'People',
-  ersl_sec_teaching: '03_Datasets_Members',
-  ersl_sec_bulletins: '03_Datasets_Members',
-  ersl_sec_bulletin_folders: '03_Datasets_Members',
-  ersl_professional_hub: '03_Datasets_Members',
-  ersl_professional_posts: '03_Datasets_Members',
-  ersl_workplan: '03_Datasets_Members',
-  ersl_workplan_matrix: '03_Datasets_Members',
-  ersl_reservoir: '03_Datasets_Members',
-  ersl_reservoir_matrix: '03_Datasets_Members',
-  ersl_sec_projects: 'Projects',
-  ersl_subpage_projects: 'Projects',
-  ersl_subpage_students: 'People',
-  ersl_sec_software: 'Software',
-  ersl_sec_instruments: 'Instruments',
-  ersl_subpage_instruments: 'Instruments',
+  ersl_sec_research: '06_Website_Data_Sync',
+  ersl_sec_people: '06_Website_Data_Sync',
+  ersl_sec_teaching: '06_Website_Data_Sync',
+  ersl_sec_bulletins: '06_Website_Data_Sync',
+  ersl_sec_bulletin_folders: '06_Website_Data_Sync',
+  ersl_professional_hub: '06_Website_Data_Sync',
+  ersl_professional_posts: '06_Website_Data_Sync',
+  ersl_workplan: '06_Website_Data_Sync',
+  ersl_workplan_matrix: '06_Website_Data_Sync',
+  ersl_reservoir: '06_Website_Data_Sync',
+  ersl_reservoir_matrix: '06_Website_Data_Sync',
+  ersl_sec_projects: '06_Website_Data_Sync',
+  ersl_subpage_projects: '06_Website_Data_Sync',
+  ersl_subpage_students: '06_Website_Data_Sync',
+  ersl_sec_software: '06_Website_Data_Sync',
+  ersl_sec_instruments: '06_Website_Data_Sync',
+  ersl_subpage_instruments: '06_Website_Data_Sync',
   ersl_sec_news: '06_Website_Data_Sync',
   ersl_site_config: '06_Website_Data_Sync',
   ersl_custom_pages: '06_Website_Data_Sync',
@@ -73,18 +73,28 @@ const ENTITY_CATEGORY_FOLDER_MAP: Record<string, string> = {
   software: 'Software',
 };
 
+const PUBLIC_BUCKET = '01_Public';
+const PRIVATE_BUCKET = '02_Private_Members';
+const PRIVACY_BUCKET_CATEGORIES = new Set(['datasets', 'software']);
+const LEGACY_ROOT_FOLDERS = [
+  '02_Datasets_Public',
+  '03_Datasets_Members',
+  '04_Projects',
+  '05_Softwares_And_Guides',
+];
+
 const PRIVATE_UPLOAD_DESTINATIONS = new Set(['workplan', 'bulletins', 'teaching']);
 
 const FILE_DESTINATION_MAP: Record<string, [string, string?]> = {
-  publications: ['02_Datasets_Public', 'Publications'],
-  datasets: ['Datasets', '_Shared_Datasets'],
-  teaching: ['03_Datasets_Members', 'Teaching_Materials'],
-  bulletins: ['03_Datasets_Members', 'Bulletins_Docs'],
-  workplan: ['03_Datasets_Members', 'Workplan_Attachments'],
-  projects: ['Projects', '_Shared_Project_Files'],
-  instruments: ['Instruments', '_Shared_Manuals'],
-  software: ['Software', '_Shared_Releases'],
-  people: ['People', '_Shared_Files'],
+  publications: ['06_Website_Data_Sync', 'Publications_Files'],
+  teaching: ['06_Website_Data_Sync', 'Teaching_Materials'],
+  bulletins: ['06_Website_Data_Sync', 'Bulletins_Docs'],
+  workplan: ['06_Website_Data_Sync', 'Workplan_Attachments'],
+  datasets: ['Datasets', PUBLIC_BUCKET],
+  projects: ['Projects', '_Shared_Projects'],
+  instruments: ['Instruments', '_Shared_Instruments'],
+  software: ['Software', PUBLIC_BUCKET],
+  people: ['People', '_Shared_People'],
   general: ['06_Website_Data_Sync', 'Uploads'],
 };
 
@@ -245,6 +255,164 @@ async function downscopeUploadToken(token: string, folderId: string): Promise<st
   }
 }
 
+async function moveBoxEntry(
+  token: string,
+  entryId: string,
+  entryType: 'file' | 'folder',
+  targetParentId: string
+): Promise<boolean> {
+  const endpoint =
+    entryType === 'folder'
+      ? `https://api.box.com/2.0/folders/${entryId}`
+      : `https://api.box.com/2.0/files/${entryId}`;
+  const res = await fetch(endpoint, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ parent: { id: targetParentId } }),
+  });
+  return res.ok;
+}
+
+async function deleteBoxFile(token: string, fileId: string): Promise<boolean> {
+  const res = await fetch(`https://api.box.com/2.0/files/${fileId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.ok || res.status === 204;
+}
+
+async function deleteEmptyBoxFolder(token: string, folderId: string): Promise<boolean> {
+  const res = await fetch(`https://api.box.com/2.0/folders/${folderId}?recursive=false`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.ok || res.status === 204;
+}
+
+async function ensureUniformItemFolder(params: {
+  token: string;
+  category: string;
+  catFolderId: string;
+  catEntries: any[];
+  itemName: string;
+  isPrivate: boolean;
+}): Promise<{ id: string; folderPath: string; shareUrl: string; created: boolean }> {
+  const { token, category, catFolderId, catEntries, itemName, isPrivate } = params;
+  const rootName = ENTITY_CATEGORY_FOLDER_MAP[category];
+
+  if (PRIVACY_BUCKET_CATEGORIES.has(category)) {
+    const targetBucket = isPrivate ? PRIVATE_BUCKET : PUBLIC_BUCKET;
+    const otherBucket = isPrivate ? PUBLIC_BUCKET : PRIVATE_BUCKET;
+
+    const targetBucketRes = await getOrCreateFolderWithEntries(token, catFolderId, targetBucket, catEntries);
+    const targetEntries = await listFolderItems(token, targetBucketRes.id);
+
+    // Migrate cleanly if a flat folder existed directly under Datasets/Software or inside the opposite privacy bucket
+    const flatMatch = catEntries.find(
+      (e: any) =>
+        e.type === 'folder' &&
+        e.id !== targetBucketRes.id &&
+        e.name !== PUBLIC_BUCKET &&
+        e.name !== PRIVATE_BUCKET &&
+        String(e.name || '').toLowerCase() === itemName.toLowerCase()
+    );
+    if (flatMatch) {
+      const moved = await moveBoxEntry(token, flatMatch.id, 'folder', targetBucketRes.id);
+      if (moved) {
+        targetEntries.push(flatMatch);
+      }
+    } else {
+      const otherBucketEntry = catEntries.find((e: any) => e.type === 'folder' && e.name === otherBucket);
+      if (otherBucketEntry) {
+        const otherEntries = await listFolderItems(token, otherBucketEntry.id);
+        const oppositeMatch = otherEntries.find(
+          (e: any) => e.type === 'folder' && String(e.name || '').toLowerCase() === itemName.toLowerCase()
+        );
+        if (oppositeMatch) {
+          const moved = await moveBoxEntry(token, oppositeMatch.id, 'folder', targetBucketRes.id);
+          if (moved) targetEntries.push(oppositeMatch);
+        }
+      }
+    }
+
+    const itemRes = await getOrCreateFolderWithEntries(token, targetBucketRes.id, itemName, targetEntries);
+    const shareUrl = await createFolderSharedLink(token, itemRes.id, isPrivate);
+    return {
+      id: itemRes.id,
+      folderPath: `${rootName}/${targetBucket}/${itemName}`,
+      shareUrl,
+      created: itemRes.created,
+    };
+  }
+
+  // People, Projects, Instruments: create item folder + uniform 01_Public & 02_Private_Members subfolders inside
+  const itemRes = await getOrCreateFolderWithEntries(token, catFolderId, itemName, catEntries);
+  const subEntries = await listFolderItems(token, itemRes.id);
+  const pubRes = await getOrCreateFolderWithEntries(token, itemRes.id, PUBLIC_BUCKET, subEntries);
+  const privRes = await getOrCreateFolderWithEntries(token, itemRes.id, PRIVATE_BUCKET, subEntries);
+
+  await Promise.all([
+    createFolderSharedLink(token, pubRes.id, false),
+    createFolderSharedLink(token, privRes.id, true),
+  ]);
+  const shareUrl = await createFolderSharedLink(token, itemRes.id, isPrivate);
+
+  return {
+    id: itemRes.id,
+    folderPath: `${rootName}/${itemName}`,
+    shareUrl,
+    created: itemRes.created,
+  };
+}
+
+async function archiveLegacyRootFolders(token: string): Promise<{ cleaned: string[]; archivedFiles: number }> {
+  const rootEntries = await listFolderItems(token, BOX_ROOT_FOLDER_ID);
+  const syncRootId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '06_Website_Data_Sync');
+  const jsonBackupsId = await ensureFolder(token, syncRootId, 'JSON_Backups');
+  const legacyArchiveRootId = await ensureFolder(token, syncRootId, '_Archived_Legacy_Folders');
+
+  const cleaned: string[] = [];
+  let archivedFiles = 0;
+
+  // Move any loose JSON backup snapshots out of research category folders cleanly into JSON_Backups
+  for (const rootFolderName of [...LEGACY_ROOT_FOLDERS, ...Object.values(ENTITY_CATEGORY_FOLDER_MAP)]) {
+    const entry = rootEntries.find(
+      (e: any) => e.type === 'folder' && String(e.name || '').toLowerCase() === rootFolderName.toLowerCase()
+    );
+    if (!entry) continue;
+
+    const children = await listFolderItems(token, entry.id);
+    const isLegacyFolder = LEGACY_ROOT_FOLDERS.some(l => l.toLowerCase() === rootFolderName.toLowerCase());
+    let archiveSubId: string | null = null;
+
+    for (const child of children) {
+      if (child.type === 'file' && String(child.name || '').toLowerCase().endsWith('.json')) {
+        const moved = await moveBoxEntry(token, child.id, 'file', jsonBackupsId);
+        if (!moved) {
+          await deleteBoxFile(token, child.id);
+        }
+        archivedFiles++;
+      } else if (isLegacyFolder) {
+        if (!archiveSubId) {
+          archiveSubId = await ensureFolder(token, legacyArchiveRootId, rootFolderName);
+        }
+        await moveBoxEntry(token, child.id, child.type === 'folder' ? 'folder' : 'file', archiveSubId);
+        archivedFiles++;
+      }
+    }
+
+    if (isLegacyFolder) {
+      const removed = await deleteEmptyBoxFolder(token, entry.id);
+      if (removed) cleaned.push(rootFolderName);
+    }
+  }
+
+  return { cleaned, archivedFiles };
+}
+
 async function upsertFileToBox(
   token: string,
   folderId: string,
@@ -311,16 +479,23 @@ async function createSharedLinks(
   return { directUrl, shareUrl };
 }
 
-async function resolveUploadFolderId(token: string, destination: string): Promise<string> {
+async function resolveUploadFolderId(
+  token: string,
+  destination: string,
+  isPrivate = false
+): Promise<string> {
   if (destination.startsWith('images/')) {
     const sub = sanitizeFolderSegment(destination.slice('images/'.length), 'General');
     const rootImagesId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '01_Website_Images');
     return ensureFolder(token, rootImagesId, sub);
   }
+  const bucket = isPrivate ? PRIVATE_BUCKET : PUBLIC_BUCKET;
+
   if (destination.startsWith('students/')) {
     const rawName = sanitizeFolderSegment(destination.slice('students/'.length), 'General');
     const rootPeopleId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, 'People');
-    return ensureFolder(token, rootPeopleId, rawName);
+    const personId = await ensureFolder(token, rootPeopleId, rawName);
+    return ensureFolder(token, personId, bucket);
   }
 
   for (const [catKey, rootName] of Object.entries(ENTITY_CATEGORY_FOLDER_MAP)) {
@@ -328,8 +503,18 @@ async function resolveUploadFolderId(token: string, destination: string): Promis
     if (destination.startsWith(prefix)) {
       const subName = sanitizeFolderSegment(destination.slice(prefix.length), 'General');
       const catFolderId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, rootName);
-      return ensureFolder(token, catFolderId, subName);
+      if (PRIVACY_BUCKET_CATEGORIES.has(catKey)) {
+        const privacyId = await ensureFolder(token, catFolderId, bucket);
+        return ensureFolder(token, privacyId, subName);
+      }
+      const itemId = await ensureFolder(token, catFolderId, subName);
+      return ensureFolder(token, itemId, bucket);
     }
+  }
+
+  if (destination === 'datasets' || destination === 'software') {
+    const rootId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, ENTITY_CATEGORY_FOLDER_MAP[destination]);
+    return ensureFolder(token, rootId, bucket);
   }
 
   const [parentName, childName] = FILE_DESTINATION_MAP[destination] || ['06_Website_Data_Sync', 'Uploads'];
@@ -425,6 +610,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (action === 'cleanup_legacy_folders') {
+      if (!isBootstrapAdmin && callerRole !== 'admin') {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Administrator permission required to reorganize root folders.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const summary = await archiveLegacyRootFolders(token);
+      return new Response(
+        JSON.stringify({ ok: true, ...summary }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (action === 'ensure_entity_folder') {
       const category = String(body?.category || '').toLowerCase();
       const rootFolderName = ENTITY_CATEGORY_FOLDER_MAP[category];
@@ -441,19 +640,26 @@ Deno.serve(async (req: Request) => {
 
       const rootEntries = await listFolderItems(token, BOX_ROOT_FOLDER_ID);
       const catRes = await getOrCreateFolderWithEntries(token, BOX_ROOT_FOLDER_ID, rootFolderName, rootEntries);
-      const itemRes = await getOrCreateFolderWithEntries(token, catRes.id, safeName);
-      const shareUrl = itemRes.shareUrl || (await createFolderSharedLink(token, itemRes.id, isPrivate));
+      const catEntries = await listFolderItems(token, catRes.id);
+      const ensured = await ensureUniformItemFolder({
+        token,
+        category,
+        catFolderId: catRes.id,
+        catEntries,
+        itemName: safeName,
+        isPrivate,
+      });
 
       return new Response(
         JSON.stringify({
           ok: true,
           category,
           categoryFolderId: catRes.id,
-          folderId: itemRes.id,
+          folderId: ensured.id,
           folderName: safeName,
-          folderPath: `${rootFolderName}/${safeName}`,
-          shareUrl,
-          created: itemRes.created,
+          folderPath: ensured.folderPath,
+          shareUrl: ensured.shareUrl,
+          created: ensured.created,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -461,6 +667,10 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'sync_entity_folders') {
       const items = Array.isArray(body?.items) ? body.items : [];
+      if (body?.cleanupLegacy && (isBootstrapAdmin || callerRole === 'admin')) {
+        await archiveLegacyRootFolders(token).catch(() => {});
+      }
+
       const rootEntries = await listFolderItems(token, BOX_ROOT_FOLDER_ID);
       const categoryFolderMap: Record<string, { id: string; shareUrl: string; entries: any[] }> = {};
 
@@ -468,6 +678,10 @@ Deno.serve(async (req: Request) => {
         const catRes = await getOrCreateFolderWithEntries(token, BOX_ROOT_FOLDER_ID, rootName, rootEntries);
         const catShareUrl = catRes.shareUrl || (await createFolderSharedLink(token, catRes.id, catKey === 'people' || catKey === 'projects'));
         const catEntries = await listFolderItems(token, catRes.id);
+        if (PRIVACY_BUCKET_CATEGORIES.has(catKey)) {
+          await getOrCreateFolderWithEntries(token, catRes.id, PUBLIC_BUCKET, catEntries);
+          await getOrCreateFolderWithEntries(token, catRes.id, PRIVATE_BUCKET, catEntries);
+        }
         categoryFolderMap[catKey] = { id: catRes.id, shareUrl: catShareUrl, entries: catEntries };
       }
 
@@ -487,18 +701,25 @@ Deno.serve(async (req: Request) => {
         if (!catInfo || !item?.id) continue;
 
         const safeName = sanitizeFolderSegment(String(item.folderName || item.name || item.id), String(item.id));
-        const itemRes = await getOrCreateFolderWithEntries(token, catInfo.id, safeName, catInfo.entries);
         const isPrivate = item?.isPrivate !== undefined ? Boolean(item.isPrivate) : (catKey === 'people' || catKey === 'projects');
-        const shareUrl = itemRes.shareUrl || (await createFolderSharedLink(token, itemRes.id, isPrivate));
+
+        const ensured = await ensureUniformItemFolder({
+          token,
+          category: catKey,
+          catFolderId: catInfo.id,
+          catEntries: catInfo.entries,
+          itemName: safeName,
+          isPrivate,
+        });
 
         results.push({
           category: catKey,
           id: String(item.id),
-          folderId: itemRes.id,
+          folderId: ensured.id,
           folderName: safeName,
-          folderPath: `${ENTITY_CATEGORY_FOLDER_MAP[catKey]}/${safeName}`,
-          shareUrl,
-          created: itemRes.created,
+          folderPath: ensured.folderPath,
+          shareUrl: ensured.shareUrl,
+          created: ensured.created,
         });
       }
 
@@ -527,6 +748,7 @@ Deno.serve(async (req: Request) => {
       const requestedFolderId = body?.folderId ? String(body.folderId).trim() : '';
       const category = body?.category ? String(body.category).toLowerCase() : '';
       const rawSubName = body?.folderName ? String(body.folderName).trim() : '';
+      const isPrivate = body?.isPrivate !== undefined ? Boolean(body.isPrivate) : (category === 'people' || category === 'projects');
 
       let targetFolderId = BOX_ROOT_FOLDER_ID;
       let resolvedPath = 'ERSL_Website_Storage';
@@ -539,8 +761,17 @@ Deno.serve(async (req: Request) => {
         const catId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, rootName);
         if (rawSubName) {
           const safeSub = sanitizeFolderSegment(rawSubName, 'Item');
-          targetFolderId = await ensureFolder(token, catId, safeSub);
-          resolvedPath = `${rootName}/${safeSub}`;
+          const catEntries = await listFolderItems(token, catId);
+          const ensured = await ensureUniformItemFolder({
+            token,
+            category,
+            catFolderId: catId,
+            catEntries,
+            itemName: safeSub,
+            isPrivate,
+          });
+          targetFolderId = ensured.id;
+          resolvedPath = ensured.folderPath;
         } else {
           targetFolderId = catId;
           resolvedPath = rootName;
@@ -549,7 +780,7 @@ Deno.serve(async (req: Request) => {
 
       const [entries, folderShareUrl] = await Promise.all([
         listFolderItems(token, targetFolderId),
-        createFolderSharedLink(token, targetFolderId, category === 'people' || category === 'projects'),
+        createFolderSharedLink(token, targetFolderId, isPrivate),
       ]);
 
       const normalizedEntries = entries.map((e: any) => ({
@@ -597,19 +828,20 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'get_upload_token') {
       const resolvedDestination = String(body?.destination || 'general');
-      const targetFolderId = body?.folderId
-        ? String(body.folderId).trim()
-        : await resolveUploadFolderId(token, resolvedDestination);
-      const [uploadToken, folderShareUrl] = await Promise.all([
-        downscopeUploadToken(token, targetFolderId),
-        createFolderSharedLink(
-          token,
-          targetFolderId,
-          PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
+      const isPrivateDest =
+        body?.isPrivate !== undefined
+          ? Boolean(body.isPrivate)
+          : PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
             resolvedDestination.startsWith('people/') ||
             resolvedDestination.startsWith('students/') ||
-            resolvedDestination.startsWith('projects/')
-        ),
+            resolvedDestination.startsWith('projects/');
+
+      const targetFolderId = body?.folderId
+        ? String(body.folderId).trim()
+        : await resolveUploadFolderId(token, resolvedDestination, isPrivateDest);
+      const [uploadToken, folderShareUrl] = await Promise.all([
+        downscopeUploadToken(token, targetFolderId),
+        createFolderSharedLink(token, targetFolderId, isPrivateDest),
       ]);
 
       return new Response(
@@ -641,9 +873,16 @@ Deno.serve(async (req: Request) => {
       }
 
       const resolvedDestination = String(destination || `images/${String(category)}`);
+      const isPrivateDest =
+        body?.isPrivate !== undefined
+          ? Boolean(body.isPrivate)
+          : PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
+            resolvedDestination.startsWith('students/') ||
+            resolvedDestination.startsWith('people/');
+
       const targetFolderId = explicitFolderId
         ? String(explicitFolderId).trim()
-        : await resolveUploadFolderId(token, resolvedDestination);
+        : await resolveUploadFolderId(token, resolvedDestination, isPrivateDest);
       const cleanName = String(fileName).replace(/[^A-Za-z0-9._-]/g, '_');
       const uploaded = await upsertFileToBox(
         token,
@@ -652,11 +891,6 @@ Deno.serve(async (req: Request) => {
         decodeBase64(base64Data),
         contentType
       );
-      const isPrivateDest =
-        PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
-        resolvedDestination.startsWith('students/') ||
-        resolvedDestination.startsWith('people/') ||
-        Boolean(body?.isPrivate);
       const links = uploaded?.id
         ? await createSharedLinks(token, uploaded.id, isPrivateDest)
         : { directUrl: null, shareUrl: null };
@@ -690,8 +924,8 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const targetSubfolder = SECTION_FOLDER_MAP[keyStr];
-      const folderId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, targetSubfolder);
+      const syncRootId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '06_Website_Data_Sync');
+      const jsonBackupsId = await ensureFolder(token, syncRootId, 'JSON_Backups');
       const cleanKey = keyStr.replace(/[^A-Za-z0-9._-]/g, '_');
       const jsonText = JSON.stringify(
         {
@@ -705,7 +939,7 @@ Deno.serve(async (req: Request) => {
       );
       const uploaded = await upsertFileToBox(
         token,
-        folderId,
+        jsonBackupsId,
         `${cleanKey}.json`,
         new TextEncoder().encode(jsonText),
         'application/json'
@@ -715,7 +949,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           ok: true,
           fileId: uploaded?.id,
-          folder: targetSubfolder,
+          folder: '06_Website_Data_Sync/JSON_Backups',
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

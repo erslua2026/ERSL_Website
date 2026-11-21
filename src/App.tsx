@@ -774,15 +774,15 @@ export default function App() {
       setTimeout(() => setCloudStatus(prev => (prev?.type === 'saved' ? null : prev)), 2500);
     }
 
-    // Automatically ensure UA Box folders exist for ALL current People, Projects, Instruments, Datasets & Software
+    // Automatically ensure uniform UA Box folders exist for ALL current People, Projects, Instruments, Datasets & Software
     if (effectiveUser?.role === 'Admin' && !boxAutoSyncDoneRef.current) {
       let alreadySyncedSession = false;
       try {
-        alreadySyncedSession = sessionStorage.getItem('ersl_box_folders_synced_v1') === '1';
+        alreadySyncedSession = sessionStorage.getItem('ersl_box_folders_synced_v2') === '1';
       } catch { }
       if (!alreadySyncedSession) {
         boxAutoSyncDoneRef.current = true;
-        try { sessionStorage.setItem('ersl_box_folders_synced_v1', '1'); } catch { }
+        try { sessionStorage.setItem('ersl_box_folders_synced_v2', '1'); } catch { }
         const prjList = pick<Project[]>('ersl_sec_projects', 'projects');
         syncAllEntityBoxFolders({
           people: ppl ? applyAutoGraduation(ppl).updatedList : people,
@@ -790,6 +790,7 @@ export default function App() {
           instruments: inst || instruments,
           datasets: dl || dataLayers,
           software: soft || softwareList,
+          cleanupLegacy: true,
         }).then(res => {
           if (res.ok && res.results && res.results.length > 0) {
             applyBoxFolderSyncResults(res.results);
@@ -1791,7 +1792,7 @@ export default function App() {
       try { localStorage.setItem('ersl_datalayers', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ dataLayers: updated });
       appendAuditLog(isEdit ? 'UPDATE_DATALAYER' : 'ADD_DATALAYER', savedItem.name);
-      provisionSingleEntityBoxFolder('datasets', savedItem.id, savedItem.name, savedItem.availability === 'Internal');
+      provisionSingleEntityBoxFolder('datasets', savedItem.id, savedItem.name, savedItem.availability !== 'Public');
     } else if (modalType === 'research-theme') {
       const updated = isEdit ? themes.map(t => t.id === savedItem.id ? savedItem : t) : [...themes, savedItem];
       setThemes(updated);
@@ -2661,8 +2662,8 @@ export default function App() {
                         ))}
                       </div>
 
-                      {/* News Grid with Adaptive Content Sizing & Popup Overview */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                      {/* News Grid (Uniform Card Size + Click for Full Overview Popup) */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {news
                           .filter(n => newsCategoryFilter === 'all' || (n.category || 'general') === newsCategoryFilter)
                           .map((n) => {
@@ -2676,35 +2677,22 @@ export default function App() {
                             };
                             const badge = badgeStyles[cat] || badgeStyles.general;
                             const resolvedPhoto = resolveAssetUrl(n.image);
-                            const summaryLen = (n.summary || '').trim().length;
-                            const colSpanClass =
-                              n.displaySize === 'full'
-                                ? 'md:col-span-3'
-                                : n.displaySize === 'wide'
-                                  ? 'md:col-span-2'
-                                  : n.displaySize === 'compact'
-                                    ? ''
-                                    : summaryLen > 550
-                                      ? 'md:col-span-3'
-                                      : summaryLen > 260
-                                        ? 'md:col-span-2'
-                                        : '';
 
                             return (
                               <article
                                 key={n.id}
                                 onClick={() => setViewingNewsItem(n)}
-                                className={`${colSpanClass} border border-gray-100 rounded-xl overflow-hidden bg-slate-50/70 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between text-left group relative cursor-pointer`}
-                                title="Click to open full story popup"
+                                className="border border-gray-100 rounded-xl overflow-hidden bg-slate-50/70 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between text-left group relative cursor-pointer"
+                                title="Click to view full story in popup"
                               >
                                 <div>
                                   {resolvedPhoto && !failedImages[`news-${n.id}`] && (
-                                    <div className="bg-slate-100 overflow-hidden relative max-h-60 flex items-center justify-center">
+                                    <div className="h-36 bg-slate-200 overflow-hidden relative">
                                       <img
                                         src={resolvedPhoto}
                                         alt={n.imageCaption || n.title}
                                         onError={() => setFailedImages(prev => ({ ...prev, [`news-${n.id}`]: true }))}
-                                        className="w-full max-h-60 object-cover group-hover:scale-105 transition-transform duration-500"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                         referrerPolicy="no-referrer"
                                       />
                                       {n.imageCaption && (
@@ -2728,7 +2716,7 @@ export default function App() {
                                     <h3 className="font-extrabold text-slate-800 text-sm leading-snug group-hover:text-[#9E1B32] transition-colors">
                                       {n.title}
                                     </h3>
-                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line text-justify">
+                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line line-clamp-4 text-justify">
                                       {n.summary}
                                     </p>
                                   </div>

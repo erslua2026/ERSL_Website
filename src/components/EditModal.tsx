@@ -717,7 +717,7 @@ export const EditModal: React.FC<EditModalProps> = ({
                     category: 'datasets',
                     itemId: formData.id,
                     itemName: formData.name,
-                    isPrivate: formData.availability === 'Internal',
+                    isPrivate: formData.availability !== 'Public',
                     boxFolderUrl: formData.boxFolderUrl,
                   }}
                   label="Upload Local Dataset / File"

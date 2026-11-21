@@ -7,9 +7,12 @@ import {
   FileText,
   FolderOpen,
   FolderSync,
+  Globe,
   Loader2,
+  Lock,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from 'lucide-react';
@@ -29,9 +32,11 @@ import {
   BoxEntityFolderResult,
   BoxFolderEntry,
   buildEntityBoxFolderName,
+  cleanupLegacyBoxFolders,
   ENTITY_CATEGORY_ROOTS,
   formatBoxFileSize,
   getBoxFileShareLinks,
+  getExpectedBoxFolderPath,
   invokeBoxUpload,
   listBoxFolderContents,
   syncAllEntityBoxFolders,
@@ -185,6 +190,7 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
       instruments,
       datasets,
       software: softwareList,
+      cleanupLegacy: true,
     });
     setSyncingAll(false);
 
@@ -202,7 +208,23 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
 
     setSyncStatus({
       type: 'ok',
-      text: `Box folders synced: ${res.results?.length || 0} item folders across People, Projects, Instruments, Datasets & Software (${res.createdCount || 0} newly created).`,
+      text: `Box folders organized uniformly: ${res.results?.length || 0} folders synced (${res.createdCount || 0} newly created) with Public / Private separation.`,
+    });
+    loadExplorer({ category: selectedCat });
+  };
+
+  const handleCleanupLegacy = async () => {
+    setSyncingAll(true);
+    setSyncStatus(null);
+    const res = await cleanupLegacyBoxFolders();
+    setSyncingAll(false);
+    if (!res.ok) {
+      setSyncStatus({ type: 'warn', text: res.error || 'Legacy folder cleanup failed.' });
+      return;
+    }
+    setSyncStatus({
+      type: 'ok',
+      text: `Legacy Box cleanup finished: archived ${res.archivedFiles || 0} old items into 06_Website_Data_Sync${res.cleaned?.length ? ` & removed empty duplicates (${res.cleaned.join(', ')})` : ''}.`,
     });
     loadExplorer({ category: selectedCat });
   };
@@ -243,38 +265,54 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
 
   const localEntityDirectories: Record<
     BoxEntityCategory,
-    Array<{ id: string; label: string; folderName: string; boxFolderUrl?: string }>
+    Array<{ id: string; label: string; folderName: string; boxFolderUrl?: string; isPrivate: boolean; expectedPath: string }>
   > = {
     people: people.map(p => ({
       id: p.id,
       label: p.name,
       folderName: buildEntityBoxFolderName(p.name, p.id),
       boxFolderUrl: p.subPage?.boxFolderUrl,
+      isPrivate: true,
+      expectedPath: `${ENTITY_CATEGORY_ROOTS.people}/${buildEntityBoxFolderName(p.name, p.id)}/{01_Public, 02_Private_Members}`,
     })),
     projects: projects.map(p => ({
       id: p.id,
       label: p.title,
       folderName: buildEntityBoxFolderName(p.title, p.id),
       boxFolderUrl: p.subPage?.boxFolderUrl,
+      isPrivate: true,
+      expectedPath: `${ENTITY_CATEGORY_ROOTS.projects}/${buildEntityBoxFolderName(p.title, p.id)}/{01_Public, 02_Private_Members}`,
     })),
     instruments: instruments.map(i => ({
       id: i.id,
       label: i.name,
       folderName: buildEntityBoxFolderName(i.name, i.id),
       boxFolderUrl: i.boxFolderUrl,
+      isPrivate: false,
+      expectedPath: `${ENTITY_CATEGORY_ROOTS.instruments}/${buildEntityBoxFolderName(i.name, i.id)}/{01_Public, 02_Private_Members}`,
     })),
-    datasets: datasets.map(d => ({
-      id: d.id,
-      label: d.name,
-      folderName: buildEntityBoxFolderName(d.name, d.id),
-      boxFolderUrl: d.boxFolderUrl,
-    })),
-    software: softwareList.map(s => ({
-      id: s.id,
-      label: s.title,
-      folderName: buildEntityBoxFolderName(s.title, s.id),
-      boxFolderUrl: s.boxFolderUrl,
-    })),
+    datasets: datasets.map(d => {
+      const priv = d.availability !== 'Public';
+      return {
+        id: d.id,
+        label: d.name,
+        folderName: buildEntityBoxFolderName(d.name, d.id),
+        boxFolderUrl: d.boxFolderUrl,
+        isPrivate: priv,
+        expectedPath: getExpectedBoxFolderPath('datasets', d.name, d.id, priv),
+      };
+    }),
+    software: softwareList.map(s => {
+      const priv = Boolean(s.visibility && s.visibility !== 'public');
+      return {
+        id: s.id,
+        label: s.title,
+        folderName: buildEntityBoxFolderName(s.title, s.id),
+        boxFolderUrl: s.boxFolderUrl,
+        isPrivate: priv,
+        expectedPath: getExpectedBoxFolderPath('software', s.title, s.id, priv),
+      };
+    }),
   };
 
   const add = async (e: React.FormEvent) => {
@@ -332,23 +370,35 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
         <div className="p-4 sm:p-5 border-b border-gray-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-extrabold text-slate-900">
-              Automatic Category Folders (Box &harr; Website)
+              Uniform Box Folder Structure (Public vs. Private Separated)
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Drop large files (&gt;3MB) into UA Box or Box Drive inside the item&apos;s folder, then copy/attach the link straight to the website.
+              <strong>Datasets &amp; Software</strong> organize cleanly into <code>01_Public/</code> vs. <code>02_Private_Members/</code>. <strong>People, Projects &amp; Instruments</strong> each contain <code>01_Public/</code> &amp; <code>02_Private_Members/</code> inside their folder. System JSON backups stay isolated inside <code>06_Website_Data_Sync/JSON_Backups</code>.
             </p>
           </div>
           {isAdmin && (
-            <button
-              type="button"
-              disabled={syncingAll}
-              onClick={handleSyncAllFolders}
-              className="px-3.5 py-2 rounded-xl text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60"
-              style={{ backgroundColor: accentColor }}
-            >
-              {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderSync className="w-3.5 h-3.5" />}
-              <span>{syncingAll ? 'Creating Box Folders...' : 'Create / Sync All Folders in Box'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={syncingAll}
+                onClick={handleCleanupLegacy}
+                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-gray-300 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                title="Archive old 02_Datasets_Public, 03_Datasets_Members, 04_Projects, 05_Softwares_And_Guides folders into 06_Website_Data_Sync and remove empty duplicates"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Clean Up Legacy Folders</span>
+              </button>
+              <button
+                type="button"
+                disabled={syncingAll}
+                onClick={handleSyncAllFolders}
+                className="px-3.5 py-2 rounded-xl text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60"
+                style={{ backgroundColor: accentColor }}
+              >
+                {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderSync className="w-3.5 h-3.5" />}
+                <span>{syncingAll ? 'Organizing Box...' : 'Sync & Organize All Box Folders'}</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -415,12 +465,13 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
                       const res = await listBoxFolderContents({
                         category: selectedCat,
                         folderName: item.folderName,
+                        isPrivate: item.isPrivate,
                       });
                       setExplorerLoading(false);
                       if (res.ok) {
                         setExplorerHistory([{ path: ENTITY_CATEGORY_ROOTS[selectedCat] }]);
                         setExplorerFolderId(res.folderId);
-                        setExplorerPath(res.folderPath || `${ENTITY_CATEGORY_ROOTS[selectedCat]}/${item.folderName}`);
+                        setExplorerPath(res.folderPath || item.expectedPath);
                         setExplorerShareUrl(res.shareUrl || item.boxFolderUrl || '');
                         setExplorerEntries(res.entries || []);
                       } else {
@@ -429,9 +480,27 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
                     }}
                     className="min-w-0 flex-1 text-left cursor-pointer"
                   >
-                    <p className="text-xs font-bold text-slate-800 truncate">{item.label}</p>
-                    <p className="text-[10px] font-mono text-slate-400 truncate">
-                      /{ENTITY_CATEGORY_ROOTS[selectedCat]}/{item.folderName}
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-slate-800 truncate">{item.label}</p>
+                      {(selectedCat === 'datasets' || selectedCat === 'software') ? (
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border shrink-0 inline-flex items-center gap-0.5 ${
+                            item.isPrivate
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {item.isPrivate ? <Lock className="w-2.5 h-2.5" /> : <Globe className="w-2.5 h-2.5" />}
+                          <span>{item.isPrivate ? 'Private' : 'Public'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                          Public + Private
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
+                      /{item.expectedPath}
                     </p>
                   </button>
                   {item.boxFolderUrl && sanitizeExternalUrl(item.boxFolderUrl) && (

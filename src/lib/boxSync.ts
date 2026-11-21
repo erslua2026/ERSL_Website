@@ -107,6 +107,21 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+export function getExpectedBoxFolderPath(
+  category: BoxEntityCategory,
+  itemName?: string,
+  itemId = 'Item',
+  isPrivate = false
+): string {
+  const root = ENTITY_CATEGORY_ROOTS[category];
+  const folderName = buildEntityBoxFolderName(itemName, itemId);
+  const bucket = isPrivate ? '02_Private_Members' : '01_Public';
+  if (category === 'datasets' || category === 'software') {
+    return `${root}/${bucket}/${folderName}`;
+  }
+  return `${root}/${folderName}/${bucket}`;
+}
+
 async function uploadDirectToBoxWithDownscopedToken(
   file: File,
   destination: BoxFileDestination,
@@ -120,6 +135,7 @@ async function uploadDirectToBoxWithDownscopedToken(
       action: 'get_upload_token',
       destination,
       folderId: options?.folderId,
+      isPrivate: options?.isPrivate,
     },
   });
 
@@ -299,6 +315,7 @@ export async function syncAllEntityBoxFolders(params: {
   instruments: Instrument[];
   datasets: DataLayer[];
   software: Software[];
+  cleanupLegacy?: boolean;
 }): Promise<{
   ok: boolean;
   configured?: boolean;
@@ -332,7 +349,7 @@ export async function syncAllEntityBoxFolders(params: {
       category: 'datasets' as BoxEntityCategory,
       id: ds.id,
       folderName: buildEntityBoxFolderName(ds.name, ds.id),
-      isPrivate: ds.availability === 'Internal',
+      isPrivate: ds.availability !== 'Public',
     })),
     ...params.software.map(soft => ({
       category: 'software' as BoxEntityCategory,
@@ -344,7 +361,11 @@ export async function syncAllEntityBoxFolders(params: {
 
   try {
     const { data, error } = await supabase.functions.invoke('box-sync', {
-      body: { action: 'sync_entity_folders', items },
+      body: {
+        action: 'sync_entity_folders',
+        items,
+        cleanupLegacy: Boolean(params.cleanupLegacy),
+      },
     });
     if (error || !data?.ok) {
       return {
@@ -369,11 +390,36 @@ export async function syncAllEntityBoxFolders(params: {
   }
 }
 
+export async function cleanupLegacyBoxFolders(): Promise<{
+  ok: boolean;
+  cleaned?: string[];
+  archivedFiles?: number;
+  error?: string;
+}> {
+  if (!supabase) return { ok: false, error: 'Supabase not configured' };
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'cleanup_legacy_folders' },
+    });
+    if (error || !data?.ok) {
+      return { ok: false, error: data?.error || error?.message || 'Legacy folder cleanup failed.' };
+    }
+    return {
+      ok: true,
+      cleaned: Array.isArray(data.cleaned) ? data.cleaned : [],
+      archivedFiles: Number(data.archivedFiles || 0),
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Network error cleaning Box folders.' };
+  }
+}
+
 export async function listBoxFolderContents(params: {
   folderId?: string;
   category?: BoxEntityCategory;
   folderName?: string;
   folderPath?: string;
+  isPrivate?: boolean;
 }): Promise<{
   ok: boolean;
   folderId?: string;
