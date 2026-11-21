@@ -33,6 +33,7 @@ import {
   BoxFolderEntry,
   buildEntityBoxFolderName,
   cleanupLegacyBoxFolders,
+  deleteBoxFileById,
   ENTITY_CATEGORY_ROOTS,
   formatBoxFileSize,
   getBoxFileShareLinks,
@@ -627,21 +628,41 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
                             {entry.modifiedAt ? ` · Updated ${entry.modifiedAt.slice(0, 10)}` : ''}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyFileLink(entry)}
-                          className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer"
-                        >
-                          {copiedFileId === entry.id ? (
-                            <>
-                              <Check className="w-3 h-3" /> Copied Link!
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3" /> Copy Box &rarr; Web Link
-                            </>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyFileLink(entry)}
+                            className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedFileId === entry.id ? (
+                              <>
+                                <Check className="w-3 h-3" /> Copied Link!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" /> Copy Box &rarr; Web Link
+                              </>
+                            )}
+                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!confirm(`Delete "${entry.name}" from UA Box? (Remember to also remove any broken link on the website.)`)) return;
+                                const ok = await deleteBoxFileById(entry.id);
+                                if (ok) {
+                                  setExplorerEntries(prev => prev.filter(x => x.id !== entry.id));
+                                } else {
+                                  setExplorerError(`Could not delete "${entry.name}" from UA Box.`);
+                                }
+                              }}
+                              className="p-1.5 rounded bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 cursor-pointer"
+                              title="Delete this file in UA Box"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           )}
-                        </button>
+                        </div>
                       </div>
                     )
                   )}

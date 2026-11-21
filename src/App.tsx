@@ -48,6 +48,7 @@ import { supabase, fetchProfile, profileToUser } from './lib/supabase';
 import { getCloudData, setCloudData, getLastCloudError } from './lib/cloudStore';
 import {
   BoxEntityFolderResult,
+  deleteBoxFilesByUrls,
   ensureEntityBoxFolder,
   getLastBoxStatus,
   syncAllEntityBoxFolders,
@@ -1262,6 +1263,8 @@ export default function App() {
 
   const handleDeleteNewsItem = (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete news announcement "${title}"?`)) return;
+    const victim = news.find(n => n.id === id);
+    if (victim) deleteBoxFilesByUrls([victim.image, victim.link]);
     const updated = news.filter(n => n.id !== id);
     setNews(updated);
     try { localStorage.setItem('ersl_news', JSON.stringify(updated)); } catch { }
@@ -1923,48 +1926,89 @@ export default function App() {
     }
 
     if (itemType === 'publication') {
+      const victim = publications.find(p => p.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.link]);
       const updated = publications.filter(p => p.id !== id);
       setPublications(updated);
       try { localStorage.setItem('ersl_publications', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ publications: updated });
       appendAuditLog('DELETE_PUBLICATION', displayName);
     } else if (itemType === 'data-layer') {
+      const victim = dataLayers.find(d => d.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.link, victim.boxUrl]);
       const updated = dataLayers.filter(d => d.id !== id);
       setDataLayers(updated);
       try { localStorage.setItem('ersl_datalayers', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ dataLayers: updated });
       appendAuditLog('DELETE_DATALAYER', displayName);
     } else if (itemType === 'research-theme') {
+      const victim = themes.find(t => t.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.image]);
       const updated = themes.filter(t => t.id !== id);
       setThemes(updated);
       try { localStorage.setItem('ersl_themes', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ themes: updated });
       appendAuditLog('DELETE_RESEARCH_THEME', displayName);
     } else if (itemType === 'instrument') {
+      const victim = instruments.find(i => i.id === id);
+      if (victim) {
+        deleteBoxFilesByUrls([
+          victim.image,
+          victim.manualLink,
+          ...(victim.resources?.map(r => r.url) || []),
+        ]);
+      }
       const updated = instruments.filter(i => i.id !== id);
       setInstruments(updated);
       try { localStorage.setItem('ersl_instruments', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ instruments: updated });
       appendAuditLog('DELETE_INSTRUMENT', displayName);
     } else if (itemType === 'person') {
+      const victim = people.find(p => p.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.image]);
       const updated = people.filter(p => p.id !== id);
       setPeople(updated);
       try { localStorage.setItem('ersl_people', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ people: updated });
       appendAuditLog('DELETE_PEOPLE_ROSTER', displayName);
     } else if (itemType === 'software') {
+      const victim = softwareList.find(s => s.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.link, victim.boxUrl]);
       const updated = softwareList.filter(s => s.id !== id);
       setSoftwareList(updated);
       try { localStorage.setItem('ersl_software', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ software: updated });
       appendAuditLog('DELETE_SOFTWARE', displayName);
     } else if (itemType === 'teaching') {
+      const victim = teachingList.find(t => t.id === id);
+      if (victim) deleteBoxFilesByUrls([victim.link]);
       const updated = teachingList.filter(t => t.id !== id);
       setTeachingList(updated);
       try { localStorage.setItem('ersl_teaching', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ teaching: updated });
       appendAuditLog('DELETE_TEACHING_MATERIAL', displayName);
     } else if (itemType === 'project') {
+      const victim = projects.find(p => p.id === id);
+      if (victim) {
+        const subBlocks = [
+          ...(victim.subPage?.customSubTabs?.flatMap(t => [
+            ...(t.blocks || []),
+            ...(t.showcaseTabs || []).flatMap(st => st.blocks || []),
+          ]) || []),
+        ];
+        deleteBoxFilesByUrls([
+          victim.image,
+          victim.link,
+          victim.subPage?.bannerImage,
+          ...(victim.subPage?.fieldPhotos?.map(fp => fp.url) || []),
+          ...subBlocks.flatMap(b => [
+            b.url,
+            b.boxUrl,
+            b.imageUrl,
+            ...(b.references?.map(r => r.url) || []),
+          ]),
+        ]);
+      }
       const updated = projects.filter(p => p.id !== id);
       setProjects(updated);
       try { localStorage.setItem('ersl_projects', JSON.stringify(updated)); } catch { }

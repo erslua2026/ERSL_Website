@@ -37,6 +37,7 @@ import {
   User,
 } from '../types';
 import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import { deleteBoxFilesByUrls } from '../lib/boxSync';
 import {
   buildNormalizedStudentSubTabs,
   DEFAULT_PROJECT_SUBPAGE,
@@ -335,7 +336,14 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
       alert('At least one sub-page tab must remain.');
       return;
     }
-    if (!confirm(`Delete the "${tab.label}" sub-page and its items?`)) return;
+    if (!confirm(`Delete the "${tab.label}" sub-page and its items? (Any attached Box files will also be removed.)`)) return;
+    const urls = (tab.blocks || []).flatMap(b => [
+      b.url,
+      b.boxUrl,
+      b.imageUrl,
+      ...(b.references?.map(r => r.url) || []),
+    ]);
+    deleteBoxFilesByUrls(urls);
     const nextTabs = customSubTabs.filter(t => t.id !== tab.id);
     commitWorkspaceUpdate(nextTabs);
     if (activeSubTabObj?.id === tab.id) {
@@ -511,6 +519,15 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
   const handleDeleteBlock = (blockId: string) => {
     if (!activeSubTabObj) return;
     if (!confirm('Remove this entry from the sub-page?')) return;
+    const victim = activeSubTabObj.blocks.find(b => b.id === blockId);
+    if (victim) {
+      deleteBoxFilesByUrls([
+        victim.url,
+        victim.boxUrl,
+        victim.imageUrl,
+        ...(victim.references?.map(r => r.url) || []),
+      ]);
+    }
     if (activeSubTabObj.kind === 'todo') {
       fetchWorkplanMatrixSnapshot().then(snap =>
         saveWorkplanTaskAction({

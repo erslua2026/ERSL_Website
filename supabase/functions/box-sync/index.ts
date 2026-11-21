@@ -284,6 +284,51 @@ async function deleteBoxFile(token: string, fileId: string): Promise<boolean> {
   return res.ok || res.status === 204;
 }
 
+async function resolveBoxFileIdFromUrl(token: string, rawUrl: string): Promise<string | null> {
+  try {
+    const parsed = new URL(String(rawUrl || '').trim());
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith('box.com') && !host.endsWith('boxcloud.com')) return null;
+
+    // Direct /file/<id> URL
+    const directFileMatch = parsed.pathname.match(/\/file\/(\d+)/);
+    if (directFileMatch) {
+      return directFileMatch[1];
+    }
+
+    // Ignore explicit /folder/<id> URLs — never delete folders via URL
+    if (parsed.pathname.includes('/folder/')) return null;
+
+    // Normalize /shared/static/<token>.<ext> -> https://<host>/s/<token> for Box shared_items lookup
+    let shareLookupUrl = '';
+    const staticMatch = parsed.pathname.match(/\/shared\/static\/([A-Za-z0-9_-]+)/);
+    if (staticMatch) {
+      shareLookupUrl = `https://${parsed.hostname}/s/${staticMatch[1]}`;
+    } else {
+      const shareMatch = parsed.pathname.match(/\/s\/([A-Za-z0-9_-]+)/);
+      if (shareMatch) {
+        shareLookupUrl = `https://${parsed.hostname}/s/${shareMatch[1]}`;
+      }
+    }
+    if (!shareLookupUrl) return null;
+
+    const res = await fetch('https://api.box.com/2.0/shared_items?fields=id,type,name', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        BoxApi: `shared_link=${shareLookupUrl}`,
+      },
+    });
+    if (!res.ok) return null;
+    const item = await res.json();
+    if (item?.type === 'file' && item?.id) {
+      return String(item.id);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function deleteEmptyBoxFolder(token: string, folderId: string): Promise<boolean> {
   const res = await fetch(`https://api.box.com/2.0/folders/${folderId}?recursive=false`, {
     method: 'DELETE',
@@ -821,6 +866,37 @@ Deno.serve(async (req: Request) => {
           fileId,
           shareUrl: links.shareUrl,
           directUrl: links.directUrl,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete_box_file') {
+      const rawIds: string[] = [];
+      if (body?.fileId) rawIds.push(String(body.fileId).trim());
+
+      const rawUrls: string[] = [
+        ...(body?.fileUrl ? [String(body.fileUrl).trim()] : []),
+        ...(Array.isArray(body?.urls) ? body.urls.map((u: any) => String(u || '').trim()) : []),
+      ].filter(Boolean);
+
+      for (const u of rawUrls) {
+        const resolvedId = await resolveBoxFileIdFromUrl(token, u);
+        if (resolvedId) rawIds.push(resolvedId);
+      }
+
+      const uniqueIds = Array.from(new Set(rawIds.filter(Boolean)));
+      const deletedIds: string[] = [];
+      for (const fid of uniqueIds) {
+        const okDel = await deleteBoxFile(token, fid);
+        if (okDel) deletedIds.push(fid);
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          deletedIds,
+          deletedCount: deletedIds.length,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

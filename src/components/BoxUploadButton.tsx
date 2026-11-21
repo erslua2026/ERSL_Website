@@ -20,10 +20,12 @@ import {
   BoxFolderEntry,
   BoxImageCategory,
   buildEntityBoxFolderName,
+  deleteBoxFileFromUrl,
   ENTITY_CATEGORY_ROOTS,
   formatBoxFileSize,
   getBoxFileShareLinks,
   getExpectedBoxFolderPath,
+  isDeletableBoxFileUrl,
   listBoxFolderContents,
   uploadDocumentWithBoxFallback,
 } from '../lib/boxSync';
@@ -534,22 +536,33 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
         </div>
       )}
 
-      {isLocalDataAttached && (
+      {(isLocalDataAttached || isDeletableBoxFileUrl(currentValue)) && (
         <div className="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
           <span className="inline-flex items-center gap-1.5 truncate">
             <FileCheck2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-            <span>{getUploadedFileLabel(currentValue)} ready</span>
+            <span>
+              {isLocalDataAttached ? `${getUploadedFileLabel(currentValue)} ready` : 'UA Box file attached'}
+            </span>
           </span>
           {onClear && (
             <button
               type="button"
               onClick={() => {
+                const prevVal = currentValue;
                 onClear();
-                setStatusMsg(null);
+                if (isDeletableBoxFileUrl(prevVal)) {
+                  deleteBoxFileFromUrl(prevVal).then(ok => {
+                    if (ok) {
+                      setStatusMsg({ type: 'info', text: 'Removed file from website & moved copy in UA Box to Trash.' });
+                    }
+                  });
+                } else {
+                  setStatusMsg(null);
+                }
               }}
               className="text-red-600 hover:underline inline-flex items-center gap-1 shrink-0 cursor-pointer"
             >
-              <Trash2 className="w-3 h-3" /> Clear
+              <Trash2 className="w-3 h-3" /> {isDeletableBoxFileUrl(currentValue) ? 'Remove & Delete from Box' : 'Clear'}
             </button>
           )}
         </div>

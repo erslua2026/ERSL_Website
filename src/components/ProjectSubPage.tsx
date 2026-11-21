@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   BarChart3,
   BookOpen,
@@ -21,9 +22,12 @@ import {
   Layers,
   Lock,
   Plus,
+  Save,
   Shield,
+  Sparkles,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import {
   Person,
@@ -32,6 +36,7 @@ import {
   ProjectContentBlock,
   ProjectContentBlockType,
   ProjectCustomSubTab,
+  ProjectShowcaseTab,
   ProjectSubPageData,
   ResearchTheme,
   SiteConfig,
@@ -39,10 +44,13 @@ import {
   User,
 } from '../types';
 import { resolveAssetUrl } from '../lib/boxUtils';
+import { deleteBoxFilesByUrls } from '../lib/boxSync';
 import {
   buildNormalizedSubTabs,
   DEFAULT_PROJECT_SUBPAGE,
+  getNormalizedShowcaseTabs,
   getVisibilityMeta,
+  isShowcaseSubTab,
   parseLegacyInvestigators,
   PreviewRole,
   resolveProjectViewerAccess,
@@ -52,6 +60,7 @@ import {
 import { ProjectBlockRenderer } from './ProjectBlockRenderer';
 import { ProjectWorkplanTracker } from './ProjectWorkplanTracker';
 import { ReservoirProject } from './ReservoirProject';
+import { ShowcaseBlogView } from './ShowcaseBlogView';
 import {
   BlockEditorModal,
   CollaboratorsModal,
@@ -79,6 +88,8 @@ function getSubTabIcon(kind?: ProjectCustomSubTab['kind']) {
     case 'overview':
     case 'information':
       return <BookOpen className="w-3.5 h-3.5" />;
+    case 'showcase':
+      return <Sparkles className="w-3.5 h-3.5" />;
     case 'datasets':
       return <Database className="w-3.5 h-3.5" />;
     case 'software':
@@ -188,10 +199,18 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     open: false,
     existing: null,
   });
+  const [activeShowcaseTabId, setActiveShowcaseTabId] = useState<string>('');
+  const [showcaseTabModal, setShowcaseTabModal] = useState<{ open: boolean; existing: ProjectShowcaseTab | null }>({
+    open: false,
+    existing: null,
+  });
+  const [showcaseTabLabel, setShowcaseTabLabel] = useState('');
+  const [showcaseTabSummary, setShowcaseTabSummary] = useState('');
   const [blockModal, setBlockModal] = useState<{
     open: boolean;
     initialType: ProjectContentBlockType;
     existing: ProjectContentBlock | null;
+    sectionLevel?: 'section' | 'subsection';
   }>({
     open: false,
     initialType: 'paragraph',
@@ -337,6 +356,18 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
       return;
     }
     if (!confirm(`Remove the "${tab.label}" sub-page and all blocks inside it from this project?`)) return;
+    const allBlocks = [
+      ...(tab.blocks || []),
+      ...(tab.showcaseTabs || []).flatMap(st => st.blocks || []),
+    ];
+    deleteBoxFilesByUrls(
+      allBlocks.flatMap(b => [
+        b.url,
+        b.boxUrl,
+        b.imageUrl,
+        ...(b.references?.map(r => r.url) || []),
+      ])
+    );
     const nextTabs = customSubTabs.filter(t => t.id !== tab.id);
     commitSubPageUpdate(nextTabs);
     if (activeSubTabObj?.id === tab.id) {
@@ -344,9 +375,118 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     }
   };
 
-  // Content block actions
+  const isShowcase = isShowcaseSubTab(activeSubTabObj);
+  const showcaseResultTabs = isShowcase && activeSubTabObj ? getNormalizedShowcaseTabs(activeSubTabObj) : [];
+  const activeResultTab = isShowcase
+    ? showcaseResultTabs.find(rt => rt.id === activeShowcaseTabId) || showcaseResultTabs[0] || null
+    : null;
+  const displayedBlocks: ProjectContentBlock[] = isShowcase
+    ? activeResultTab?.blocks || []
+    : activeSubTabObj?.blocks || [];
+
+  const updateActiveShowcaseTabs = (nextShowcaseTabs: ProjectShowcaseTab[]) => {
+    if (!activeSubTabObj) return;
+    const nextTabs = customSubTabs.map(t =>
+      t.id === activeSubTabObj.id
+        ? {
+            ...t,
+            kind: 'showcase' as const,
+            showcaseTabs: nextShowcaseTabs,
+            blocks: nextShowcaseTabs[0]?.blocks || [],
+          }
+        : t
+    );
+    commitSubPageUpdate(nextTabs);
+  };
+
+  const openShowcaseTabModal = (existing: ProjectShowcaseTab | null) => {
+    setShowcaseTabLabel(existing?.label || '');
+    setShowcaseTabSummary(existing?.summary || '');
+    setShowcaseTabModal({ open: true, existing });
+  };
+
+  const handleSaveShowcaseTab = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeSubTabObj || !showcaseTabLabel.trim()) return;
+    if (showcaseTabModal.existing) {
+      const next = showcaseResultTabs.map(rt =>
+        rt.id === showcaseTabModal.existing!.id
+          ? { ...rt, label: showcaseTabLabel.trim(), summary: showcaseTabSummary.trim() }
+          : rt
+      );
+      updateActiveShowcaseTabs(next);
+    } else {
+      const newTab: ProjectShowcaseTab = {
+        id: `res-${Date.now()}`,
+        label: showcaseTabLabel.trim(),
+        summary: showcaseTabSummary.trim(),
+        blocks: [],
+      };
+      updateActiveShowcaseTabs([...showcaseResultTabs, newTab]);
+      setActiveShowcaseTabId(newTab.id);
+    }
+    setShowcaseTabModal({ open: false, existing: null });
+  };
+
+  const handleMoveShowcaseTab = (idx: number, delta: -1 | 1) => {
+    const target = idx + delta;
+    if (target < 0 || target >= showcaseResultTabs.length) return;
+    const next = [...showcaseResultTabs];
+    const [moved] = next.splice(idx, 1);
+    next.splice(target, 0, moved);
+    updateActiveShowcaseTabs(next);
+  };
+
+  const handleDeleteShowcaseTab = (tabToDelete: ProjectShowcaseTab) => {
+    if (showcaseResultTabs.length <= 1) {
+      alert('Showcase must keep at least one Result / Model tab.');
+      return;
+    }
+    if (!confirm(`Remove model/result tab "${tabToDelete.label}" and its contents from Showcase?`)) return;
+    deleteBoxFilesByUrls(
+      (tabToDelete.blocks || []).flatMap(b => [
+        b.url,
+        b.boxUrl,
+        b.imageUrl,
+        ...(b.references?.map(r => r.url) || []),
+      ])
+    );
+    const next = showcaseResultTabs.filter(rt => rt.id !== tabToDelete.id);
+    updateActiveShowcaseTabs(next);
+    if (activeResultTab?.id === tabToDelete.id) {
+      setActiveShowcaseTabId(next[0]?.id || '');
+    }
+  };
+
+  const handleToggleBlockSectionLevel = (blk: ProjectContentBlock) => {
+    if (!activeSubTabObj || !isShowcase || !activeResultTab) return;
+    const nextLevel: 'section' | 'subsection' = blk.sectionLevel === 'subsection' ? 'section' : 'subsection';
+    const nextShowcaseTabs = showcaseResultTabs.map(rt =>
+      rt.id === activeResultTab.id
+        ? {
+            ...rt,
+            blocks: rt.blocks.map(b => (b.id === blk.id ? { ...b, sectionLevel: nextLevel } : b)),
+          }
+        : rt
+    );
+    updateActiveShowcaseTabs(nextShowcaseTabs);
+  };
+
+  // Content block actions (supports both standard sub-pages and nested Showcase Result Tabs)
   const handleSaveBlock = (savedBlock: ProjectContentBlock) => {
     if (!activeSubTabObj) return;
+    if (isShowcase && activeResultTab) {
+      const exists = activeResultTab.blocks.some(b => b.id === savedBlock.id);
+      const nextBlocks = exists
+        ? activeResultTab.blocks.map(b => (b.id === savedBlock.id ? savedBlock : b))
+        : [...activeResultTab.blocks, savedBlock];
+      const nextShowcaseTabs = showcaseResultTabs.map(rt =>
+        rt.id === activeResultTab.id ? { ...rt, blocks: nextBlocks } : rt
+      );
+      updateActiveShowcaseTabs(nextShowcaseTabs);
+      setBlockModal({ open: false, initialType: 'paragraph', existing: null });
+      return;
+    }
     const exists = activeSubTabObj.blocks.some(b => b.id === savedBlock.id);
     const nextBlocks = exists
       ? activeSubTabObj.blocks.map(b => (b.id === savedBlock.id ? savedBlock : b))
@@ -358,6 +498,31 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   const handleDeleteBlock = (blockId: string) => {
     if (!activeSubTabObj || !confirm('Remove this content section from the sub-page?')) return;
+    if (isShowcase && activeResultTab) {
+      const victim = activeResultTab.blocks.find(b => b.id === blockId);
+      if (victim) {
+        deleteBoxFilesByUrls([
+          victim.url,
+          victim.boxUrl,
+          victim.imageUrl,
+          ...(victim.references?.map(r => r.url) || []),
+        ]);
+      }
+      const nextShowcaseTabs = showcaseResultTabs.map(rt =>
+        rt.id === activeResultTab.id ? { ...rt, blocks: rt.blocks.filter(b => b.id !== blockId) } : rt
+      );
+      updateActiveShowcaseTabs(nextShowcaseTabs);
+      return;
+    }
+    const victim = activeSubTabObj.blocks.find(b => b.id === blockId);
+    if (victim) {
+      deleteBoxFilesByUrls([
+        victim.url,
+        victim.boxUrl,
+        victim.imageUrl,
+        ...(victim.references?.map(r => r.url) || []),
+      ]);
+    }
     const nextTabs = customSubTabs.map(t =>
       t.id === activeSubTabObj.id ? { ...t, blocks: t.blocks.filter(b => b.id !== blockId) } : t
     );
@@ -366,6 +531,18 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
 
   const handleMoveBlock = (index: number, delta: -1 | 1) => {
     if (!activeSubTabObj) return;
+    if (isShowcase && activeResultTab) {
+      const target = index + delta;
+      if (target < 0 || target >= activeResultTab.blocks.length) return;
+      const nextBlocks = [...activeResultTab.blocks];
+      const [moved] = nextBlocks.splice(index, 1);
+      nextBlocks.splice(target, 0, moved);
+      const nextShowcaseTabs = showcaseResultTabs.map(rt =>
+        rt.id === activeResultTab.id ? { ...rt, blocks: nextBlocks } : rt
+      );
+      updateActiveShowcaseTabs(nextShowcaseTabs);
+      return;
+    }
     const target = index + delta;
     if (target < 0 || target >= activeSubTabObj.blocks.length) return;
     const nextBlocks = [...activeSubTabObj.blocks];
@@ -868,16 +1045,34 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           {showEditControls && activeSubTabObj?.kind !== 'reservoir-tracker' && activeSubTabObj?.kind !== 'workplan-tracker' && (
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 border border-gray-200 rounded-xl p-2.5 text-[11px]">
               <span className="font-extrabold text-slate-500 px-1.5">Quick Add:</span>
+              {isShowcase ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setBlockModal({ open: true, initialType: 'paragraph', existing: null, sectionLevel: 'section' })}
+                    className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-bold cursor-pointer"
+                  >
+                    + Section (1.)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBlockModal({ open: true, initialType: 'paragraph', existing: null, sectionLevel: 'subsection' })}
+                    className="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 border border-gray-200 font-bold text-slate-700 cursor-pointer"
+                  >
+                    + Sub-Section (1.1)
+                  </button>
+                </>
+              ) : null}
               {(
                 [
-                  ['paragraph', 'Paragraph'],
+                  ['paragraph', isShowcase ? 'Text Only' : 'Paragraph'],
                   ['objectives', 'Checklist / Objectives'],
                   ['dataset', 'Dataset'],
                   ['software', 'Software / Code'],
                   ['meeting-note', 'Meeting Note'],
                   ['link', 'Resource / Link'],
                   ['event', 'Event'],
-                  ['image', 'Photo'],
+                  ['image', 'Photo / Figure'],
                 ] as const
               ).map(([blkType, lbl]) => (
                 <button
@@ -926,26 +1121,130 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               onChange={handleSaveWorkplanTracker}
             />
           ) : (
+          <div className="space-y-4">
+            {/* Nested Result / Model Sub-Tabs Strip inside Showcase */}
+            {isShowcase && (
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
+                    Models &amp; Results Sub-Tabs ({showcaseResultTabs.length})
+                  </span>
+                  {showEditControls && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {activeResultTab && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openShowcaseTabModal(activeResultTab)}
+                            className="px-2 py-1 rounded-lg bg-white hover:bg-blue-50 border border-gray-200 text-[10px] font-bold text-blue-700 inline-flex items-center gap-1 cursor-pointer"
+                            title="Rename active result tab"
+                          >
+                            <Edit2 className="w-3 h-3" /> Rename Tab
+                          </button>
+                          <button
+                            type="button"
+                            disabled={showcaseResultTabs.findIndex(r => r.id === activeResultTab.id) <= 0}
+                            onClick={() => handleMoveShowcaseTab(showcaseResultTabs.findIndex(r => r.id === activeResultTab.id), -1)}
+                            className="p-1 rounded-lg bg-white hover:bg-slate-100 border border-gray-200 text-slate-600 disabled:opacity-35 cursor-pointer"
+                            title="Move result tab left"
+                          >
+                            <ArrowLeft className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={showcaseResultTabs.findIndex(r => r.id === activeResultTab.id) >= showcaseResultTabs.length - 1}
+                            onClick={() => handleMoveShowcaseTab(showcaseResultTabs.findIndex(r => r.id === activeResultTab.id), 1)}
+                            className="p-1 rounded-lg bg-white hover:bg-slate-100 border border-gray-200 text-slate-600 disabled:opacity-35 cursor-pointer"
+                            title="Move result tab right"
+                          >
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={showcaseResultTabs.length <= 1}
+                            onClick={() => handleDeleteShowcaseTab(activeResultTab)}
+                            className="p-1 rounded-lg bg-white hover:bg-red-50 border border-gray-200 text-red-600 disabled:opacity-35 cursor-pointer"
+                            title="Remove result tab"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openShowcaseTabModal(null)}
+                        style={{ backgroundColor: headerAccent }}
+                        className="px-2.5 py-1 rounded-lg text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-xs hover:opacity-90 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add Model / Result Tab
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {showcaseResultTabs.map((rt, idx) => {
+                    const isAct = activeResultTab?.id === rt.id;
+                    return (
+                      <button
+                        key={rt.id}
+                        type="button"
+                        onClick={() => setActiveShowcaseTabId(rt.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border ${
+                          isAct
+                            ? 'text-white border-transparent shadow-xs'
+                            : 'bg-white text-slate-700 border-gray-200 hover:bg-slate-100'
+                        }`}
+                        style={isAct ? { backgroundColor: headerAccent } : undefined}
+                      >
+                        <Sparkles className="w-3 h-3 shrink-0" />
+                        <span>{rt.label || `Result ${idx + 1}`}</span>
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                            isAct ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {rt.blocks.length}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
           <div className={isOverviewLayout ? 'grid grid-cols-1 lg:grid-cols-12 gap-6' : 'space-y-4'}>
             <div className={isOverviewLayout ? 'lg:col-span-8 space-y-4' : 'space-y-4'}>
-              {(!activeSubTabObj?.blocks || activeSubTabObj.blocks.length === 0) ? (
+              {displayedBlocks.length === 0 ? (
                 <div className="p-8 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-500 space-y-2">
                   <p>
-                    No sections added to <strong>{activeSubTabObj?.label}</strong> yet.
+                    No sections added to <strong>{isShowcase ? activeResultTab?.label : activeSubTabObj?.label}</strong> yet.
                   </p>
                   {showEditControls && (
                     <p className="text-[11px] text-slate-400">
-                      Use <strong>+ Add Text Paragraph</strong> or the Quick Add buttons above to customize this sub-page.
+                      Use <strong>+ Section (1.)</strong>, <strong>+ Sub-Section (1.1)</strong>, or the Quick Add buttons above to build this {isShowcase ? 'result blog' : 'sub-page'}.
                     </p>
                   )}
                 </div>
+              ) : isShowcase && activeResultTab ? (
+                <ShowcaseBlogView
+                  tabTitle={activeResultTab.label}
+                  tabSummary={activeResultTab.summary}
+                  blocks={displayedBlocks}
+                  canEdit={showEditControls}
+                  primaryColor={headerAccent}
+                  onEdit={blk => setBlockModal({ open: true, initialType: blk.type, existing: blk })}
+                  onDelete={handleDeleteBlock}
+                  onMove={handleMoveBlock}
+                  onToggleSectionLevel={handleToggleBlockSectionLevel}
+                />
               ) : (
-                activeSubTabObj.blocks.map((block, idx) => (
+                displayedBlocks.map((block, idx) => (
                   <ProjectBlockRenderer
                     key={block.id}
                     block={block}
                     index={idx}
-                    total={activeSubTabObj.blocks.length}
+                    total={displayedBlocks.length}
                     canEdit={showEditControls}
                     primaryColor={headerAccent}
                     embeddedBoxUrl={embeddedBoxUrl}
@@ -1119,6 +1418,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               </div>
             )}
           </div>
+          </div>
           )}
         </div>
       )}
@@ -1195,6 +1495,9 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         <BlockEditorModal
           initialType={blockModal.initialType}
           existing={blockModal.existing}
+          initialDefaults={
+            blockModal.sectionLevel ? { sectionLevel: blockModal.sectionLevel } : undefined
+          }
           primaryColor={headerAccent}
           uploadDestination="projects"
           entityContext={{
@@ -1207,6 +1510,66 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}
           onSave={handleSaveBlock}
         />
+      )}
+
+      {/* Showcase Model / Result Sub-Tab Modal */}
+      {showcaseTabModal.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
+            <div className="p-4 text-white flex justify-between items-center" style={{ backgroundColor: headerAccent }}>
+              <h3 className="font-extrabold text-sm flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4" />
+                <span>{showcaseTabModal.existing ? 'Rename / Edit Result Tab' : 'Add Model / Result Tab'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowcaseTabModal({ open: false, existing: null })}
+                className="text-white/80 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveShowcaseTab} className="p-5 space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Model / Result Tab Title *</label>
+                <input
+                  required
+                  value={showcaseTabLabel}
+                  onChange={e => setShowcaseTabLabel(e.target.value)}
+                  placeholder="e.g., GOES-16/19 TSS ML Model, Chlorophyll-a Model, Live Demo"
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Brief Result Scope / Subtitle (Optional)</label>
+                <textarea
+                  rows={3}
+                  value={showcaseTabSummary}
+                  onChange={e => setShowcaseTabSummary(e.target.value)}
+                  placeholder="Optional 1–2 line summary displayed above this result tab's sections..."
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowcaseTabModal({ open: false, existing: null })}
+                  className="px-4 py-2 rounded-lg bg-slate-100 font-bold text-slate-600 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg text-white font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                  style={{ backgroundColor: headerAccent }}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{showcaseTabModal.existing ? 'Save Tab' : 'Create Result Tab'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

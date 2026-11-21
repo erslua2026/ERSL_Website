@@ -203,7 +203,10 @@ export function buildSiteSearchItems({
         if (!editMode && !access.canViewVisibility(subTab.visibility)) return;
 
         // Index the sub-page itself
-        const blockTexts = subTab.blocks
+        const showcaseBlocks = (subTab.showcaseTabs || []).flatMap(st => st.blocks || []);
+        const allTabBlocks = [...subTab.blocks, ...showcaseBlocks];
+        const showcaseNames = (subTab.showcaseTabs || []).map(st => `${st.label} ${st.summary || ''}`).join(' ');
+        const blockTexts = allTabBlocks
           .map(b =>
             [b.title, b.body, b.category, b.availability, b.language, b.location, b.attendees, b.caption, b.date]
               .filter(Boolean)
@@ -215,15 +218,15 @@ export function buildSiteSearchItems({
           id: `srch-proj-sub-${p.id}-${subTab.id}`,
           title: `${p.title} — ${subTab.label}`,
           subtitle: `Project Sub-Page (${subTab.visibility}) · ${p.agency}`,
-          searchText: [p.title, subTab.label, subTab.description, blockTexts].filter(Boolean).join(' '),
+          searchText: [p.title, subTab.label, subTab.description, showcaseNames, blockTexts].filter(Boolean).join(' '),
           tab: 'projects',
           tabLabel: `Project · ${subTab.label}`,
           projectId: p.id,
           projectSubTabId: subTab.id,
         });
 
-        // Also index individual blocks (paragraphs, datasets, software, meeting notes, events, links)
-        subTab.blocks.forEach(blk => {
+        // Also index individual blocks (paragraphs, datasets, software, meeting notes, events, links, showcase models)
+        allTabBlocks.forEach(blk => {
           items.push({
             id: `srch-proj-blk-${p.id}-${subTab.id}-${blk.id}`,
             title: blk.title,

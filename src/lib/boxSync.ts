@@ -509,7 +509,7 @@ export async function syncSectionToBox<T>(
   }
 }
 
-const compressImageFileToDataUrl = (file: File, maxDim = 1600, quality = 0.84): Promise<string> =>
+const compressImageFileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     if (file.type === 'image/gif') {
       readFileAsDataUrl(file).then(resolve).catch(reject);
@@ -519,26 +519,61 @@ const compressImageFileToDataUrl = (file: File, maxDim = 1600, quality = 0.84): 
     const objUrl = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(objUrl);
-      let w = img.width;
-      let h = img.height;
-      if (w > maxDim || h > maxDim) {
-        if (w / h > 1) {
-          h = Math.round((h * maxDim) / w);
-          w = maxDim;
-        } else {
-          w = Math.round((w * maxDim) / h);
-          h = maxDim;
+
+      const renderAt = (maxDim: number, mime: string, quality: number): string | null => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w / h > 1) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        if (mime === 'image/jpeg') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        return canvas.toDataURL(mime, quality);
+      };
+
+      const TARGET_MAX_DATA_URL_LEN = 2_400_000;
+      // Preserve PNG only if small; otherwise use progressive high-res JPEG passes
+      if (file.type === 'image/png' && file.size < 350_000) {
+        const pngOut = renderAt(1800, 'image/png', 0.92);
+        if (pngOut && pngOut.length <= TARGET_MAX_DATA_URL_LEN) {
+          resolve(pngOut);
+          return;
         }
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, w, h);
-        // Preserve PNG transparency if small/PNG, else compress cleanly as JPEG
-        const mime = file.type === 'image/png' && file.size < 400_000 ? 'image/png' : 'image/jpeg';
-        resolve(canvas.toDataURL(mime, quality));
+
+      const passes = [
+        { maxDim: 1800, quality: 0.84 },
+        { maxDim: 1500, quality: 0.76 },
+        { maxDim: 1200, quality: 0.68 },
+        { maxDim: 960, quality: 0.58 },
+        { maxDim: 800, quality: 0.5 },
+      ];
+      let best = '';
+      for (const p of passes) {
+        const out = renderAt(p.maxDim, 'image/jpeg', p.quality);
+        if (!out) continue;
+        best = out;
+        if (out.length <= TARGET_MAX_DATA_URL_LEN) {
+          resolve(out);
+          return;
+        }
+      }
+      if (best) {
+        resolve(best);
         return;
       }
       readFileAsDataUrl(file).then(resolve).catch(reject);
@@ -658,4 +693,63 @@ export async function uploadDocumentToBox(
   options?: { folderId?: string; isPrivate?: boolean }
 ): Promise<{ url: string; shareUrl: string; fileName: string; uploadedToBox: boolean }> {
   return uploadDocumentWithBoxFallback(file, destination, options);
+}
+
+const PROTECTED_BOX_TOKENS = [
+  'bl5k9qrcbymh4xgvlt03u8fdw81j8vlq', // Default ERSL Logo
+  'ys8ovh6ya40h0ut2fl6br3i9b671dn01', // Default Water Quality Slide
+  'q4sdyxc0fcn1ohc5k8ycqi5nvpfrmy0m', // Default Flood Mapping Slide
+];
+
+export function isDeletableBoxFileUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith('data:')) return false;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith('box.com') && !host.endsWith('boxcloud.com')) return false;
+    if (parsed.pathname.includes('/folder/')) return false;
+    if (PROTECTED_BOX_TOKENS.some(tok => trimmed.includes(tok))) return false;
+    return (
+      parsed.pathname.includes('/shared/static/') ||
+      parsed.pathname.includes('/s/') ||
+      parsed.pathname.includes('/file/')
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteBoxFileById(fileId: string): Promise<boolean> {
+  if (!supabase || !fileId.trim()) return false;
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'delete_box_file', fileId: fileId.trim() },
+    });
+    return Boolean(!error && data?.ok && (data?.deletedCount || 0) > 0);
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteBoxFilesByUrls(urls: Array<string | undefined>): Promise<number> {
+  if (!supabase) return 0;
+  const deletable = Array.from(new Set(urls.filter((u): u is string => isDeletableBoxFileUrl(u))));
+  if (deletable.length === 0) return 0;
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'delete_box_file', urls: deletable },
+    });
+    if (error || !data?.ok) return 0;
+    return Number(data.deletedCount || 0);
+  } catch {
+    return 0;
+  }
+}
+
+export async function deleteBoxFileFromUrl(url?: string): Promise<boolean> {
+  if (!isDeletableBoxFileUrl(url)) return false;
+  const count = await deleteBoxFilesByUrls([url]);
+  return count > 0;
 }

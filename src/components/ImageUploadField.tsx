@@ -17,9 +17,11 @@ import {
   BoxFolderEntry,
   BoxImageCategory,
   buildEntityBoxFolderName,
+  deleteBoxFileFromUrl,
   formatBoxFileSize,
   getBoxFileShareLinks,
   getExpectedBoxFolderPath,
+  isDeletableBoxFileUrl,
   listBoxFolderContents,
   uploadImageWithBoxFallback,
 } from '../lib/boxSync';
@@ -272,12 +274,23 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           <button
             type="button"
             onClick={() => {
+              const prevVal = value;
               onChange('');
-              setStatusMsg(null);
+              if (isDeletableBoxFileUrl(prevVal)) {
+                deleteBoxFileFromUrl(prevVal).then(ok => {
+                  setStatusMsg(
+                    ok
+                      ? { type: 'info', text: 'Photo removed from website & moved to Box Trash.' }
+                      : null
+                  );
+                });
+              } else {
+                setStatusMsg(null);
+              }
             }}
             className="text-[11px] font-bold text-red-600 hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <Trash2 className="w-3 h-3" /> Clear Photo
+            <Trash2 className="w-3 h-3" /> {isDeletableBoxFileUrl(value) ? 'Remove & Delete from Box' : 'Clear Photo'}
           </button>
         )}
       </div>

@@ -8,6 +8,7 @@ import {
   ProjectContentBlockType,
   ProjectCustomSubTab,
   ProjectInvestigator,
+  ProjectReferenceLink,
   ResearchTheme,
   SubTabVisibility,
 } from '../types';
@@ -442,6 +443,7 @@ interface BlockEditorModalProps {
     category?: string;
     title?: string;
     priority?: 'low' | 'medium' | 'high';
+    sectionLevel?: 'section' | 'subsection';
   };
   primaryColor: string;
   uploadDestination?: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>;
@@ -476,6 +478,14 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [version, setVersion] = useState(existing?.version || '');
   const [caption, setCaption] = useState(existing?.caption || '');
   const [highlight, setHighlight] = useState(Boolean(existing?.highlight));
+  const [sectionLevel, setSectionLevel] = useState<'section' | 'subsection'>(
+    existing?.sectionLevel || initialDefaults?.sectionLevel || 'section'
+  );
+  const [contextNote, setContextNote] = useState(existing?.contextNote || '');
+  const [imageUrl, setImageUrl] = useState(existing?.imageUrl || '');
+  const [references, setReferences] = useState<ProjectReferenceLink[]>(
+    Array.isArray(existing?.references) ? existing.references : []
+  );
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
     existing?.priority || initialDefaults?.priority || 'medium'
   );
@@ -494,6 +504,14 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       alert('Please upload a local photo, paste from clipboard, or enter an image URL.');
       return;
     }
+    const cleanedRefs = references
+      .filter(r => r.url.trim())
+      .map(r => ({
+        id: r.id || `ref-${Date.now()}`,
+        label: r.label.trim() || 'Reference Link',
+        url: r.url.trim(),
+        kind: r.kind || 'other',
+      }));
     onSave({
       ...(existing || {}),
       id: existing?.id || `blk-${Date.now()}`,
@@ -511,8 +529,12 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       attendees: type === 'meeting-note' ? (attendees.trim() || undefined) : undefined,
       language: type === 'software' ? (language.trim() || undefined) : undefined,
       version: type === 'software' ? (version.trim() || undefined) : undefined,
-      caption: type === 'image' ? (caption.trim() || title.trim()) : undefined,
+      caption: type === 'image' ? (caption.trim() || title.trim()) : (imageUrl.trim() ? (caption.trim() || undefined) : undefined),
       highlight: type === 'paragraph' ? highlight : undefined,
+      sectionLevel,
+      contextNote: contextNote.trim() || undefined,
+      imageUrl: type !== 'image' ? (imageUrl.trim() || undefined) : undefined,
+      references: cleanedRefs.length > 0 ? cleanedRefs : undefined,
       priority: isTodoBlock ? priority : existing?.priority,
       completed: isTodoBlock ? completed : existing?.completed,
     });
@@ -591,11 +613,138 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           )}
 
           {type === 'paragraph' && (
-            <label className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-gray-200 cursor-pointer">
-              <input type="checkbox" checked={highlight} onChange={e => setHighlight(e.target.checked)} />
-              <span className="font-bold text-slate-700">Highlight this paragraph box with subtle Crimson accent tint</span>
-            </label>
+            <div className="space-y-3 bg-slate-50 border border-gray-200 rounded-xl p-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Outline Level</label>
+                  <select
+                    value={sectionLevel}
+                    onChange={e => setSectionLevel(e.target.value as 'section' | 'subsection')}
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white font-semibold"
+                  >
+                    <option value="section">Main Section (1., 2., 3.)</option>
+                    <option value="subsection">Sub-Section / Sub-Content (1.1, 1.2)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Section Tag / Topic (Optional)</label>
+                  <input
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    placeholder="e.g., Architecture, Validation, Discussion"
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Context / Key Takeaway Callout (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={contextNote}
+                  onChange={e => setContextNote(e.target.value)}
+                  placeholder="Short context banner highlighted before the prose (e.g., model domain, resolution, headline metric)..."
+                  className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <ImageUploadField
+                  value={imageUrl}
+                  onChange={setImageUrl}
+                  category="Projects"
+                  entityContext={entityContext}
+                  label="Inline Result Figure / Image (Optional)"
+                />
+                {imageUrl && (
+                  <input
+                    value={caption}
+                    onChange={e => setCaption(e.target.value)}
+                    placeholder="Figure caption (e.g., Fig. 1: Validation scatter plots across 8 holdouts)..."
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                  />
+                )}
+              </div>
+
+              <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                <input type="checkbox" checked={highlight} onChange={e => setHighlight(e.target.checked)} />
+                <span className="font-bold text-slate-700">Highlight narrative text with subtle Crimson accent tint</span>
+              </label>
+            </div>
           )}
+
+          {/* Corresponding Result Reference Links Builder (Paper / Dataset / Code / Demo App / Box) */}
+          <div className="bg-slate-50 border border-gray-200 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-bold text-slate-800">
+                Linked Results &amp; Reference Links (Paper / Dataset / Code / App)
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setReferences(prev => [
+                    ...prev,
+                    { id: `ref-${Date.now()}-${prev.length}`, label: '', url: '', kind: 'paper' },
+                  ])
+                }
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" /> Add Reference Link
+              </button>
+            </div>
+            {references.length === 0 ? (
+              <p className="text-[10px] text-slate-500">
+                Optional: attach direct links to papers (DOI), datasets, GitHub repos, interactive result apps, or Box files for this section.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {references.map((r, idx) => (
+                  <div key={r.id} className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 items-center bg-white p-2 rounded-lg border border-gray-200">
+                    <select
+                      value={r.kind || 'other'}
+                      onChange={e =>
+                        setReferences(prev =>
+                          prev.map((x, i) => (i === idx ? { ...x, kind: e.target.value as ProjectReferenceLink['kind'] } : x))
+                        )
+                      }
+                      className="sm:col-span-3 p-1.5 border border-gray-300 rounded text-[11px] font-bold bg-slate-50"
+                    >
+                      <option value="paper">Paper / DOI</option>
+                      <option value="dataset">Dataset</option>
+                      <option value="code">Code / Model</option>
+                      <option value="demo">Live Result / App</option>
+                      <option value="box">Box Archive</option>
+                      <option value="other">Other Link</option>
+                    </select>
+                    <input
+                      value={r.label}
+                      onChange={e =>
+                        setReferences(prev => prev.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))
+                      }
+                      placeholder="Label (e.g., Full Manuscript DOI)"
+                      className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-[11px]"
+                    />
+                    <input
+                      value={r.url}
+                      onChange={e =>
+                        setReferences(prev => prev.map((x, i) => (i === idx ? { ...x, url: e.target.value } : x)))
+                      }
+                      placeholder="https://... or 10.1016/..."
+                      className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setReferences(prev => prev.filter((_, i) => i !== idx))}
+                      className="sm:col-span-1 p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer flex justify-center font-bold"
+                      title="Remove link"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {type === 'dataset' && (
             <div>

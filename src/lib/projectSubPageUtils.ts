@@ -5,6 +5,7 @@ import {
   ProjectContentBlock,
   ProjectCustomSubTab,
   ProjectInvestigator,
+  ProjectShowcaseTab,
   ProjectSubPageData,
   SubTabVisibility,
   User,
@@ -209,6 +210,12 @@ export const SUBTAB_PRESETS: Array<{
   description: string;
 }> = [
   {
+    kind: 'showcase',
+    defaultLabel: 'Showcase',
+    defaultVisibility: 'public',
+    description: 'Dedicated results showcase with customizable sub-tabs for individual models, validation plots, demos, and findings.',
+  },
+  {
     kind: 'information',
     defaultLabel: 'Project Information',
     defaultVisibility: 'public',
@@ -314,6 +321,38 @@ export function formatInvestigatorsSummary(list: ProjectInvestigator[]): string 
     .join(' · ');
 }
 
+export function isShowcaseSubTab(tab?: ProjectCustomSubTab | null): boolean {
+  if (!tab) return false;
+  if (tab.kind === 'showcase') return true;
+  const idLower = (tab.id || '').trim().toLowerCase();
+  const labelLower = (tab.label || '').trim().toLowerCase();
+  return idLower === 'showcase' || labelLower === 'showcase';
+}
+
+export function getNormalizedShowcaseTabs(tab: ProjectCustomSubTab): ProjectShowcaseTab[] {
+  if (Array.isArray(tab.showcaseTabs) && tab.showcaseTabs.length > 0) {
+    return tab.showcaseTabs.map((st, idx) => ({
+      id: st.id || `res-tab-${idx + 1}`,
+      label: st.label || `Model / Result ${idx + 1}`,
+      summary: st.summary || '',
+      blocks: Array.isArray(st.blocks) ? st.blocks : [],
+    }));
+  }
+  const existingBlocks = Array.isArray(tab.blocks) ? tab.blocks : [];
+  const firstHeading = existingBlocks.find(b => b.type === 'paragraph' && b.title?.trim())?.title?.trim();
+  const autoLabel = firstHeading
+    ? (firstHeading.length > 36 ? `${firstHeading.slice(0, 34).trim()}…` : firstHeading)
+    : 'Model & Key Results';
+  return [
+    {
+      id: 'res-primary',
+      label: autoLabel,
+      summary: '',
+      blocks: existingBlocks,
+    },
+  ];
+}
+
 /**
  * Normalizes legacy ProjectSubPageData (fixed 4 sub-tabs) into the flexible
  * customSubTabs representation without dropping any existing summary,
@@ -323,13 +362,48 @@ export function buildNormalizedSubTabs(
   project: Project,
   subPage: ProjectSubPageData
 ): ProjectCustomSubTab[] {
-  const ensureProjectManagementTab = (tabs: ProjectCustomSubTab[]): ProjectCustomSubTab[] => {
+  const ensureBuiltInTabs = (tabs: ProjectCustomSubTab[]): ProjectCustomSubTab[] => {
+    let next = tabs.map(t =>
+      isShowcaseSubTab(t)
+        ? { ...t, kind: 'showcase' as const }
+        : t
+    );
+
+    // Ensure every Research Project has a public Showcase tab with nested Model/Result tabs
+    if (!next.some(t => isShowcaseSubTab(t))) {
+      const showcaseTab: ProjectCustomSubTab = {
+        id: 'showcase',
+        label: 'Showcase',
+        kind: 'showcase',
+        visibility: 'public',
+        description:
+          'Highlighted models, validation figures, scientific findings, and result tabs for this project.',
+        blocks: [],
+        showcaseTabs: [
+          {
+            id: 'res-primary',
+            label: 'Model 1 · Key Results',
+            summary: '',
+            blocks: [],
+          },
+        ],
+      };
+      const pmIdx = next.findIndex(
+        t => t.kind === 'workplan-tracker' || t.kind === 'reservoir-tracker' || t.id === 'project-management'
+      );
+      if (pmIdx >= 0) {
+        next = [...next.slice(0, pmIdx), showcaseTab, ...next.slice(pmIdx)];
+      } else {
+        next = [...next, showcaseTab];
+      }
+    }
+
     if (isReservoirManagedProject(project)) {
-      if (tabs.some(t => t.kind === 'reservoir-tracker' || t.id === 'project-management')) {
-        return tabs;
+      if (next.some(t => t.kind === 'reservoir-tracker' || t.id === 'project-management')) {
+        return next;
       }
       return [
-        ...tabs,
+        ...next,
         {
           id: 'project-management',
           label: 'Project Management',
@@ -342,12 +416,12 @@ export function buildNormalizedSubTabs(
       ];
     }
 
-    if (tabs.some(t => t.kind === 'workplan-tracker' || t.id === 'project-management')) {
-      return tabs;
+    if (next.some(t => t.kind === 'workplan-tracker' || t.id === 'project-management')) {
+      return next;
     }
 
     return [
-      ...tabs,
+      ...next,
       {
         id: 'project-management',
         label: 'Project Management',
@@ -361,7 +435,7 @@ export function buildNormalizedSubTabs(
   };
 
   if (Array.isArray(subPage.customSubTabs) && subPage.customSubTabs.length > 0) {
-    return ensureProjectManagementTab(
+    return ensureBuiltInTabs(
       subPage.customSubTabs.map(tab => ({
         ...tab,
         visibility: tab.visibility || subPage.tabVisibility?.[tab.id] || 'public',
@@ -435,7 +509,7 @@ export function buildNormalizedSubTabs(
     availability: ds.availability || 'Public',
   }));
 
-  return ensureProjectManagementTab([
+  return ensureBuiltInTabs([
     {
       id: 'overview',
       label: 'Overview',

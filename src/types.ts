@@ -33,6 +33,13 @@ export type ProjectContentBlockType =
   | 'box-folder'
   | 'image';
 
+export interface ProjectReferenceLink {
+  id: string;
+  label: string;
+  url: string;
+  kind?: 'paper' | 'dataset' | 'code' | 'demo' | 'box' | 'other';
+}
+
 export interface ProjectContentBlock {
   id: string;
   type: ProjectContentBlockType;
@@ -56,11 +63,16 @@ export interface ProjectContentBlock {
   answer?: string;
   resolved?: boolean;
   status?: string;
+  sectionLevel?: 'section' | 'subsection';
+  contextNote?: string;
+  imageUrl?: string;
+  references?: ProjectReferenceLink[];
 }
 
 export type ProjectCustomSubTabKind =
   | 'overview'
   | 'information'
+  | 'showcase'
   | 'resources'
   | 'events'
   | 'datasets'
@@ -74,6 +86,13 @@ export type ProjectCustomSubTabKind =
   | 'reservoir-tracker'
   | 'workplan-tracker'
   | 'custom';
+
+export interface ProjectShowcaseTab {
+  id: string;
+  label: string;
+  summary?: string;
+  blocks: ProjectContentBlock[];
+}
 
 export type ProjectTrackerStageStatus = string;
 
@@ -142,6 +161,7 @@ export interface ProjectCustomSubTab {
   visibility: SubTabVisibility;
   description?: string;
   blocks: ProjectContentBlock[];
+  showcaseTabs?: ProjectShowcaseTab[];
   workplanRounds?: ProjectTrackerRound[];
   workplanConfig?: ProjectTrackerConfig;
 }

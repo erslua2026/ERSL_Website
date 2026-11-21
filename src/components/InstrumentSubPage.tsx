@@ -15,6 +15,7 @@ import {
 import { Instrument, InstrumentResourceItem, InstrumentStatus, User } from '../types';
 import { getInstrumentStatusMeta, INSTRUMENT_STATUS_OPTIONS } from '../lib/instrumentUtils';
 import { isResolvableResourceUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
+import { deleteBoxFileFromUrl } from '../lib/boxSync';
 import { ImageUploadField } from './ImageUploadField';
 import { BoxUploadButton } from './BoxUploadButton';
 
@@ -184,8 +185,9 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
   };
 
   const handleDeleteResource = (item: InstrumentResourceItem) => {
-    if (!confirm(`Remove "${item.title}" from this instrument's resources?`)) return;
+    if (!confirm(`Remove "${item.title}" from this instrument's resources? (Any linked Box file will also be moved to Box Trash.)`)) return;
     persistResources(resources.filter(r => r.id !== item.id));
+    deleteBoxFileFromUrl(item.url);
   };
 
   return (
