@@ -66,6 +66,7 @@ export interface ProjectContentBlock {
   sectionLevel?: 'section' | 'subsection';
   contextNote?: string;
   imageUrl?: string;
+  figureSize?: 'full' | 'compact';
   references?: ProjectReferenceLink[];
 }
 
@@ -87,10 +88,22 @@ export type ProjectCustomSubTabKind =
   | 'workplan-tracker'
   | 'custom';
 
+export interface ProjectShowcaseMetric {
+  id: string;
+  value: string;
+  label: string;
+}
+
 export interface ProjectShowcaseTab {
   id: string;
   label: string;
+  articleTitle?: string;
   summary?: string;
+  metrics?: ProjectShowcaseMetric[];
+  heroImageUrl?: string;
+  heroCaption?: string;
+  attributionNote?: string;
+  citationText?: string;
   blocks: ProjectContentBlock[];
 }
 

@@ -332,6 +332,7 @@ export function isShowcaseSubTab(tab?: ProjectCustomSubTab | null): boolean {
 export function getNormalizedShowcaseTabs(tab: ProjectCustomSubTab): ProjectShowcaseTab[] {
   if (Array.isArray(tab.showcaseTabs) && tab.showcaseTabs.length > 0) {
     return tab.showcaseTabs.map((st, idx) => ({
+      ...st,
       id: st.id || `res-tab-${idx + 1}`,
       label: st.label || `Model / Result ${idx + 1}`,
       summary: st.summary || '',

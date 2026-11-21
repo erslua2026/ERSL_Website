@@ -4,26 +4,27 @@ import {
   ArrowUp,
   BookOpen,
   Calendar,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Code2,
+  Copy,
   Database,
   Edit2,
   ExternalLink,
-  FileText,
   FolderGit2,
   Hash,
   Image as ImageIcon,
   IndentDecrease,
   IndentIncrease,
   Link2,
-  ListChecks,
   Maximize2,
   Rocket,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
-import { ProjectContentBlock, ProjectReferenceLink } from '../types';
+import { ProjectContentBlock, ProjectReferenceLink, ProjectShowcaseTab } from '../types';
 import {
   isBoxUrl,
   isSafeDataDocumentUrl,
@@ -34,11 +35,11 @@ import {
 import { LinkedReferenceText } from './LinkedReferenceText';
 
 interface ShowcaseBlogViewProps {
-  tabTitle: string;
-  tabSummary?: string;
+  resultTab: ProjectShowcaseTab;
   blocks: ProjectContentBlock[];
   canEdit: boolean;
   primaryColor: string;
+  onEditTabMeta?: () => void;
   onEdit: (block: ProjectContentBlock) => void;
   onDelete: (blockId: string) => void;
   onMove: (index: number, delta: -1 | 1) => void;
@@ -81,18 +82,58 @@ const REF_KIND_META: Record<
   },
 };
 
+/**
+ * Safely renders prose supporting inline **bold**, `code`, and auto-linked URLs/DOIs.
+ */
+function RichBlogProse({ text }: { text: string }) {
+  const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {tokens.map((tok, i) => {
+        if (tok.startsWith('**') && tok.endsWith('**') && tok.length > 4) {
+          return (
+            <strong key={i} className="font-bold text-slate-900">
+              <LinkedReferenceText text={tok.slice(2, -2)} />
+            </strong>
+          );
+        }
+        if (tok.startsWith('`') && tok.endsWith('`') && tok.length > 2) {
+          return (
+            <code
+              key={i}
+              className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[0.88em] text-slate-800"
+            >
+              {tok.slice(1, -1)}
+            </code>
+          );
+        }
+        return <LinkedReferenceText key={i} text={tok} />;
+      })}
+    </>
+  );
+}
+
 export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
-  tabTitle,
-  tabSummary,
+  resultTab,
   blocks,
   canEdit,
   primaryColor,
+  onEditTabMeta,
   onEdit,
   onDelete,
   onMove,
   onToggleSectionLevel,
 }) => {
   const [lightbox, setLightbox] = useState<{ src: string; caption?: string } | null>(null);
+  const [tocOpen, setTocOpen] = useState(true);
+  const [copiedCitation, setCopiedCitation] = useState(false);
+
+  const metrics = Array.isArray(resultTab.metrics) ? resultTab.metrics.filter(m => m.value?.trim() || m.label?.trim()) : [];
+  const heroImgSrc = resultTab.heroImageUrl
+    ? isSafeDataDocumentUrl(resultTab.heroImageUrl)
+      ? resultTab.heroImageUrl
+      : resolveAssetUrl(resultTab.heroImageUrl)
+    : '';
 
   // Build hierarchical numbering (1., 1.1, 1.2, 2., 2.1 ...) for blog outline & sections
   const numberedEntries = useMemo(() => {
@@ -155,92 +196,160 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 text-left">
-      {/* Article Masthead */}
-      <div className="border-b border-gray-200 pb-4 space-y-1.5">
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest" style={{ color: primaryColor }}>
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Research Model &amp; Results Showcase</span>
+    <article className="max-w-[860px] mx-auto text-left space-y-6 pb-2">
+      {/* Editorial Article Header */}
+      <header className="space-y-3 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2 flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-[1.85rem] font-black text-slate-900 leading-tight tracking-tight">
+              {resultTab.articleTitle?.trim() || resultTab.label}
+            </h1>
+            {resultTab.summary && (
+              <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                {resultTab.summary}
+              </p>
+            )}
+          </div>
+          {canEdit && onEditTabMeta && (
+            <button
+              type="button"
+              onClick={onEditTabMeta}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <Edit2 className="w-3 h-3" /> Edit Header / Metrics / Citation
+            </button>
+          )}
         </div>
-        <h2 className="text-lg sm:text-xl font-black text-slate-900 leading-snug">
-          {tabTitle}
-        </h2>
-        {tabSummary && (
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            {tabSummary}
-          </p>
-        )}
-      </div>
 
-      {/* Table of Contents (Contents & Sub-Contents) */}
+        {/* Key Metrics Strip (matching scientific blog metric cards) */}
+        {metrics.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+            {metrics.map(m => (
+              <div
+                key={m.id}
+                className="bg-slate-50 border border-slate-200 border-l-4 rounded-lg px-4 py-3"
+                style={{ borderLeftColor: primaryColor }}
+              >
+                <span className="text-base sm:text-lg font-extrabold block leading-snug" style={{ color: primaryColor }}>
+                  {m.value}
+                </span>
+                <span className="text-xs text-slate-600 leading-snug block mt-0.5">
+                  {m.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </header>
+
+      {/* Optional Hero Comparison Image / GIF */}
+      {heroImgSrc && (
+        <figure className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+          <div className="relative bg-white rounded-lg overflow-hidden flex justify-center p-1">
+            <img
+              src={heroImgSrc}
+              alt={resultTab.heroCaption || resultTab.articleTitle || resultTab.label}
+              onClick={() =>
+                setLightbox({
+                  src: heroImgSrc,
+                  caption: resultTab.heroCaption || resultTab.articleTitle || resultTab.label,
+                })
+              }
+              className="max-w-full max-h-[540px] object-contain rounded cursor-zoom-in"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setLightbox({
+                  src: heroImgSrc,
+                  caption: resultTab.heroCaption || resultTab.articleTitle || resultTab.label,
+                })
+              }
+              className="absolute top-2.5 right-2.5 px-2 py-1 rounded-md bg-slate-900/75 hover:bg-slate-900 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Maximize2 className="w-3 h-3" /> Enlarge
+            </button>
+          </div>
+          {resultTab.heroCaption && (
+            <figcaption className="text-xs sm:text-[13px] text-slate-600 leading-relaxed px-1.5">
+              <RichBlogProse text={resultTab.heroCaption} />
+            </figcaption>
+          )}
+        </figure>
+      )}
+
+      {/* Collapsible Contents & Sub-Contents Navigation */}
       {numberedEntries.length > 0 && (
         <nav
           aria-label="Showcase Table of Contents"
-          className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5"
+          className="rounded-xl border border-slate-200 bg-slate-50/80 overflow-hidden"
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setTocOpen(prev => !prev)}
+            className="w-full px-4 py-2.5 flex items-center justify-between gap-2 text-left hover:bg-slate-100/70 transition-colors cursor-pointer"
+          >
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <Hash className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-              <span>Contents &amp; Sub-Contents</span>
+              <span>Contents &amp; Sub-Contents ({numberedEntries.length})</span>
             </span>
-            <span className="text-[10px] font-bold text-slate-400">
-              {numberedEntries.length} {numberedEntries.length === 1 ? 'section' : 'sections'} · click to jump
+            <span className="text-[11px] font-bold text-slate-500 inline-flex items-center gap-1">
+              {tocOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              <span>{tocOpen ? 'Hide' : 'Show'}</span>
             </span>
-          </div>
+          </button>
 
-          <div className="space-y-1">
-            {numberedEntries.map(({ block, isSub, numLabel }) => {
-              const hasImg = Boolean(block.type === 'image' ? block.url : block.imageUrl);
-              const refCount =
-                (block.references?.length || 0) +
-                (block.url && block.type !== 'image' ? 1 : 0) +
-                (block.boxUrl ? 1 : 0);
+          {tocOpen && (
+            <div className="px-3 pb-3 pt-1 border-t border-slate-200/80 space-y-1">
+              {numberedEntries.map(({ block, isSub, numLabel }) => {
+                const hasImg = Boolean(block.type === 'image' ? block.url : block.imageUrl);
+                const refCount =
+                  (block.references?.length || 0) +
+                  (block.url && block.type !== 'image' ? 1 : 0) +
+                  (block.boxUrl ? 1 : 0);
 
-              return (
-                <button
-                  key={block.id}
-                  type="button"
-                  onClick={() => scrollToBlock(block.id)}
-                  className={`w-full text-left rounded-lg px-2.5 py-1.5 hover:bg-white border border-transparent hover:border-gray-200 transition-colors flex items-center justify-between gap-2 cursor-pointer group ${
-                    isSub ? 'pl-6 text-xs text-slate-600' : 'text-xs font-extrabold text-slate-800'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`font-mono shrink-0 ${isSub ? 'text-[11px] text-slate-400' : 'text-xs font-black'}`}
-                      style={!isSub ? { color: primaryColor } : undefined}
-                    >
-                      {numLabel}
+                return (
+                  <button
+                    key={block.id}
+                    type="button"
+                    onClick={() => scrollToBlock(block.id)}
+                    className={`w-full text-left rounded-lg px-2.5 py-1 hover:bg-white border border-transparent hover:border-gray-200 transition-colors flex items-center justify-between gap-2 cursor-pointer group ${
+                      isSub ? 'pl-6 text-xs text-slate-600' : 'text-xs font-extrabold text-slate-800'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`font-mono shrink-0 ${isSub ? 'text-[11px] text-slate-400' : 'text-xs font-black'}`}
+                        style={!isSub ? { color: primaryColor } : undefined}
+                      >
+                        {numLabel}
+                      </span>
+                      <span className="truncate group-hover:underline">{block.title}</span>
                     </span>
-                    <span className="truncate group-hover:underline">{block.title}</span>
-                  </span>
 
-                  <span className="flex items-center gap-1.5 shrink-0 text-[10px] font-bold text-slate-400">
-                    {block.category && (
-                      <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-500">
-                        {block.category}
-                      </span>
-                    )}
-                    {hasImg && (
-                      <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-600 inline-flex items-center gap-0.5">
-                        <ImageIcon className="w-2.5 h-2.5" /> Figure
-                      </span>
-                    )}
-                    {refCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-blue-700 inline-flex items-center gap-0.5">
-                        <Link2 className="w-2.5 h-2.5" /> {refCount}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="flex items-center gap-1.5 shrink-0 text-[10px] font-bold text-slate-400">
+                      {hasImg && (
+                        <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-slate-600 inline-flex items-center gap-0.5">
+                          <ImageIcon className="w-2.5 h-2.5" /> Figure
+                        </span>
+                      )}
+                      {refCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-blue-700 inline-flex items-center gap-0.5">
+                          <Link2 className="w-2.5 h-2.5" /> {refCount}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </nav>
       )}
 
-      {/* Blog Article Body */}
-      <div className="space-y-7">
+      {/* Editorial Article Sections & Sub-Sections */}
+      <div className="space-y-8">
         {numberedEntries.map(({ block, isSub, numLabel }, idx) => {
           const inlineImgRaw = block.type === 'image' ? block.url : block.imageUrl;
           const inlineImgSrc = inlineImgRaw
@@ -249,7 +358,6 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
               : resolveAssetUrl(inlineImgRaw)
             : '';
 
-          // Collect all reference links attached to this blog section (structured references + legacy url/boxUrl)
           const allRefs: ProjectReferenceLink[] = [
             ...(Array.isArray(block.references) ? block.references : []),
           ];
@@ -285,63 +393,67 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
           }
 
           return (
-            <article
+            <section
               key={block.id}
               id={`showcase-sec-${block.id}`}
               className={`scroll-mt-6 group ${
                 isSub
                   ? 'ml-3 sm:ml-6 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-3'
-                  : 'pt-2 pb-4 border-b border-gray-100 last:border-b-0 space-y-3.5'
+                  : 'space-y-3.5'
               }`}
             >
-              {/* Section Header + Editorial Toolbar */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`font-black font-mono ${isSub ? 'text-xs text-slate-500' : 'text-sm sm:text-base'}`}
-                      style={!isSub ? { color: primaryColor } : undefined}
-                    >
-                      {numLabel}
-                    </span>
-                    <h3
-                      className={`font-extrabold text-slate-900 leading-snug ${
-                        isSub ? 'text-sm sm:text-base' : 'text-base sm:text-lg'
-                      }`}
-                    >
+              {/* Section Heading + Editorial Controls */}
+              <div
+                className={`flex items-start justify-between gap-3 ${
+                  isSub ? '' : 'border-b-2 border-slate-200 pb-1.5'
+                }`}
+              >
+                <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-2">
+                  <span
+                    className={`font-mono shrink-0 ${isSub ? 'text-xs font-bold text-slate-400' : 'text-base sm:text-lg font-black'}`}
+                    style={!isSub ? { color: primaryColor } : undefined}
+                  >
+                    {numLabel}
+                  </span>
+                  {isSub ? (
+                    <h3 className="text-base font-extrabold text-slate-800 leading-snug">
                       {block.title}
                     </h3>
-                    {block.category && (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-gray-200">
-                        {block.category}
-                      </span>
-                    )}
-                    {block.type === 'dataset' && (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                        Dataset · {block.availability || 'Public'}
-                      </span>
-                    )}
-                    {block.type === 'software' && (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
-                        {block.language || 'Code'}{block.version ? ` v${block.version}` : ''}
-                      </span>
-                    )}
-                    {block.type === 'event' && block.date && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 inline-flex items-center gap-1">
-                        <Calendar className="w-2.5 h-2.5" /> {block.date}
-                      </span>
-                    )}
-                  </div>
+                  ) : (
+                    <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug">
+                      {block.title}
+                    </h2>
+                  )}
+                  {block.category && (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-gray-200">
+                      {block.category}
+                    </span>
+                  )}
+                  {block.type === 'dataset' && (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                      Dataset · {block.availability || 'Public'}
+                    </span>
+                  )}
+                  {block.type === 'software' && (
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
+                      {block.language || 'Code'}{block.version ? ` v${block.version}` : ''}
+                    </span>
+                  )}
+                  {block.type === 'event' && block.date && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 inline-flex items-center gap-1">
+                      <Calendar className="w-2.5 h-2.5" /> {block.date}
+                    </span>
+                  )}
                 </div>
 
                 {canEdit && (
-                  <div className="flex items-center gap-1 shrink-0 opacity-85 group-hover:opacity-100">
+                  <div className="flex items-center gap-1 shrink-0 opacity-85 group-hover:opacity-100 pb-0.5">
                     {onToggleSectionLevel && (
                       <button
                         type="button"
                         onClick={() => onToggleSectionLevel(block)}
                         className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-gray-200 text-slate-600 cursor-pointer"
-                        title={isSub ? 'Promote to Main Section (1.)' : 'Make Sub-Section (1.1)'}
+                        title={isSub ? 'Promote to Main Section (h2)' : 'Make Sub-Section (h3)'}
                       >
                         {isSub ? <IndentDecrease className="w-3.5 h-3.5" /> : <IndentIncrease className="w-3.5 h-3.5" />}
                       </button>
@@ -387,73 +499,83 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
               {/* Context Callout Strip */}
               {block.contextNote && (
                 <div
-                  className="rounded-lg border-l-4 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-700 leading-relaxed"
+                  className="rounded-lg border-l-4 bg-slate-50 px-4 py-3 text-xs sm:text-[13px] text-slate-700 leading-relaxed"
                   style={{ borderLeftColor: primaryColor }}
                 >
                   <span className="text-[10px] font-extrabold uppercase tracking-wider block mb-0.5" style={{ color: primaryColor }}>
-                    Context &amp; Key Takeaway
+                    Context &amp; Highlights
                   </span>
-                  <LinkedReferenceText text={block.contextNote} />
+                  <RichBlogProse text={block.contextNote} />
                 </div>
               )}
 
-              {/* Blog Prose / Checklist Body */}
+              {/* Blog Prose Paragraphs or Objectives Checklist */}
               {block.body && (
                 block.type === 'objectives' ? (
-                  <ul className="space-y-1.5 text-xs sm:text-[13px] text-slate-700">
+                  <ul className="space-y-2 text-sm text-slate-700">
                     {block.body
                       .split('\n')
                       .map(line => line.trim())
                       .filter(Boolean)
                       .map((line, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                        <li key={i} className="flex items-start gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 mt-1 text-emerald-600" />
                           <span className="leading-relaxed">
-                            <LinkedReferenceText text={line} />
+                            <RichBlogProse text={line} />
                           </span>
                         </li>
                       ))}
                   </ul>
                 ) : (
                   <div
-                    className={`text-xs sm:text-[13px] text-slate-700 leading-relaxed whitespace-pre-line text-justify ${
+                    className={`space-y-3 text-sm sm:text-[15px] text-slate-800 leading-relaxed text-justify ${
                       block.highlight ? 'bg-red-50/40 border border-red-100 rounded-xl p-4' : ''
                     }`}
                   >
-                    <LinkedReferenceText text={block.body} />
+                    {block.body
+                      .split(/\n{2,}/)
+                      .map(p => p.trim())
+                      .filter(Boolean)
+                      .map((para, pIdx) => (
+                        <p key={pIdx} className="whitespace-pre-line">
+                          <RichBlogProse text={para} />
+                        </p>
+                      ))}
                   </div>
                 )
               )}
 
-              {/* Embedded Figure / Validation Plot */}
+              {/* Responsive Figure Card (Full width or 78% centered Scatter Plot + Caption) */}
               {inlineImgSrc && (
-                <figure className="rounded-xl border border-gray-200 bg-slate-50/70 overflow-hidden">
-                  <div className="relative bg-white p-2 flex justify-center">
+                <figure className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+                  <div className="relative bg-white rounded-lg overflow-hidden flex justify-center p-1">
                     <img
                       src={inlineImgSrc}
                       alt={block.caption || block.title}
                       onClick={() => setLightbox({ src: inlineImgSrc, caption: block.caption || block.title })}
-                      className="w-full max-h-[520px] object-contain rounded cursor-zoom-in"
+                      className={`${
+                        block.figureSize === 'compact' ? 'w-full sm:max-w-[78%]' : 'max-w-full'
+                      } max-h-[540px] object-contain rounded cursor-zoom-in mx-auto block`}
                       referrerPolicy="no-referrer"
                     />
                     <button
                       type="button"
                       onClick={() => setLightbox({ src: inlineImgSrc, caption: block.caption || block.title })}
-                      className="absolute top-3 right-3 px-2 py-1 rounded-md bg-slate-900/75 hover:bg-slate-900 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                      className="absolute top-2.5 right-2.5 px-2 py-1 rounded-md bg-slate-900/75 hover:bg-slate-900 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
                       title="Open figure full size"
                     >
                       <Maximize2 className="w-3 h-3" /> Enlarge
                     </button>
                   </div>
                   {(block.caption || block.type === 'image') && (
-                    <figcaption className="px-4 py-2 text-[11px] font-semibold text-slate-600 border-t border-gray-200 bg-slate-50 flex items-center justify-between gap-2">
-                      <span>{block.caption || block.title}</span>
+                    <figcaption className="text-xs sm:text-[13px] text-slate-600 leading-relaxed px-1.5">
+                      <RichBlogProse text={block.caption || block.title} />
                     </figcaption>
                   )}
                 </figure>
               )}
 
-              {/* Corresponding Result Reference Links Bar */}
+              {/* Linked Results & References Bar */}
               {allRefs.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 inline-flex items-center gap-1">
@@ -462,10 +584,46 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
                   {allRefs.map(renderRefPill)}
                 </div>
               )}
-            </article>
+            </section>
           );
         })}
       </div>
+
+      {/* Editorial Data, Code, Attribution & Citation Footer Box */}
+      {(resultTab.attributionNote || resultTab.citationText) && (
+        <footer className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-3 text-xs sm:text-[13px]">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+            Data, Code &amp; Attribution
+          </h3>
+          {resultTab.attributionNote && (
+            <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+              <RichBlogProse text={resultTab.attributionNote} />
+            </p>
+          )}
+          {resultTab.citationText && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-slate-700">Suggested Citation:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(resultTab.citationText || '');
+                    setCopiedCitation(true);
+                    setTimeout(() => setCopiedCitation(false), 2000);
+                  }}
+                  className="px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-[10px] font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  {copiedCitation ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedCitation ? 'Copied!' : 'Copy Citation'}</span>
+                </button>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 font-mono text-[11px] sm:text-xs text-slate-700 overflow-x-auto leading-relaxed">
+                {resultTab.citationText}
+              </div>
+            </div>
+          )}
+        </footer>
+      )}
 
       {/* Full-Resolution Figure Zoom Lightbox */}
       {lightbox && (
@@ -500,6 +658,6 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 };

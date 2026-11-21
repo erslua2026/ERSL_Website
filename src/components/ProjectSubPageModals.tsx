@@ -483,6 +483,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   );
   const [contextNote, setContextNote] = useState(existing?.contextNote || '');
   const [imageUrl, setImageUrl] = useState(existing?.imageUrl || '');
+  const [figureSize, setFigureSize] = useState<'full' | 'compact'>(existing?.figureSize || 'full');
   const [references, setReferences] = useState<ProjectReferenceLink[]>(
     Array.isArray(existing?.references) ? existing.references : []
   );
@@ -534,6 +535,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       sectionLevel,
       contextNote: contextNote.trim() || undefined,
       imageUrl: type !== 'image' ? (imageUrl.trim() || undefined) : undefined,
+      figureSize: (type === 'image' || imageUrl.trim()) ? figureSize : undefined,
       references: cleanedRefs.length > 0 ? cleanedRefs : undefined,
       priority: isTodoBlock ? priority : existing?.priority,
       completed: isTodoBlock ? completed : existing?.completed,
@@ -657,12 +659,22 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                   label="Inline Result Figure / Image (Optional)"
                 />
                 {imageUrl && (
-                  <input
-                    value={caption}
-                    onChange={e => setCaption(e.target.value)}
-                    placeholder="Figure caption (e.g., Fig. 1: Validation scatter plots across 8 holdouts)..."
-                    className="w-full p-2 border border-gray-300 rounded-lg bg-white"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      value={caption}
+                      onChange={e => setCaption(e.target.value)}
+                      placeholder="Figure caption (e.g., Fig. 1: Validation scatter plots)..."
+                      className="sm:col-span-2 p-2 border border-gray-300 rounded-lg bg-white"
+                    />
+                    <select
+                      value={figureSize}
+                      onChange={e => setFigureSize(e.target.value as 'full' | 'compact')}
+                      className="p-2 border border-gray-300 rounded-lg bg-white font-semibold"
+                    >
+                      <option value="full">Full Article Width</option>
+                      <option value="compact">Scatter Plot (78% Centered)</option>
+                    </select>
+                  </div>
                 )}
               </div>
 
@@ -868,9 +880,22 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                 entityContext={entityContext}
                 label="Project Photo (Upload from Computer, Paste Clipboard, or Paste URL)"
               />
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Caption</label>
-                <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Figure or field site description..." className="w-full p-2 border border-gray-300 rounded-lg" />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-gray-700 block mb-1">Caption</label>
+                  <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Figure or field site description..." className="w-full p-2 border border-gray-300 rounded-lg" />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">Figure Layout Size</label>
+                  <select
+                    value={figureSize}
+                    onChange={e => setFigureSize(e.target.value as 'full' | 'compact')}
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="full">Full Article Width</option>
+                    <option value="compact">Scatter Plot (78% Centered)</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="font-bold text-gray-700 block mb-1">Additional Notes (Optional)</label>
