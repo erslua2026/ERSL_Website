@@ -45,7 +45,7 @@ import {
   User,
 } from '../types';
 import { ImageUploadField } from './ImageUploadField';
-import { resolveAssetUrl } from '../lib/boxUtils';
+import { resolveAssetUrl, sanitizeExternalUrl } from '../lib/boxUtils';
 import { deleteBoxFilesByUrls } from '../lib/boxSync';
 import {
   buildNormalizedSubTabs,
@@ -1421,9 +1421,9 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                     </div>
                   </div>
 
-                  {subPage.boxFolderUrl && (
+                  {canViewVisibility('members') && subPage.boxFolderUrl && sanitizeExternalUrl(subPage.boxFolderUrl) && (
                     <a
-                      href={subPage.boxFolderUrl}
+                      href={sanitizeExternalUrl(subPage.boxFolderUrl)}
                       target="_blank"
                       rel="noreferrer"
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-colors"

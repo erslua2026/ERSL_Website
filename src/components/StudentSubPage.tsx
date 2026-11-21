@@ -632,10 +632,12 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
               <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/25 bg-white/15 text-white">
                 {person.role}
               </span>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/25 bg-black/20 text-white inline-flex items-center gap-1">
-                <FolderGit2 className="w-3 h-3" />
-                <span>Box: People/{studentBoxSlug}</span>
-              </span>
+              {access.canViewVisibility('members') && (
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/25 bg-black/20 text-white inline-flex items-center gap-1">
+                  <FolderGit2 className="w-3 h-3" />
+                  <span>Box: People/{studentBoxSlug}</span>
+                </span>
+              )}
               {!isStandalone && (
                 <button
                   type="button"
@@ -735,7 +737,7 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
             )}
           </div>
 
-          {rawSubPage.boxFolderUrl && sanitizeExternalUrl(rawSubPage.boxFolderUrl) && (
+          {access.canViewVisibility('members') && rawSubPage.boxFolderUrl && sanitizeExternalUrl(rawSubPage.boxFolderUrl) && (
             <a
               href={sanitizeExternalUrl(rawSubPage.boxFolderUrl)}
               target="_blank"
