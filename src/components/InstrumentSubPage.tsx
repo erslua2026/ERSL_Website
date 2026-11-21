@@ -618,6 +618,13 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
               <ImageUploadField
                 label="Instrument Photo"
                 category="Instruments"
+                entityContext={{
+                  category: 'instruments',
+                  itemId: instrument.id,
+                  itemName: instrument.name,
+                  isPrivate: false,
+                  boxFolderUrl: instrument.boxFolderUrl,
+                }}
                 value={draftImage}
                 onChange={setDraftImage}
               />

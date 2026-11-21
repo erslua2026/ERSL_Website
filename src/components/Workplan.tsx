@@ -607,7 +607,7 @@ export const Workplan: React.FC<{
     merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     setComments(prev => ({ ...prev, [taskId]: merged }));
-    localStorage.setItem(`ersl_comments_${taskId}`, JSON.stringify(merged));
+    try { localStorage.setItem(`ersl_comments_${taskId}`, JSON.stringify(merged)); } catch { }
   }, []);
 
   const toggle = (id: string) => {

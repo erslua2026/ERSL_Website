@@ -1201,7 +1201,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
             category: 'projects',
             itemId: project.id,
             itemName: project.title,
-            isPrivate: true,
+            isPrivate: (activeSubTabObj?.visibility || 'public') !== 'public',
             boxFolderUrl: subPage.boxFolderUrl,
           }}
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}

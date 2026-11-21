@@ -716,6 +716,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                 value={url}
                 onChange={setUrl}
                 category="Projects"
+                entityContext={entityContext}
                 label="Project Photo (Upload from Computer, Paste Clipboard, or Paste URL)"
               />
               <div>

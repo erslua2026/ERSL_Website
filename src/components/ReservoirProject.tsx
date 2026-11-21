@@ -1837,7 +1837,7 @@ export const ReservoirProject: React.FC<
                 onClick={() => {
                   const next = !adminMode;
                   setAdminMode(next);
-                  localStorage.setItem('ersl_reservoir_admin_mode', String(next));
+                  try { localStorage.setItem('ersl_reservoir_admin_mode', String(next)); } catch { }
                   showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
@@ -1916,7 +1916,7 @@ export const ReservoirProject: React.FC<
                 onClick={() => {
                   const next = !adminMode;
                   setAdminMode(next);
-                  localStorage.setItem('ersl_reservoir_admin_mode', String(next));
+                  try { localStorage.setItem('ersl_reservoir_admin_mode', String(next)); } catch { }
                   showToast(next ? 'Admin Mode Active — Workload, Members & Dates Fully Editable' : 'Member Mode Active — Work Progress Editing Enabled');
                 }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${

@@ -268,7 +268,7 @@ export default function App() {
 
   // Automatically persist any publications update to local storage
   useEffect(() => {
-    localStorage.setItem('ersl_publications', JSON.stringify(publications));
+    try { localStorage.setItem('ersl_publications', JSON.stringify(publications)); } catch { }
   }, [publications]);
 
   const [softwareList, setSoftwareList] = useState<Software[]>(() => {
@@ -1244,7 +1244,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('ersl_news', JSON.stringify(news));
+    try { localStorage.setItem('ersl_news', JSON.stringify(news)); } catch { }
   }, [news]);
 
   const handleSaveNewsItem = (savedItem: NewsItem) => {
@@ -1279,7 +1279,7 @@ export default function App() {
   });
   const [activeBulletinFolder, setActiveBulletinFolder] = useState<string>('All');
   useEffect(() => {
-    localStorage.setItem('ersl_bulletin_folders', JSON.stringify(bulletinFolders));
+    try { localStorage.setItem('ersl_bulletin_folders', JSON.stringify(bulletinFolders)); } catch { }
   }, [bulletinFolders]);
 
   // Lab Bulletins & Announcements State (Point 5)
@@ -1422,57 +1422,61 @@ export default function App() {
   const [studentInterests, setStudentInterests] = useState<string[]>([]);
   const [showContactSuccess, setShowContactSuccess] = useState(false);
 
-  // Sync state changes with localStorage
+  // Sync state changes with localStorage (quota-safe: Supabase Cloud & Box remain primary)
+  const safeCacheWrite = (key: string, value: unknown) => {
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch {
+      // Ignore browser 5MB QuotaExceededError so inline/cloud portal state never crashes
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem('ersl_themes', JSON.stringify(themes));
+    safeCacheWrite('ersl_themes', themes);
   }, [themes]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_projects', JSON.stringify(projects));
+    safeCacheWrite('ersl_projects', projects);
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_publications', JSON.stringify(publications));
-  }, [publications]);
-
-  useEffect(() => {
-    localStorage.setItem('ersl_software', JSON.stringify(softwareList));
+    safeCacheWrite('ersl_software', softwareList);
   }, [softwareList]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_datalayers', JSON.stringify(dataLayers));
+    safeCacheWrite('ersl_datalayers', dataLayers);
   }, [dataLayers]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_instruments', JSON.stringify(instruments));
+    safeCacheWrite('ersl_instruments', instruments);
   }, [instruments]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_people', JSON.stringify(people));
+    safeCacheWrite('ersl_people', people);
   }, [people]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_boxfiles', JSON.stringify(boxFiles));
+    safeCacheWrite('ersl_boxfiles', boxFiles);
   }, [boxFiles]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_auditlogs', JSON.stringify(auditLogs));
+    safeCacheWrite('ersl_auditlogs', auditLogs);
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_bulletins', JSON.stringify(bulletins));
+    safeCacheWrite('ersl_bulletins', bulletins);
   }, [bulletins]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_all_users', JSON.stringify(allUsers));
+    safeCacheWrite('ersl_all_users', allUsers);
   }, [allUsers]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_inbox', JSON.stringify(inboxEntries));
+    safeCacheWrite('ersl_inbox', inboxEntries);
   }, [inboxEntries]);
 
   useEffect(() => {
-    localStorage.setItem('ersl_teaching', JSON.stringify(teachingList));
+    safeCacheWrite('ersl_teaching', teachingList);
   }, [teachingList]);
 
   useEffect(() => {
@@ -1525,7 +1529,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('ersl_tab', activeTab);
+    try { localStorage.setItem('ersl_tab', activeTab); } catch { }
   }, [activeTab]);
 
   // Smooth scroll-reveal transition as sections & cards enter the viewport
@@ -3543,7 +3547,7 @@ export default function App() {
                                 onClick={() => {
                                   if (confirm("Are you sure you want to clear all publications? The catalog will be completely emptied. You can add papers manually by DOI or sync from Google Scholar.")) {
                                     setPublications([]);
-                                    localStorage.setItem('ersl_publications', JSON.stringify([]));
+                                    try { localStorage.setItem('ersl_publications', JSON.stringify([])); } catch { }
                                     appendAuditLog('CLEAR_PUBLICATIONS', 'Cleared all publications from website catalog');
                                   }
                                 }}

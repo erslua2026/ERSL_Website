@@ -906,6 +906,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 value={formData.image || ''}
                 onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
                 category="Instruments"
+                entityContext={{
+                  category: 'instruments',
+                  itemId: formData.id,
+                  itemName: formData.name,
+                  isPrivate: false,
+                  boxFolderUrl: formData.boxFolderUrl,
+                }}
                 label="Equipment Display Image"
               />
             </>
@@ -1245,6 +1252,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 value={formData.image || ''}
                 onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
                 category="People"
+                entityContext={{
+                  category: 'people',
+                  itemId: formData.id,
+                  itemName: formData.name,
+                  isPrivate: false,
+                  boxFolderUrl: formData.subPage?.boxFolderUrl,
+                }}
                 previewShape="circle"
                 label="Profile Portrait Photo (Optional for Alumni/Collaborators)"
               />
@@ -1592,6 +1606,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                   value={formData.image || ''}
                   onChange={nextImg => setFormData((prev: any) => ({ ...prev, image: nextImg }))}
                   category="Projects"
+                  entityContext={{
+                    category: 'projects',
+                    itemId: formData.id,
+                    itemName: formData.title,
+                    isPrivate: false,
+                    boxFolderUrl: formData.subPage?.boxFolderUrl,
+                  }}
                   label="Project Banner Photo (Optional — Upload, Paste Clipboard, or URL)"
                 />
                 <p className="text-[10px] text-gray-500">

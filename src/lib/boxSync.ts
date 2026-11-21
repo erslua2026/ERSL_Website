@@ -551,20 +551,33 @@ const compressImageFileToDataUrl = (file: File, maxDim = 1600, quality = 0.84): 
   });
 
 /**
- * Upload a local image directly into UA Box `01_Website_Images/<category>` and return
- * the Box Direct Link. Falls back cleanly (with automatic compression) to a local data URL
- * so local upload and clipboard paste always succeed even without Box OIT authorization.
+ * Upload a local image directly into UA Box — either into the entity's own uniform folder
+ * (People, Projects, Instruments, Datasets, Software) when entityContext is provided,
+ * or into `01_Website_Images/<category>` for global site assets (News, Research Themes, Logos).
  */
 export async function uploadImageWithBoxFallback(
   file: File,
-  category: BoxImageCategory
+  category: BoxImageCategory,
+  entityContext?: {
+    category: BoxEntityCategory;
+    itemId?: string;
+    itemName?: string;
+    isPrivate?: boolean;
+  }
 ): Promise<{ url: string; uploadedToBox: boolean; note?: string }> {
   if (file.size > 15 * 1024 * 1024) {
     throw new Error('Image size exceeds 15MB limit. Please choose a smaller image.');
   }
 
+  const destination: BoxFileDestination =
+    entityContext?.category && (entityContext.itemName || entityContext.itemId)
+      ? (`${entityContext.category}/${buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')}` as BoxFileDestination)
+      : `images/${category}`;
+
   try {
-    const res = await invokeBoxUpload(file, `images/${category}`);
+    const res = await invokeBoxUpload(file, destination, {
+      isPrivate: Boolean(entityContext?.isPrivate),
+    });
     if (res) {
       return { url: res.directUrl, uploadedToBox: true };
     }

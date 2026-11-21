@@ -1087,7 +1087,7 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
             category: 'people',
             itemId: person.id,
             itemName: person.name,
-            isPrivate: true,
+            isPrivate: (activeSubTabObj?.visibility || 'members') !== 'public',
             boxFolderUrl: rawSubPage.boxFolderUrl,
           }}
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}
