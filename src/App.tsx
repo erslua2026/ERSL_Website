@@ -21,7 +21,7 @@ import {
 
 import {
   User, Role, ResearchTheme, Project, ProjectSubPageData, Publication, Software,
-  DataLayer, Instrument, Person, BoxFile, AuditLog,
+  DataLayer, Instrument, Person, BoxFile, AuditLog, BoxEntityCategory,
   SiteConfig, CustomPageData, BulletinItem, TabConfig, PageHeaderConfig
 } from './types';
 import { newsItems, NewsItem } from './data/news';
@@ -46,7 +46,12 @@ import { MemberManager } from './components/MemberManager';
 import { ProfessionalDevelopment } from './components/ProfessionalDevelopment';
 import { supabase, fetchProfile, profileToUser } from './lib/supabase';
 import { getCloudData, setCloudData, getLastCloudError } from './lib/cloudStore';
-import { getLastBoxStatus } from './lib/boxSync';
+import {
+  BoxEntityFolderResult,
+  ensureEntityBoxFolder,
+  getLastBoxStatus,
+  syncAllEntityBoxFolders,
+} from './lib/boxSync';
 import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
@@ -767,6 +772,170 @@ export default function App() {
       setCloudStatus({ type: 'saved', text: 'Refreshed latest data from ERSL Cloud' });
       setTimeout(() => setCloudStatus(prev => (prev?.type === 'saved' ? null : prev)), 2500);
     }
+
+    // Automatically ensure UA Box folders exist for ALL current People, Projects, Instruments, Datasets & Software
+    if (effectiveUser?.role === 'Admin' && !boxAutoSyncDoneRef.current) {
+      let alreadySyncedSession = false;
+      try {
+        alreadySyncedSession = sessionStorage.getItem('ersl_box_folders_synced_v1') === '1';
+      } catch { }
+      if (!alreadySyncedSession) {
+        boxAutoSyncDoneRef.current = true;
+        try { sessionStorage.setItem('ersl_box_folders_synced_v1', '1'); } catch { }
+        const prjList = pick<Project[]>('ersl_sec_projects', 'projects');
+        syncAllEntityBoxFolders({
+          people: ppl ? applyAutoGraduation(ppl).updatedList : people,
+          projects: prjList ? normalizeProjects(prjList) : projects,
+          instruments: inst || instruments,
+          datasets: dl || dataLayers,
+          software: soft || softwareList,
+        }).then(res => {
+          if (res.ok && res.results && res.results.length > 0) {
+            applyBoxFolderSyncResults(res.results);
+          }
+        }).catch(() => {});
+      }
+    }
+  };
+
+  const boxAutoSyncDoneRef = useRef(false);
+  const latestBoxEntitiesRef = useRef({ people, projects, instruments, dataLayers, softwareList });
+  latestBoxEntitiesRef.current = { people, projects, instruments, dataLayers, softwareList };
+
+  const applyBoxFolderSyncResults = (results: BoxEntityFolderResult[]) => {
+    if (!Array.isArray(results) || results.length === 0) return;
+    const byCatAndId = new Map<string, BoxEntityFolderResult>();
+    results.forEach(r => byCatAndId.set(`${r.category}:${r.id}`, r));
+
+    const snap = latestBoxEntitiesRef.current;
+
+    // People
+    let peopleChanged = false;
+    const nextPeople = snap.people.map(p => {
+      const match = byCatAndId.get(`people:${p.id}`);
+      if (match?.shareUrl && !p.subPage?.boxFolderUrl) {
+        peopleChanged = true;
+        return {
+          ...p,
+          subPage: {
+            summary: p.subPage?.summary || '',
+            objectives: p.subPage?.objectives || [],
+            tabVisibility: p.subPage?.tabVisibility || { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
+            resources: p.subPage?.resources || [],
+            events: p.subPage?.events || [],
+            datasets: p.subPage?.datasets || [],
+            ...(p.subPage || {}),
+            boxFolderUrl: match.shareUrl,
+          },
+        };
+      }
+      return p;
+    });
+    if (peopleChanged) {
+      setPeople(nextPeople);
+      try { localStorage.setItem('ersl_people', JSON.stringify(nextPeople)); } catch { }
+      syncSiteContentToCloud({ people: nextPeople });
+    }
+
+    // Projects
+    let projectsChanged = false;
+    const nextProjects = snap.projects.map(pr => {
+      const match = byCatAndId.get(`projects:${pr.id}`);
+      if (match?.shareUrl && !pr.subPage?.boxFolderUrl) {
+        projectsChanged = true;
+        return {
+          ...pr,
+          subPage: {
+            summary: pr.subPage?.summary || pr.summary || pr.details || '',
+            objectives: pr.subPage?.objectives || [],
+            tabVisibility: pr.subPage?.tabVisibility || { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
+            resources: pr.subPage?.resources || [],
+            events: pr.subPage?.events || [],
+            datasets: pr.subPage?.datasets || [],
+            ...(pr.subPage || {}),
+            boxFolderUrl: match.shareUrl,
+          },
+        };
+      }
+      return pr;
+    });
+    if (projectsChanged) {
+      setProjects(nextProjects);
+      try { localStorage.setItem('ersl_projects', JSON.stringify(nextProjects)); } catch { }
+      syncSiteContentToCloud({ projects: nextProjects });
+    }
+
+    // Instruments
+    let instChanged = false;
+    const nextInst = snap.instruments.map(i => {
+      const match = byCatAndId.get(`instruments:${i.id}`);
+      if (match?.shareUrl && !i.boxFolderUrl) {
+        instChanged = true;
+        return { ...i, boxFolderUrl: match.shareUrl };
+      }
+      return i;
+    });
+    if (instChanged) {
+      setInstruments(nextInst);
+      try { localStorage.setItem('ersl_instruments', JSON.stringify(nextInst)); } catch { }
+      syncSiteContentToCloud({ instruments: nextInst });
+    }
+
+    // Datasets
+    let dlChanged = false;
+    const nextDl = snap.dataLayers.map(d => {
+      const match = byCatAndId.get(`datasets:${d.id}`);
+      if (match?.shareUrl && !d.boxFolderUrl) {
+        dlChanged = true;
+        return { ...d, boxFolderUrl: match.shareUrl };
+      }
+      return d;
+    });
+    if (dlChanged) {
+      setDataLayers(nextDl);
+      try { localStorage.setItem('ersl_datalayers', JSON.stringify(nextDl)); } catch { }
+      syncSiteContentToCloud({ dataLayers: nextDl });
+    }
+
+    // Software
+    let softChanged = false;
+    const nextSoft = snap.softwareList.map(s => {
+      const match = byCatAndId.get(`software:${s.id}`);
+      if (match?.shareUrl && !s.boxFolderUrl) {
+        softChanged = true;
+        return { ...s, boxFolderUrl: match.shareUrl };
+      }
+      return s;
+    });
+    if (softChanged) {
+      setSoftwareList(nextSoft);
+      try { localStorage.setItem('ersl_software', JSON.stringify(nextSoft)); } catch { }
+      syncSiteContentToCloud({ software: nextSoft });
+    }
+  };
+
+  const provisionSingleEntityBoxFolder = (
+    category: BoxEntityCategory,
+    itemId: string,
+    itemName: string,
+    isPrivate = false
+  ) => {
+    ensureEntityBoxFolder({ category, itemId, itemName, isPrivate })
+      .then(res => {
+        if (!res.ok || !res.shareUrl) return;
+        applyBoxFolderSyncResults([
+          {
+            category,
+            id: itemId,
+            folderId: res.folderId || '',
+            folderName: res.folderName || '',
+            folderPath: res.folderPath || '',
+            shareUrl: res.shareUrl,
+            created: true,
+          },
+        ]);
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -1621,6 +1790,7 @@ export default function App() {
       try { localStorage.setItem('ersl_datalayers', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ dataLayers: updated });
       appendAuditLog(isEdit ? 'UPDATE_DATALAYER' : 'ADD_DATALAYER', savedItem.name);
+      provisionSingleEntityBoxFolder('datasets', savedItem.id, savedItem.name, savedItem.availability === 'Internal');
     } else if (modalType === 'research-theme') {
       const updated = isEdit ? themes.map(t => t.id === savedItem.id ? savedItem : t) : [...themes, savedItem];
       setThemes(updated);
@@ -1639,18 +1809,21 @@ export default function App() {
       try { localStorage.setItem('ersl_instruments', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ instruments: updated });
       appendAuditLog(isEdit ? 'UPDATE_INSTRUMENT' : 'ADD_INSTRUMENT', savedItem.name);
+      provisionSingleEntityBoxFolder('instruments', savedItem.id, savedItem.name, false);
     } else if (modalType === 'person') {
       const updated = isEdit ? people.map(p => p.id === savedItem.id ? savedItem : p) : [...people, savedItem];
       setPeople(updated);
       try { localStorage.setItem('ersl_people', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ people: updated });
       appendAuditLog(isEdit ? 'UPDATE_PEOPLE_ROSTER' : 'ADD_PEOPLE_ROSTER', savedItem.name);
+      provisionSingleEntityBoxFolder('people', savedItem.id, savedItem.name, true);
     } else if (modalType === 'software') {
       const updated = isEdit ? softwareList.map(s => s.id === savedItem.id ? savedItem : s) : [savedItem, ...softwareList];
       setSoftwareList(updated);
       try { localStorage.setItem('ersl_software', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ software: updated });
       appendAuditLog(isEdit ? 'UPDATE_SOFTWARE' : 'ADD_SOFTWARE', savedItem.title);
+      provisionSingleEntityBoxFolder('software', savedItem.id, savedItem.title, Boolean(savedItem.visibility && savedItem.visibility !== 'public'));
     } else if (modalType === 'teaching') {
       const updated = isEdit ? teachingList.map(t => t.id === savedItem.id ? savedItem : t) : [savedItem, ...teachingList];
       setTeachingList(updated);
@@ -1678,6 +1851,7 @@ export default function App() {
       try { localStorage.setItem('ersl_projects', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ projects: updated });
       appendAuditLog(isEdit ? 'UPDATE_PROJECT' : 'ADD_PROJECT', normalizedProject.title);
+      provisionSingleEntityBoxFolder('projects', normalizedProject.id, normalizedProject.title, true);
     }
 
     setModalOpen(false);
@@ -3592,19 +3766,60 @@ export default function App() {
                     />
 
                     {/* Card grid */}
+                    {!currentUser && softwareList.some(s => s.visibility === 'members') && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
+                        <span className="font-semibold flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-amber-700" />
+                          Additional internal lab software repositories &amp; packages are visible to signed-in ERSL members.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSSOPopup(true)}
+                          className="px-3 py-1 rounded-lg bg-[#9E1B32] hover:bg-red-800 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          Member Login
+                        </button>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
-                      {softwareList.map((soft) => (
+                      {softwareList
+                        .filter(soft => {
+                          const vis = soft.visibility || 'public';
+                          if (vis === 'admin') return isAdmin || editMode;
+                          if (vis === 'members') return Boolean(currentUser) || editMode;
+                          return true;
+                        })
+                        .map((soft) => {
+                          const vis = soft.visibility || 'public';
+                          return (
                         <div key={soft.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow relative group">
                           <div>
-                            <div className="flex justify-between items-center">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${soft.language === 'Python'
-                                ? 'bg-blue-50 text-blue-600 border-blue-100'
-                                : 'bg-purple-50 text-purple-600 border-purple-100'
-                                }`}>
-                                {soft.language}
-                              </span>
+                            <div className="flex justify-between items-center gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${soft.language === 'Python'
+                                  ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                  : 'bg-purple-50 text-purple-600 border-purple-100'
+                                  }`}>
+                                  {soft.language}
+                                </span>
+                                <span
+                                  className={`text-[9px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider inline-flex items-center gap-1 ${
+                                    vis === 'admin'
+                                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                      : vis === 'members'
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  }`}
+                                >
+                                  {vis !== 'public' && <Lock className="w-2.5 h-2.5" />}
+                                  <span>{vis === 'admin' ? 'Admin Only' : vis === 'members' ? 'Members Only' : 'Public'}</span>
+                                </span>
+                              </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-gray-400 font-mono text-[10px]">Open Source</span>
+                                <span className="text-gray-400 font-mono text-[10px]">
+                                  {vis === 'public' ? 'Open Source' : 'Lab Internal'}
+                                </span>
                                 {editMode && (
                                   <div className="flex space-x-1">
                                     <button
@@ -3636,8 +3851,24 @@ export default function App() {
                             <p className="text-gray-600 text-xs mt-2 leading-relaxed text-justify">{soft.description}</p>
                           </div>
 
-                          <div className="border-t border-gray-100 pt-3 mt-4 flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-gray-400">LICENSE: MIT OPEN SOURCE</span>
+                          <div className="border-t border-gray-100 pt-3 mt-4 flex flex-wrap justify-between items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-gray-400">
+                                {vis === 'public' ? 'LICENSE: MIT OPEN SOURCE' : 'ERSL RESTRICTED PACKAGE'}
+                              </span>
+                              {currentUser && soft.boxFolderUrl && sanitizeExternalUrl(soft.boxFolderUrl) && (
+                                <a
+                                  href={sanitizeExternalUrl(soft.boxFolderUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 inline-flex items-center gap-1"
+                                  title="Open Software Folder in UA Box"
+                                >
+                                  <FolderGit2 className="w-3 h-3" />
+                                  <span>Box</span>
+                                </a>
+                              )}
+                            </div>
                             {soft.link && (
                               isSafeDataDocumentUrl(soft.link) ? (
                                 <button
@@ -3664,7 +3895,8 @@ export default function App() {
                             )}
                           </div>
                         </div>
-                      ))}
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -3741,7 +3973,19 @@ export default function App() {
                             </div>
 
                             {/* Actions and access buttons */}
-                            <div className="flex items-center space-x-3 self-end md:self-center shrink-0">
+                            <div className="flex items-center space-x-2.5 self-end md:self-center shrink-0">
+                              {currentUser && data.boxFolderUrl && sanitizeExternalUrl(data.boxFolderUrl) && (
+                                <a
+                                  href={sanitizeExternalUrl(data.boxFolderUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold py-1.5 px-3 rounded inline-flex items-center gap-1"
+                                  title="Open this Dataset folder in UA Box"
+                                >
+                                  <FolderGit2 className="w-3.5 h-3.5" />
+                                  <span>Box Folder</span>
+                                </a>
+                              )}
                               {data.link && (
                                 isSafeDataDocumentUrl(data.link) ? (
                                   <button
@@ -4948,7 +5192,16 @@ export default function App() {
                 {activeTab === 'box' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     {currentUser ? (
-                      <BoxFolders currentUser={currentUser} {...getSubHeaderPassProps('box')} />
+                      <BoxFolders
+                        currentUser={currentUser}
+                        people={people}
+                        projects={projects}
+                        instruments={instruments}
+                        datasets={dataLayers}
+                        softwareList={softwareList}
+                        onApplySyncedEntityFolders={applyBoxFolderSyncResults}
+                        {...getSubHeaderPassProps('box')}
+                      />
                     ) : (
                       <div className="bg-white p-12 rounded-xl border border-gray-100 text-center text-gray-400 max-w-lg mx-auto shadow-sm space-y-4">
                         <Lock className="w-12 h-12 mx-auto text-[#9E1B32]" />

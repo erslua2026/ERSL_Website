@@ -617,7 +617,7 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
               </span>
               <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-white/25 bg-black/20 text-white inline-flex items-center gap-1">
                 <FolderGit2 className="w-3 h-3" />
-                <span>Box: 07_Students/{studentBoxSlug}</span>
+                <span>Box: People/{studentBoxSlug}</span>
               </span>
               {!isStandalone && (
                 <button
@@ -675,7 +675,7 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
 
       {/* Main Split Workspace: Vertical Left Sidebar + Right Content Canvas */}
       <div className="flex flex-col lg:flex-row gap-4 items-start">
-        <aside className="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3 space-y-3 lg:sticky lg:top-4">
+        <aside className="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3 space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <div className="space-y-1">
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-2 block pb-1">
               Student Sections
@@ -1082,7 +1082,14 @@ export const StudentSubPage: React.FC<StudentSubPageProps> = ({
           existing={blockModal.existing}
           initialDefaults={blockModal.initialDefaults}
           primaryColor={headerAccent}
-          uploadDestination={`students/${studentBoxSlug}`}
+          uploadDestination={`people/${studentBoxSlug}`}
+          entityContext={{
+            category: 'people',
+            itemId: person.id,
+            itemName: person.name,
+            isPrivate: true,
+            boxFolderUrl: rawSubPage.boxFolderUrl,
+          }}
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}
           onSave={handleSaveBlock}
         />

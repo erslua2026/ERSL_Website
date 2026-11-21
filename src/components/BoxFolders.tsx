@@ -1,9 +1,41 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, Plus, Trash2, Lock, Globe } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  FolderSync,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { User } from '../types';
+import type {
+  BoxEntityCategory,
+  DataLayer,
+  Instrument,
+  Person,
+  Project,
+  Software,
+  User,
+} from '../types';
 import { SubPageHeader, SubPageHeaderPassProps } from './SubPageHeader';
 import { sanitizeExternalUrl, toBoxEmbedUrl } from '../lib/boxUtils';
+import {
+  BoxEntityFolderResult,
+  BoxFolderEntry,
+  buildEntityBoxFolderName,
+  ENTITY_CATEGORY_ROOTS,
+  formatBoxFileSize,
+  getBoxFileShareLinks,
+  invokeBoxUpload,
+  listBoxFolderContents,
+  syncAllEntityBoxFolders,
+} from '../lib/boxSync';
 
 interface BoxFolder {
   id: string;
@@ -13,8 +45,24 @@ interface BoxFolder {
   visibility: 'public' | 'private' | 'members' | 'admin';
 }
 
-export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPassProps> = ({
+interface BoxFoldersProps extends SubPageHeaderPassProps {
+  currentUser: User | null;
+  people?: Person[];
+  projects?: Project[];
+  instruments?: Instrument[];
+  datasets?: DataLayer[];
+  softwareList?: Software[];
+  onApplySyncedEntityFolders?: (results: BoxEntityFolderResult[]) => void;
+}
+
+export const BoxFolders: React.FC<BoxFoldersProps> = ({
   currentUser,
+  people = [],
+  projects = [],
+  instruments = [],
+  datasets = [],
+  softwareList = [],
+  onApplySyncedEntityFolders,
   headerOverride,
   accentColor = '#9E1B32',
   showSubheadings = true,
@@ -26,6 +74,20 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
   const [active, setActive] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', description: '', share_url: '', visibility: 'members' as 'public' | 'members' | 'admin' });
+
+  // Live Structured Box <-> Web Explorer state
+  const [selectedCat, setSelectedCat] = useState<BoxEntityCategory>('projects');
+  const [explorerFolderId, setExplorerFolderId] = useState<string | undefined>(undefined);
+  const [explorerPath, setExplorerPath] = useState('Projects');
+  const [explorerShareUrl, setExplorerShareUrl] = useState('');
+  const [explorerEntries, setExplorerEntries] = useState<BoxFolderEntry[]>([]);
+  const [explorerHistory, setExplorerHistory] = useState<Array<{ folderId?: string; path: string }>>([]);
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [explorerError, setExplorerError] = useState('');
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ type: 'ok' | 'warn'; text: string } | null>(null);
+  const [uploadingToBox, setUploadingToBox] = useState(false);
+  const [copiedFileId, setCopiedFileId] = useState<string | null>(null);
 
   const defaultBoxFolders: BoxFolder[] = [
     {
@@ -79,6 +141,142 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const loadExplorer = useCallback(
+    async (opts: {
+      category?: BoxEntityCategory;
+      folderId?: string;
+      folderPath?: string;
+      pushHistory?: boolean;
+    }) => {
+      setExplorerLoading(true);
+      setExplorerError('');
+      const res = await listBoxFolderContents({
+        category: opts.folderId ? undefined : (opts.category || selectedCat),
+        folderId: opts.folderId,
+        folderPath: opts.folderPath,
+      });
+      setExplorerLoading(false);
+      if (!res.ok) {
+        setExplorerError(res.error || 'Live UA Box folder listing unavailable until Box credentials are configured.');
+        setExplorerEntries([]);
+        return;
+      }
+      if (opts.pushHistory) {
+        setExplorerHistory(prev => [...prev, { folderId: explorerFolderId, path: explorerPath }]);
+      }
+      setExplorerFolderId(res.folderId);
+      setExplorerPath(res.folderPath || ENTITY_CATEGORY_ROOTS[opts.category || selectedCat]);
+      setExplorerShareUrl(res.shareUrl || '');
+      setExplorerEntries(res.entries || []);
+    },
+    [selectedCat, explorerFolderId, explorerPath]
+  );
+
+  useEffect(() => {
+    loadExplorer({ category: 'projects' });
+  }, []);
+
+  const handleSyncAllFolders = async () => {
+    setSyncingAll(true);
+    setSyncStatus(null);
+    const res = await syncAllEntityBoxFolders({
+      people,
+      projects,
+      instruments,
+      datasets,
+      software: softwareList,
+    });
+    setSyncingAll(false);
+
+    if (!res.ok) {
+      setSyncStatus({
+        type: 'warn',
+        text: res.error || 'Box auto-folder sync requires UA Box OAuth credentials on box-sync.',
+      });
+      return;
+    }
+
+    if (res.results && res.results.length > 0 && onApplySyncedEntityFolders) {
+      onApplySyncedEntityFolders(res.results);
+    }
+
+    setSyncStatus({
+      type: 'ok',
+      text: `Box folders synced: ${res.results?.length || 0} item folders across People, Projects, Instruments, Datasets & Software (${res.createdCount || 0} newly created).`,
+    });
+    loadExplorer({ category: selectedCat });
+  };
+
+  const handleDirectUploadToExplorer = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingToBox(true);
+    setExplorerError('');
+    try {
+      const dest = (explorerFolderId
+        ? `${selectedCat}/Explorer`
+        : selectedCat) as any;
+      await invokeBoxUpload(file, dest, {
+        folderId: explorerFolderId,
+        isPrivate: selectedCat === 'people' || selectedCat === 'projects',
+      });
+      await loadExplorer({ category: selectedCat, folderId: explorerFolderId, folderPath: explorerPath });
+    } catch (err: any) {
+      setExplorerError(err?.message || 'Upload to UA Box failed.');
+    } finally {
+      setUploadingToBox(false);
+    }
+  };
+
+  const handleCopyFileLink = async (entry: BoxFolderEntry) => {
+    const res = await getBoxFileShareLinks(entry.id, selectedCat === 'people' || selectedCat === 'projects');
+    const url = res.shareUrl || res.directUrl || entry.shareUrl || entry.directUrl;
+    if (url && navigator.clipboard) {
+      await navigator.clipboard.writeText(url);
+      setCopiedFileId(entry.id);
+      setTimeout(() => setCopiedFileId(null), 2200);
+    } else if (!res.ok) {
+      setExplorerError(res.error || 'Could not generate shared link.');
+    }
+  };
+
+  const localEntityDirectories: Record<
+    BoxEntityCategory,
+    Array<{ id: string; label: string; folderName: string; boxFolderUrl?: string }>
+  > = {
+    people: people.map(p => ({
+      id: p.id,
+      label: p.name,
+      folderName: buildEntityBoxFolderName(p.name, p.id),
+      boxFolderUrl: p.subPage?.boxFolderUrl,
+    })),
+    projects: projects.map(p => ({
+      id: p.id,
+      label: p.title,
+      folderName: buildEntityBoxFolderName(p.title, p.id),
+      boxFolderUrl: p.subPage?.boxFolderUrl,
+    })),
+    instruments: instruments.map(i => ({
+      id: i.id,
+      label: i.name,
+      folderName: buildEntityBoxFolderName(i.name, i.id),
+      boxFolderUrl: i.boxFolderUrl,
+    })),
+    datasets: datasets.map(d => ({
+      id: d.id,
+      label: d.name,
+      folderName: buildEntityBoxFolderName(d.name, d.id),
+      boxFolderUrl: d.boxFolderUrl,
+    })),
+    software: softwareList.map(s => ({
+      id: s.id,
+      label: s.title,
+      folderName: buildEntityBoxFolderName(s.title, s.id),
+      boxFolderUrl: s.boxFolderUrl,
+    })),
+  };
+
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -118,9 +316,9 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
       <SubPageHeader
         tabId="box"
         defaults={{
-          badge: 'BOX WORKSPACE',
-          title: 'Lab Box Folders',
-          subtitle: 'Shared lab folders from Box, opened right inside the website.',
+          badge: 'BOX WORKSPACE · TWO-WAY SYNC',
+          title: 'Lab Box Folders & Web Bridge',
+          subtitle: 'Dedicated folders for People, Projects, Instruments, Datasets & Software — move files Box ↔ Website seamlessly even above 3MB.',
         }}
         override={headerOverride}
         accentColor={accentColor}
@@ -128,6 +326,263 @@ export const BoxFolders: React.FC<{ currentUser: User | null } & SubPageHeaderPa
         canEdit={canEditHeader || isAdmin}
         onSave={onSaveHeader}
       />
+
+      {/* Structured 5-Category Box Directory + Box <-> Web Browser */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-gray-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900">
+              Automatic Category Folders (Box &harr; Website)
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Drop large files (&gt;3MB) into UA Box or Box Drive inside the item&apos;s folder, then copy/attach the link straight to the website.
+            </p>
+          </div>
+          {isAdmin && (
+            <button
+              type="button"
+              disabled={syncingAll}
+              onClick={handleSyncAllFolders}
+              className="px-3.5 py-2 rounded-xl text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60"
+              style={{ backgroundColor: accentColor }}
+            >
+              {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderSync className="w-3.5 h-3.5" />}
+              <span>{syncingAll ? 'Creating Box Folders...' : 'Create / Sync All Folders in Box'}</span>
+            </button>
+          )}
+        </div>
+
+        {syncStatus && (
+          <div
+            className={`mx-4 mt-3 px-3.5 py-2 rounded-lg text-xs font-semibold border ${
+              syncStatus.type === 'ok'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}
+          >
+            {syncStatus.text}
+          </div>
+        )}
+
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          {(['people', 'projects', 'instruments', 'datasets', 'software'] as BoxEntityCategory[]).map(cat => {
+            const items = localEntityDirectories[cat];
+            const isSel = selectedCat === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => {
+                  setSelectedCat(cat);
+                  setExplorerHistory([]);
+                  setExplorerFolderId(undefined);
+                  loadExplorer({ category: cat });
+                }}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  isSel ? 'border-[#9E1B32] bg-red-50/40 ring-1 ring-[#9E1B32]/20' : 'border-gray-200 bg-white hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-extrabold text-slate-900">📁 {ENTITY_CATEGORY_ROOTS[cat]}</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                    {items.length}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 truncate">
+                  {items.filter(x => x.boxFolderUrl).length}/{items.length} linked
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="px-4 pb-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left: Website Entity Directory for Selected Category */}
+          <div className="lg:col-span-5 border border-gray-200 rounded-xl overflow-hidden bg-slate-50/50">
+            <div className="px-3.5 py-2 border-b border-gray-200 bg-white flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-800">
+                {ENTITY_CATEGORY_ROOTS[selectedCat]} Item Folders ({localEntityDirectories[selectedCat].length})
+              </span>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+              {localEntityDirectories[selectedCat].map(item => (
+                <div key={item.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-white">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setExplorerLoading(true);
+                      setExplorerError('');
+                      const res = await listBoxFolderContents({
+                        category: selectedCat,
+                        folderName: item.folderName,
+                      });
+                      setExplorerLoading(false);
+                      if (res.ok) {
+                        setExplorerHistory([{ path: ENTITY_CATEGORY_ROOTS[selectedCat] }]);
+                        setExplorerFolderId(res.folderId);
+                        setExplorerPath(res.folderPath || `${ENTITY_CATEGORY_ROOTS[selectedCat]}/${item.folderName}`);
+                        setExplorerShareUrl(res.shareUrl || item.boxFolderUrl || '');
+                        setExplorerEntries(res.entries || []);
+                      } else {
+                        setExplorerError(res.error || 'Could not load Box folder.');
+                      }
+                    }}
+                    className="min-w-0 flex-1 text-left cursor-pointer"
+                  >
+                    <p className="text-xs font-bold text-slate-800 truncate">{item.label}</p>
+                    <p className="text-[10px] font-mono text-slate-400 truncate">
+                      /{ENTITY_CATEGORY_ROOTS[selectedCat]}/{item.folderName}
+                    </p>
+                  </button>
+                  {item.boxFolderUrl && sanitizeExternalUrl(item.boxFolderUrl) && (
+                    <a
+                      href={sanitizeExternalUrl(item.boxFolderUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold shrink-0 inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Box
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Live Box Folder Contents & Web <-> Box Upload/Copy */}
+          <div className="lg:col-span-7 border border-gray-200 rounded-xl overflow-hidden bg-white flex flex-col">
+            <div className="px-3.5 py-2 border-b border-gray-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {explorerHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prev = explorerHistory[explorerHistory.length - 1];
+                      setExplorerHistory(h => h.slice(0, -1));
+                      loadExplorer({
+                        category: selectedCat,
+                        folderId: prev.folderId,
+                        folderPath: prev.path,
+                      });
+                    }}
+                    className="p-1 rounded bg-white border border-gray-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                    title="Back"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <span className="text-xs font-bold text-slate-800 font-mono truncate">
+                  📁 ERSL_Website_Storage / {explorerPath}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <label className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer">
+                  {uploadingToBox ? <Loader2 className="w-3 h-3 animate-spin" /> : <UploadCloud className="w-3 h-3" />}
+                  <span>Web &rarr; Box Upload</span>
+                  <input type="file" onChange={handleDirectUploadToExplorer} disabled={uploadingToBox} className="hidden" />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    loadExplorer({ category: selectedCat, folderId: explorerFolderId, folderPath: explorerPath })
+                  }
+                  className="px-2 py-1 rounded-lg bg-white border border-gray-200 hover:bg-slate-100 text-slate-700 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 ${explorerLoading ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+
+                {sanitizeExternalUrl(explorerShareUrl) && (
+                  <a
+                    href={sanitizeExternalUrl(explorerShareUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Open in Box
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="p-2 flex-1 max-h-72 overflow-y-auto">
+              {explorerLoading ? (
+                <div className="py-10 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Loading live UA Box folder...</span>
+                </div>
+              ) : explorerError ? (
+                <div className="m-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <p className="font-bold">Live Box Folder Connection Notice</p>
+                  <p className="text-[11px]">{explorerError}</p>
+                  <p className="text-[11px] text-amber-800">
+                    Once `box-sync` secrets (`BOX_CLIENT_ID`, `BOX_CLIENT_SECRET`, `BOX_ENTERPRISE_ID`, `BOX_ROOT_FOLDER_ID`) are active, this browser reads &amp; uploads directly to UA Box.
+                  </p>
+                </div>
+              ) : explorerEntries.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-10">
+                  No files inside this Box folder yet. Upload here or drop large files (&gt;3MB) in UA Box and click Refresh.
+                </p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {explorerEntries.map(entry =>
+                    entry.type === 'folder' ? (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() =>
+                          loadExplorer({
+                            folderId: entry.id,
+                            folderPath: `${explorerPath}/${entry.name}`,
+                            pushHistory: true,
+                          })
+                        }
+                        className="w-full px-3 py-2 flex items-center justify-between hover:bg-blue-50/50 text-left cursor-pointer"
+                      >
+                        <span className="text-xs font-bold text-slate-800 truncate flex items-center gap-2">
+                          <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span className="truncate">{entry.name}</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-600 shrink-0">Open Folder &rarr;</span>
+                      </button>
+                    ) : (
+                      <div key={entry.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-50">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 truncate flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <span className="truncate">{entry.name}</span>
+                          </p>
+                          <p className="text-[10px] text-slate-400 pl-5">
+                            {formatBoxFileSize(entry.size)}
+                            {entry.modifiedAt ? ` · Updated ${entry.modifiedAt.slice(0, 10)}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyFileLink(entry)}
+                          className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                        >
+                          {copiedFileId === entry.id ? (
+                            <>
+                              <Check className="w-3 h-3" /> Copied Link!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" /> Copy Box &rarr; Web Link
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded p-2">{error}</p>}
 
       {isAdmin && (

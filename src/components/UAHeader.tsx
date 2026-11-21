@@ -287,7 +287,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
 
         {/* Desktop Vertical Sidebar (lg+) */}
         <aside
-          className={`hidden lg:flex flex-col w-64 shrink-0 border-gray-200 select-none sticky top-0 h-screen overflow-y-auto ${
+          className={`hidden lg:flex flex-col w-64 shrink-0 border-gray-200 select-none sticky top-0 h-screen max-h-dvh overflow-y-auto ${
             siteConfig.layoutMode === 'vertical-right' ? 'border-l' : 'border-r'
           } ${
             siteConfig.themeStyle !== 'classic'
@@ -297,7 +297,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
           style={siteConfig.themeStyle !== 'classic' ? { color: headerText } : { backgroundColor: headerBg, color: headerText }}
         >
           {/* UA Brand Strip + Vertical ERSL Lockup */}
-          <div className="bg-gradient-to-r from-[#9E1B32]/8 via-slate-100/95 to-red-50/80 text-slate-800 px-4 py-2 text-[10px] flex items-center justify-between border-b border-[#9E1B32]/15">
+          <div className="shrink-0 bg-gradient-to-r from-[#9E1B32]/8 via-slate-100/95 to-red-50/80 text-slate-800 px-4 py-2 text-[10px] flex items-center justify-between border-b border-[#9E1B32]/15">
             <a href="https://www.ua.edu/" target="_blank" rel="noreferrer" className="font-bold uppercase tracking-wider text-slate-900 hover:text-[#9E1B32] transition-colors">
               Univ. of Alabama
             </a>
@@ -310,7 +310,7 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
           <button
             onClick={() => onTabChange('home')}
             title="Go to ERSL Home"
-            className="p-4 flex items-center gap-3 text-left border-b border-gray-200/30 cursor-pointer group"
+            className="shrink-0 p-4 flex items-center gap-3 text-left border-b border-gray-200/30 cursor-pointer group"
           >
             {renderLogo('w-20 h-20')}
             <div className="min-w-0 flex-1">
@@ -332,49 +332,51 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
           </button>
 
           {/* Universal Full-Site Search for Logged-In Members & Admins */}
-          <div className="px-3 pt-3 pb-1 border-b border-gray-200/20">
+          <div className="shrink-0 px-3 pt-3 pb-1 border-b border-gray-200/20">
             {renderSearchBox('sidebar')}
           </div>
 
-          {/* Vertical Navigation Tabs */}
-          <nav
-            className={`flex-1 px-3 py-3 flex flex-col gap-1 overflow-y-auto ${
-              siteConfig.tabPosition === 'center'
-                ? 'justify-center'
-                : siteConfig.tabPosition === 'end'
-                  ? 'justify-end'
-                  : 'justify-start'
-            }`}
-          >
-            {visibleTabs.map(tab => {
-              const active = currentTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-between transition-all cursor-pointer ${
-                    active
-                      ? 'text-white shadow-sm'
-                      : isDarkHeader
-                        ? 'text-slate-200 hover:bg-white/10'
-                        : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                  style={active ? { backgroundColor: primaryColor } : undefined}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    <span className="text-sm">{tab.icon || '•'}</span>
-                    <span className="truncate">{tab.label}</span>
-                  </span>
-                  {(tab.visibility === 'members' || tab.visibility === 'admin') && (
-                    <Lock className={`w-3 h-3 shrink-0 ${active ? 'text-white/80' : tab.visibility === 'admin' ? 'text-rose-500' : 'text-amber-500'}`} />
-                  )}
-                </button>
-              );
-            })}
+          {/* Vertical Navigation Tabs — safe margin alignment prevents upper tabs clipping off scrollTop=0 on short viewports */}
+          <nav className="flex-1 min-h-[180px] px-3 py-3 overflow-y-auto overscroll-contain flex flex-col">
+            <div
+              className={`flex flex-col gap-1 w-full ${
+                siteConfig.tabPosition === 'center'
+                  ? 'my-auto'
+                  : siteConfig.tabPosition === 'end'
+                    ? 'mt-auto'
+                    : ''
+              }`}
+            >
+              {visibleTabs.map(tab => {
+                const active = currentTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                    className={`w-full shrink-0 text-left px-3 py-2.5 rounded-xl text-[13px] font-bold flex items-center justify-between transition-all cursor-pointer ${
+                      active
+                        ? 'text-white shadow-sm'
+                        : isDarkHeader
+                          ? 'text-slate-200 hover:bg-white/10'
+                          : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                    style={active ? { backgroundColor: primaryColor } : undefined}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <span className="text-sm">{tab.icon || '•'}</span>
+                      <span className="truncate">{tab.label}</span>
+                    </span>
+                    {(tab.visibility === 'members' || tab.visibility === 'admin') && (
+                      <Lock className={`w-3 h-3 shrink-0 ${active ? 'text-white/80' : tab.visibility === 'admin' ? 'text-rose-500' : 'text-amber-500'}`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </nav>
 
           {/* Bottom User / Admin / Customizer Controls */}
-          <div className="p-3 border-t border-gray-200/20 space-y-2">
+          <div className="shrink-0 p-3 border-t border-gray-200/20 space-y-2">
             {isAdmin && onOpenCustomizer && (
               <button
                 onClick={onOpenCustomizer}

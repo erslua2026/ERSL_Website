@@ -379,6 +379,9 @@ export function buildSiteSearchItems({
   // 9. Software
   if (visibleTabIds.has('software') || canSeePrivate) {
     softwareList.forEach(soft => {
+      const vis = soft.visibility || 'public';
+      if (vis === 'admin' && !isAdmin && !editMode) return;
+      if (vis === 'members' && !canSeePrivate) return;
       items.push({
         id: `srch-soft-${soft.id}`,
         title: soft.title,

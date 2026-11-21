@@ -224,6 +224,8 @@ export interface Publication {
   keywords?: string[];
 }
 
+export type BoxEntityCategory = 'people' | 'projects' | 'instruments' | 'datasets' | 'software';
+
 export interface Software {
   id: string;
   title: string;
@@ -232,6 +234,8 @@ export interface Software {
   language: 'Python' | 'R' | 'JavaScript' | 'Other';
   version?: string;
   boxUrl?: string;
+  boxFolderUrl?: string;
+  visibility?: 'public' | 'members' | 'admin';
 }
 
 export interface DataLayer {
@@ -241,6 +245,7 @@ export interface DataLayer {
   availability: string;
   link?: string;
   boxUrl?: string;
+  boxFolderUrl?: string;
   source?: string;
 }
 
@@ -263,6 +268,7 @@ export interface Instrument {
   category: string;
   image: string;
   manualLink?: string;
+  boxFolderUrl?: string;
   status?: InstrumentStatus;
   statusNote?: string;
   resources?: InstrumentResourceItem[];

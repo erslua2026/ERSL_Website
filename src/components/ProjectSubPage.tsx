@@ -1196,6 +1196,14 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           initialType={blockModal.initialType}
           existing={blockModal.existing}
           primaryColor={headerAccent}
+          uploadDestination="projects"
+          entityContext={{
+            category: 'projects',
+            itemId: project.id,
+            itemName: project.title,
+            isPrivate: true,
+            boxFolderUrl: subPage.boxFolderUrl,
+          }}
           onClose={() => setBlockModal({ open: false, initialType: 'paragraph', existing: null })}
           onSave={handleSaveBlock}
         />

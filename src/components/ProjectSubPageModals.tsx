@@ -11,7 +11,8 @@ import {
   ResearchTheme,
   SubTabVisibility,
 } from '../types';
-import { BoxUploadButton } from './BoxUploadButton';
+import { BoxUploadButton, BoxUploadEntityContext } from './BoxUploadButton';
+import type { BoxFileDestination, BoxImageCategory } from '../lib/boxSync';
 import { ImageUploadField } from './ImageUploadField';
 import {
   formatInvestigatorsSummary,
@@ -443,7 +444,8 @@ interface BlockEditorModalProps {
     priority?: 'low' | 'medium' | 'high';
   };
   primaryColor: string;
-  uploadDestination?: 'projects' | 'datasets' | 'software' | 'general' | `students/${string}`;
+  uploadDestination?: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>;
+  entityContext?: BoxUploadEntityContext;
   onClose: () => void;
   onSave: (block: ProjectContentBlock) => void;
 }
@@ -454,6 +456,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   initialDefaults,
   primaryColor,
   uploadDestination,
+  entityContext,
   onClose,
   onSave,
 }) => {
@@ -741,6 +744,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                     uploadDestination ||
                     (type === 'dataset' ? 'datasets' : type === 'software' ? 'software' : 'projects')
                   }
+                  entityContext={entityContext}
                   label="Upload Local Document / Archive / Image"
                   currentValue={boxUrl}
                   onClear={() => setBoxUrl('')}

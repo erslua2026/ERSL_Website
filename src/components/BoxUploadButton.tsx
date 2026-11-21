@@ -1,15 +1,60 @@
 import React, { useState } from 'react';
-import { ClipboardPaste, FileCheck2, Loader2, Trash2, UploadCloud } from 'lucide-react';
-import { BoxFileDestination, BoxImageCategory, uploadDocumentWithBoxFallback } from '../lib/boxSync';
-import { getUploadedFileLabel } from '../lib/boxUtils';
+import {
+  ArrowLeft,
+  ClipboardPaste,
+  ExternalLink,
+  FileCheck2,
+  FileText,
+  FolderOpen,
+  Link2,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
+import {
+  BoxEntityCategory,
+  BoxFileDestination,
+  BoxFolderEntry,
+  BoxImageCategory,
+  buildEntityBoxFolderName,
+  ENTITY_CATEGORY_ROOTS,
+  formatBoxFileSize,
+  getBoxFileShareLinks,
+  listBoxFolderContents,
+  uploadDocumentWithBoxFallback,
+} from '../lib/boxSync';
+import { getUploadedFileLabel, sanitizeExternalUrl } from '../lib/boxUtils';
+
+export interface BoxUploadEntityContext {
+  category: BoxEntityCategory;
+  itemId?: string;
+  itemName?: string;
+  isPrivate?: boolean;
+  boxFolderUrl?: string;
+}
 
 interface BoxUploadButtonProps {
   destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>;
   label?: string;
   accept?: string;
   currentValue?: string;
+  entityContext?: BoxUploadEntityContext;
   onClear?: () => void;
   onUploaded: (url: string, fileName: string) => void;
+}
+
+function inferCategoryFromDestination(
+  dest: string,
+  ctx?: BoxUploadEntityContext
+): BoxEntityCategory | undefined {
+  if (ctx?.category) return ctx.category;
+  if (dest.startsWith('people/') || dest.startsWith('students/') || dest === 'people') return 'people';
+  if (dest.startsWith('projects/') || dest === 'projects') return 'projects';
+  if (dest.startsWith('instruments/') || dest === 'instruments') return 'instruments';
+  if (dest.startsWith('datasets/') || dest === 'datasets') return 'datasets';
+  if (dest.startsWith('software/') || dest === 'software') return 'software';
+  return undefined;
 }
 
 export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
@@ -17,6 +62,7 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
   label = 'Upload Local File / Document',
   accept = '*/*',
   currentValue,
+  entityContext,
   onClear,
   onUploaded,
 }) => {
@@ -24,26 +70,121 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
   const [dragging, setDragging] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'info' | 'err'; text: string } | null>(null);
 
+  // Box -> Web Browser State
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState('');
+  const [pickerCategory, setPickerCategory] = useState<BoxEntityCategory>(
+    inferCategoryFromDestination(destination, entityContext) || 'projects'
+  );
+  const [pickerPath, setPickerPath] = useState('');
+  const [pickerShareUrl, setPickerShareUrl] = useState(entityContext?.boxFolderUrl || '');
+  const [pickerEntries, setPickerEntries] = useState<BoxFolderEntry[]>([]);
+  const [folderHistory, setFolderHistory] = useState<Array<{ folderId: string; path: string }>>([]);
+  const [linkingFileId, setLinkingFileId] = useState<string | null>(null);
+
+  const effectiveUploadDestination = (
+    entityContext?.category && (entityContext.itemName || entityContext.itemId)
+      ? `${entityContext.category}/${buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')}`
+      : destination
+  ) as Exclude<BoxFileDestination, `images/${BoxImageCategory}`>;
+
   const processFile = async (file: File) => {
     setUploading(true);
     setStatusMsg(null);
     try {
-      const res = await uploadDocumentWithBoxFallback(file, destination);
+      const res = await uploadDocumentWithBoxFallback(file, effectiveUploadDestination, {
+        isPrivate: entityContext?.isPrivate,
+      });
       onUploaded(res.url, res.fileName);
       setStatusMsg({
         type: 'ok',
         text: res.uploadedToBox
-          ? `Uploaded to UA Box: ${file.name}`
+          ? `Uploaded to UA Box (${ENTITY_CATEGORY_ROOTS[inferCategoryFromDestination(effectiveUploadDestination, entityContext) || 'projects']}): ${file.name}`
           : `Attached locally & ready to save: ${file.name}`,
       });
+      if (pickerOpen) {
+        loadBoxFolder({
+          category: pickerCategory,
+          folderName: entityContext?.itemName
+            ? buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')
+            : undefined,
+        });
+      }
     } catch (err: any) {
       setStatusMsg({
         type: 'err',
-        text: err?.message || 'File upload failed. Try a file under 3.5MB or paste an external/Box link.',
+        text:
+          err?.message ||
+          'File exceeds 3.5MB browser fallback. Drop it into your Box folder and click "Browse Box Folder" to link it here.',
       });
     } finally {
       setUploading(false);
     }
+  };
+
+  const loadBoxFolder = async (opts: {
+    folderId?: string;
+    category?: BoxEntityCategory;
+    folderName?: string;
+    folderPath?: string;
+    pushHistory?: boolean;
+  }) => {
+    setPickerLoading(true);
+    setPickerError('');
+    const res = await listBoxFolderContents({
+      folderId: opts.folderId,
+      category: opts.category,
+      folderName: opts.folderName,
+      folderPath: opts.folderPath,
+    });
+    setPickerLoading(false);
+
+    if (!res.ok) {
+      setPickerError(res.error || 'Could not browse Box folder.');
+      setPickerEntries([]);
+      return;
+    }
+
+    if (opts.pushHistory && res.folderId) {
+      setFolderHistory(prev => [...prev, { folderId: res.folderId!, path: res.folderPath || 'Box' }]);
+    }
+    setPickerPath(res.folderPath || ENTITY_CATEGORY_ROOTS[opts.category || pickerCategory]);
+    if (res.shareUrl) setPickerShareUrl(res.shareUrl);
+    setPickerEntries(res.entries || []);
+  };
+
+  const handleOpenPicker = () => {
+    const nextOpen = !pickerOpen;
+    setPickerOpen(nextOpen);
+    if (nextOpen) {
+      const initialCat = inferCategoryFromDestination(destination, entityContext) || 'projects';
+      setPickerCategory(initialCat);
+      setFolderHistory([]);
+      const subName =
+        entityContext?.category === initialCat && (entityContext.itemName || entityContext.itemId)
+          ? buildEntityBoxFolderName(entityContext.itemName, entityContext.itemId || 'Item')
+          : undefined;
+      loadBoxFolder({ category: initialCat, folderName: subName });
+    }
+  };
+
+  const handleAttachBoxFile = async (entry: BoxFolderEntry) => {
+    setLinkingFileId(entry.id);
+    const linkRes = await getBoxFileShareLinks(entry.id, Boolean(entityContext?.isPrivate));
+    setLinkingFileId(null);
+    const chosenUrl =
+      linkRes.shareUrl || linkRes.directUrl || entry.shareUrl || entry.directUrl || '';
+    if (!linkRes.ok || !chosenUrl) {
+      setPickerError(linkRes.error || 'Unable to create shared link for this Box file.');
+      return;
+    }
+    onUploaded(chosenUrl, entry.name);
+    setStatusMsg({
+      type: 'ok',
+      text: `Linked from UA Box: ${entry.name} (${formatBoxFileSize(entry.size)})`,
+    });
+    setPickerOpen(false);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,6 +251,7 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
   };
 
   const isLocalDataAttached = Boolean(currentValue && currentValue.startsWith('data:'));
+  const directFolderHref = sanitizeExternalUrl(entityContext?.boxFolderUrl || pickerShareUrl);
 
   return (
     <div
@@ -140,19 +282,191 @@ export const BoxUploadButton: React.FC<BoxUploadButtonProps> = ({
 
         <button
           type="button"
+          onClick={handleOpenPicker}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-bold cursor-pointer transition-colors ${
+            pickerOpen
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
+          }`}
+          title="Browse files already stored in UA Box (>3MB supported) and attach them to the website"
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
+          <span>Browse Box Folder (Box &rarr; Web)</span>
+        </button>
+
+        {directFolderHref && (
+          <a
+            href={directFolderHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-md bg-white hover:bg-slate-100 border border-gray-300 px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+            title="Open this item's dedicated Box folder to drop >3MB files"
+          >
+            <ExternalLink className="w-3 h-3 text-blue-600" />
+            <span>Open Box Folder</span>
+          </a>
+        )}
+
+        <button
+          type="button"
           disabled={uploading}
           onClick={handlePasteButton}
           className="inline-flex items-center gap-1.5 rounded-md bg-white hover:bg-slate-100 border border-gray-300 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 cursor-pointer transition-colors"
           title="Paste copied screenshot or image from clipboard (Ctrl+V)"
         >
           <ClipboardPaste className="w-3.5 h-3.5 text-[#9E1B32]" />
-          <span>Paste Clipboard Image</span>
+          <span>Paste Image</span>
         </button>
-
-        <span className="text-[10px] text-slate-500 font-medium">
-          or drag &amp; drop / press <kbd className="px-1 py-0.5 bg-white border border-gray-300 rounded text-[9px]">Ctrl+V</kbd>
-        </span>
       </div>
+
+      {pickerOpen && (
+        <div className="bg-white border border-blue-200 rounded-lg p-3 space-y-2.5 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(['people', 'projects', 'instruments', 'datasets', 'software'] as BoxEntityCategory[]).map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    setPickerCategory(cat);
+                    setFolderHistory([]);
+                    loadBoxFolder({ category: cat });
+                  }}
+                  className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer ${
+                    pickerCategory === cat
+                      ? 'bg-[#9E1B32] text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {ENTITY_CATEGORY_ROOTS[cat]}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {folderHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextHist = folderHistory.slice(0, -1);
+                    setFolderHistory(nextHist);
+                    const prev = nextHist[nextHist.length - 1];
+                    if (prev) {
+                      loadBoxFolder({ folderId: prev.folderId, folderPath: prev.path });
+                    } else {
+                      loadBoxFolder({ category: pickerCategory });
+                    }
+                  }}
+                  className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3 h-3" /> Back
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  loadBoxFolder({
+                    folderId: folderHistory[folderHistory.length - 1]?.folderId,
+                    category: pickerCategory,
+                  })
+                }
+                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                title="Refresh Box folder contents"
+              >
+                <RefreshCw className={`w-3 h-3 ${pickerLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+            <span className="font-mono truncate">📁 {pickerPath || ENTITY_CATEGORY_ROOTS[pickerCategory]}</span>
+            {sanitizeExternalUrl(pickerShareUrl) && (
+              <a
+                href={sanitizeExternalUrl(pickerShareUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1 shrink-0"
+              >
+                <ExternalLink className="w-3 h-3" /> Open in Box
+              </a>
+            )}
+          </div>
+
+          {pickerLoading ? (
+            <div className="py-4 text-center text-slate-500 flex items-center justify-center gap-2 text-[11px]">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+              <span>Reading Box folder contents...</span>
+            </div>
+          ) : pickerError ? (
+            <div className="p-2.5 rounded bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+              <p className="font-bold">Box API Folder Listing Notice</p>
+              <p>{pickerError}</p>
+              <p className="text-[10px] text-amber-800">
+                Tip: If Box App credentials are still pending, open your UA Box folder in another tab, copy the file’s Box Shared Link, and paste it into the link field above.
+              </p>
+            </div>
+          ) : pickerEntries.length === 0 ? (
+            <p className="text-[11px] text-slate-400 italic py-3 text-center">
+              This Box folder is empty. Upload a file into Box and click Refresh to attach it here.
+            </p>
+          ) : (
+            <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-md">
+              {pickerEntries.map(entry =>
+                entry.type === 'folder' ? (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() =>
+                      loadBoxFolder({
+                        folderId: entry.id,
+                        folderPath: `${pickerPath}/${entry.name}`,
+                        pushHistory: true,
+                      })
+                    }
+                    className="w-full px-2.5 py-2 flex items-center justify-between hover:bg-blue-50/60 text-left cursor-pointer"
+                  >
+                    <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                      <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="truncate">{entry.name}</span>
+                    </span>
+                    <span className="text-[10px] text-blue-600 font-bold shrink-0">Open &rarr;</span>
+                  </button>
+                ) : (
+                  <div
+                    key={entry.id}
+                    className="px-2.5 py-2 flex items-center justify-between gap-2 hover:bg-slate-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="truncate">{entry.name}</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 pl-5">
+                        {formatBoxFileSize(entry.size)}
+                        {entry.modifiedAt ? ` · ${entry.modifiedAt.slice(0, 10)}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={linkingFileId === entry.id}
+                      onClick={() => handleAttachBoxFile(entry)}
+                      className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      {linkingFileId === entry.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Link2 className="w-3 h-3" />
+                      )}
+                      <span>Attach</span>
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isLocalDataAttached && (
         <div className="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">

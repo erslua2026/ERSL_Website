@@ -1,4 +1,14 @@
 import { supabase } from './supabase';
+import type {
+  BoxEntityCategory,
+  DataLayer,
+  Instrument,
+  Person,
+  Project,
+  Software,
+} from '../types';
+
+export type { BoxEntityCategory };
 
 export type BoxImageCategory =
   | 'People'
@@ -12,14 +22,49 @@ export type BoxImageCategory =
 export type BoxFileDestination =
   | `images/${BoxImageCategory}`
   | `students/${string}`
+  | `people/${string}`
+  | `projects/${string}`
+  | `instruments/${string}`
+  | `datasets/${string}`
+  | `software/${string}`
   | 'publications'
   | 'datasets'
   | 'teaching'
   | 'bulletins'
   | 'workplan'
   | 'projects'
+  | 'instruments'
+  | 'people'
   | 'software'
   | 'general';
+
+export const ENTITY_CATEGORY_ROOTS: Record<BoxEntityCategory, string> = {
+  people: 'People',
+  projects: 'Projects',
+  instruments: 'Instruments',
+  datasets: 'Datasets',
+  software: 'Software',
+};
+
+export interface BoxFolderEntry {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  size: number;
+  modifiedAt?: string | null;
+  shareUrl?: string | null;
+  directUrl?: string | null;
+}
+
+export interface BoxEntityFolderResult {
+  category: BoxEntityCategory;
+  id: string;
+  folderId: string;
+  folderName: string;
+  folderPath: string;
+  shareUrl: string;
+  created: boolean;
+}
 
 export interface BoxSyncStatus {
   state: 'idle' | 'synced' | 'pending_auth' | 'error';
@@ -30,6 +75,25 @@ let lastBoxStatus: BoxSyncStatus = { state: 'idle' };
 
 export function getLastBoxStatus(): BoxSyncStatus {
   return lastBoxStatus;
+}
+
+export function buildEntityBoxFolderName(nameOrTitle?: string, fallbackId = 'Item'): string {
+  const cleaned = String(nameOrTitle || '')
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 75);
+  return cleaned || String(fallbackId || 'Item').replace(/[^A-Za-z0-9._-]/g, '_');
+}
+
+export function formatBoxFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
@@ -43,24 +107,98 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-async function invokeBoxUpload(
+async function uploadDirectToBoxWithDownscopedToken(
   file: File,
-  destination: BoxFileDestination
-): Promise<{ directUrl: string; shareUrl: string; fileName: string } | null> {
+  destination: BoxFileDestination,
+  cleanName: string,
+  options?: { folderId?: string; isPrivate?: boolean }
+): Promise<{ directUrl: string; shareUrl: string; fileName: string; folderId?: string } | null> {
   if (!supabase) return null;
+
+  const { data: tokData, error: tokErr } = await supabase.functions.invoke('box-sync', {
+    body: {
+      action: 'get_upload_token',
+      destination,
+      folderId: options?.folderId,
+    },
+  });
+
+  if (tokErr || !tokData?.ok || !tokData?.uploadToken || !tokData?.folderId) {
+    return null;
+  }
+
+  const form = new FormData();
+  form.append(
+    'attributes',
+    JSON.stringify({ name: cleanName, parent: { id: tokData.folderId } })
+  );
+  form.append('file', file, cleanName);
+
+  const upRes = await fetch('https://upload.box.com/api/2.0/files/content', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tokData.uploadToken}` },
+    body: form,
+  });
+
+  if (!upRes.ok) {
+    return null;
+  }
+
+  const upJson = await upRes.json();
+  const uploadedFileId = upJson?.entries?.[0]?.id;
+  if (!uploadedFileId) return null;
+
+  const { data: linkData } = await supabase.functions.invoke('box-sync', {
+    body: {
+      action: 'get_box_file_link',
+      fileId: uploadedFileId,
+      isPrivate: Boolean(options?.isPrivate),
+    },
+  });
+
+  const shareUrl = linkData?.shareUrl || linkData?.directUrl || tokData.folderShareUrl || '';
+  const directUrl = linkData?.directUrl || shareUrl;
+  if (!shareUrl && !directUrl) return null;
+
+  lastBoxStatus = { state: 'synced', message: `Uploaded ${cleanName} directly to UA Box` };
+  return {
+    directUrl,
+    shareUrl: shareUrl || directUrl,
+    fileName: upJson?.entries?.[0]?.name || cleanName,
+    folderId: tokData.folderId,
+  };
+}
+
+export async function invokeBoxUpload(
+  file: File,
+  destination: BoxFileDestination,
+  options?: { folderId?: string; isPrivate?: boolean }
+): Promise<{ directUrl: string; shareUrl: string; fileName: string; folderId?: string } | null> {
+  if (!supabase) return null;
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const cleanName = `${stamp}_${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+
+  // For files > 3.5MB (up to 50MB), try direct browser upload using a folder-scoped Box token first
+  if (file.size > 3.5 * 1024 * 1024) {
+    const directRes = await uploadDirectToBoxWithDownscopedToken(file, destination, cleanName, options);
+    if (directRes) return directRes;
+    throw new Error(
+      'Direct >3.5MB browser upload requires UA Box token & CORS setup. Upload the file directly in your Box folder, then click "Browse Box Folder" to attach it to the website.'
+    );
+  }
 
   const dataUrl = await readFileAsDataUrl(file);
   const commaIdx = dataUrl.indexOf(',');
   const base64Data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
   if (!base64Data) return null;
 
-  const stamp = new Date().toISOString().slice(0, 10);
-  const cleanName = `${stamp}_${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
-
   const { data, error } = await supabase.functions.invoke('box-sync', {
     body: {
       action: 'upload_file',
       destination,
+      folderId: options?.folderId,
+      isPrivate: options?.isPrivate,
       fileName: cleanName,
       contentType: file.type || 'application/octet-stream',
       base64Data,
@@ -76,7 +214,218 @@ async function invokeBoxUpload(
     directUrl: data.directUrl || data.shareUrl,
     shareUrl: data.shareUrl || data.directUrl,
     fileName: data.fileName || cleanName,
+    folderId: data.folderId,
   };
+}
+
+export async function checkBoxConnectionHealth(): Promise<{
+  ok: boolean;
+  configured: boolean;
+  subfolders: string[];
+  error?: string;
+}> {
+  if (!supabase) {
+    return { ok: false, configured: false, subfolders: [], error: 'Supabase not configured' };
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'health' },
+    });
+    if (error || !data?.ok) {
+      return {
+        ok: false,
+        configured: data?.configured !== false,
+        subfolders: [],
+        error: data?.error || error?.message || 'Box sync unavailable',
+      };
+    }
+    return {
+      ok: true,
+      configured: true,
+      subfolders: Array.isArray(data.subfolders) ? data.subfolders : [],
+    };
+  } catch (err: any) {
+    return { ok: false, configured: false, subfolders: [], error: err?.message || 'Box sync unavailable' };
+  }
+}
+
+export async function ensureEntityBoxFolder(params: {
+  category: BoxEntityCategory;
+  itemId: string;
+  itemName: string;
+  isPrivate?: boolean;
+}): Promise<{
+  ok: boolean;
+  folderId?: string;
+  folderName?: string;
+  folderPath?: string;
+  shareUrl?: string;
+  error?: string;
+}> {
+  if (!supabase) return { ok: false, error: 'Supabase not configured' };
+  const folderName = buildEntityBoxFolderName(params.itemName, params.itemId);
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: {
+        action: 'ensure_entity_folder',
+        category: params.category,
+        itemId: params.itemId,
+        folderName,
+        isPrivate: params.isPrivate ?? (params.category === 'people' || params.category === 'projects'),
+      },
+    });
+    if (error || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || error?.message || 'Could not ensure Box folder yet.',
+      };
+    }
+    lastBoxStatus = { state: 'synced', message: `Ready: Box/${data.folderPath}` };
+    return {
+      ok: true,
+      folderId: data.folderId,
+      folderName: data.folderName,
+      folderPath: data.folderPath,
+      shareUrl: data.shareUrl,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Could not reach Box sync service.' };
+  }
+}
+
+export async function syncAllEntityBoxFolders(params: {
+  people: Person[];
+  projects: Project[];
+  instruments: Instrument[];
+  datasets: DataLayer[];
+  software: Software[];
+}): Promise<{
+  ok: boolean;
+  configured?: boolean;
+  categoryRoots?: Record<string, { folderId: string; rootName: string; shareUrl: string }>;
+  results?: BoxEntityFolderResult[];
+  createdCount?: number;
+  error?: string;
+}> {
+  if (!supabase) return { ok: false, error: 'Supabase not configured' };
+
+  const items = [
+    ...params.people.map(p => ({
+      category: 'people' as BoxEntityCategory,
+      id: p.id,
+      folderName: buildEntityBoxFolderName(p.name, p.id),
+      isPrivate: true,
+    })),
+    ...params.projects.map(proj => ({
+      category: 'projects' as BoxEntityCategory,
+      id: proj.id,
+      folderName: buildEntityBoxFolderName(proj.title, proj.id),
+      isPrivate: true,
+    })),
+    ...params.instruments.map(inst => ({
+      category: 'instruments' as BoxEntityCategory,
+      id: inst.id,
+      folderName: buildEntityBoxFolderName(inst.name, inst.id),
+      isPrivate: false,
+    })),
+    ...params.datasets.map(ds => ({
+      category: 'datasets' as BoxEntityCategory,
+      id: ds.id,
+      folderName: buildEntityBoxFolderName(ds.name, ds.id),
+      isPrivate: ds.availability === 'Internal',
+    })),
+    ...params.software.map(soft => ({
+      category: 'software' as BoxEntityCategory,
+      id: soft.id,
+      folderName: buildEntityBoxFolderName(soft.title, soft.id),
+      isPrivate: Boolean(soft.visibility && soft.visibility !== 'public'),
+    })),
+  ];
+
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'sync_entity_folders', items },
+    });
+    if (error || !data?.ok) {
+      return {
+        ok: false,
+        configured: data?.configured,
+        error: data?.error || error?.message || 'UA Box folder sync is pending authorization.',
+      };
+    }
+    lastBoxStatus = {
+      state: 'synced',
+      message: `Synced ${data.totalSynced || items.length} Box folders`,
+    };
+    return {
+      ok: true,
+      configured: true,
+      categoryRoots: data.categoryRoots,
+      results: Array.isArray(data.results) ? data.results : [],
+      createdCount: Number(data.createdCount || 0),
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Network notice syncing Box folders.' };
+  }
+}
+
+export async function listBoxFolderContents(params: {
+  folderId?: string;
+  category?: BoxEntityCategory;
+  folderName?: string;
+  folderPath?: string;
+}): Promise<{
+  ok: boolean;
+  folderId?: string;
+  folderPath?: string;
+  shareUrl?: string;
+  entries: BoxFolderEntry[];
+  error?: string;
+}> {
+  if (!supabase) return { ok: false, entries: [], error: 'Supabase not configured' };
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'list_box_folder', ...params },
+    });
+    if (error || !data?.ok) {
+      return {
+        ok: false,
+        entries: [],
+        error: data?.error || error?.message || 'Could not browse Box folder yet.',
+      };
+    }
+    return {
+      ok: true,
+      folderId: data.folderId,
+      folderPath: data.folderPath,
+      shareUrl: data.shareUrl,
+      entries: Array.isArray(data.entries) ? data.entries : [],
+    };
+  } catch (err: any) {
+    return { ok: false, entries: [], error: err?.message || 'Box folder listing failed.' };
+  }
+}
+
+export async function getBoxFileShareLinks(
+  fileId: string,
+  isPrivate = false
+): Promise<{ ok: boolean; shareUrl?: string; directUrl?: string; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase not configured' };
+  try {
+    const { data, error } = await supabase.functions.invoke('box-sync', {
+      body: { action: 'get_box_file_link', fileId, isPrivate },
+    });
+    if (error || !data?.ok) {
+      return { ok: false, error: data?.error || error?.message || 'Could not generate Box file link.' };
+    }
+    return {
+      ok: true,
+      shareUrl: data.shareUrl || data.directUrl,
+      directUrl: data.directUrl || data.shareUrl,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Box link error.' };
+  }
 }
 
 /**
@@ -196,11 +545,12 @@ export async function uploadImageWithBoxFallback(
  */
 export async function uploadDocumentWithBoxFallback(
   file: File,
-  destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>
+  destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>,
+  options?: { folderId?: string; isPrivate?: boolean }
 ): Promise<{ url: string; shareUrl: string; fileName: string; uploadedToBox: boolean }> {
   try {
-    if (file.size <= 25 * 1024 * 1024) {
-      const res = await invokeBoxUpload(file, destination);
+    if (file.size <= 50 * 1024 * 1024) {
+      const res = await invokeBoxUpload(file, destination, options);
       if (res) {
         return {
           url: res.shareUrl || res.directUrl,
@@ -211,7 +561,7 @@ export async function uploadDocumentWithBoxFallback(
       }
     }
   } catch {
-    // Fall back seamlessly to local/Supabase portal storage below
+    // Fall back seamlessly to compressed/local storage below if Box credentials/CORS unavailable
   }
 
   if (file.type.startsWith('image/')) {
@@ -227,7 +577,7 @@ export async function uploadDocumentWithBoxFallback(
   const MAX_LOCAL_DOC_BYTES = 3.5 * 1024 * 1024;
   if (file.size > MAX_LOCAL_DOC_BYTES) {
     throw new Error(
-      'Files over 3.5MB require UA Box direct link (pending UA OIT authorization). Upload files <= 3.5MB directly from your computer or paste a Box/Drive link.'
+      'File exceeds the 3.5MB browser fallback limit. Drop this file directly into its UA Box folder ("Open Box Folder"), then click "Browse Box Folder" below to attach it to the website.'
     );
   }
 
@@ -245,7 +595,8 @@ export async function uploadDocumentWithBoxFallback(
  */
 export async function uploadDocumentToBox(
   file: File,
-  destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>
+  destination: Exclude<BoxFileDestination, `images/${BoxImageCategory}`>,
+  options?: { folderId?: string; isPrivate?: boolean }
 ): Promise<{ url: string; shareUrl: string; fileName: string; uploadedToBox: boolean }> {
-  return uploadDocumentWithBoxFallback(file, destination);
+  return uploadDocumentWithBoxFallback(file, destination, options);
 }

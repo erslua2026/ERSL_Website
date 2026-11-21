@@ -271,6 +271,17 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+            {currentUser && instrument.boxFolderUrl && sanitizeExternalUrl(instrument.boxFolderUrl) && (
+              <a
+                href={sanitizeExternalUrl(instrument.boxFolderUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 inline-flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Instrument Box Folder</span>
+              </a>
+            )}
             <span className="inline-flex items-center gap-1 text-emerald-700">
               <Globe className="w-3 h-3" /> {publicCount} Public
             </span>
@@ -699,7 +710,14 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
                   className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
-                  destination="general"
+                  destination="instruments"
+                  entityContext={{
+                    category: 'instruments',
+                    itemId: instrument.id,
+                    itemName: instrument.name,
+                    isPrivate: resVisibility !== 'public',
+                    boxFolderUrl: instrument.boxFolderUrl,
+                  }}
                   currentValue={resUrl}
                   onClear={() => setResUrl('')}
                   onUploaded={(url) => setResUrl(url)}

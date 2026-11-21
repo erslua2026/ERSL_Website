@@ -271,6 +271,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           title: '',
           description: '',
           language: 'Python',
+          visibility: 'public',
           link: ''
         });
       } else if (type === 'teaching') {
@@ -712,6 +713,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
                 <BoxUploadButton
                   destination="datasets"
+                  entityContext={{
+                    category: 'datasets',
+                    itemId: formData.id,
+                    itemName: formData.name,
+                    isPrivate: formData.availability === 'Internal',
+                    boxFolderUrl: formData.boxFolderUrl,
+                  }}
                   label="Upload Local Dataset / File"
                   currentValue={formData.link}
                   onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}
@@ -878,7 +886,14 @@ export const EditModal: React.FC<EditModalProps> = ({
                   className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
                 />
                 <BoxUploadButton
-                  destination="general"
+                  destination="instruments"
+                  entityContext={{
+                    category: 'instruments',
+                    itemId: formData.id,
+                    itemName: formData.name,
+                    isPrivate: false,
+                    boxFolderUrl: formData.boxFolderUrl,
+                  }}
                   label="Upload Operating Manual (PDF / Doc / Photo)"
                   accept=".pdf,.doc,.docx,.txt,.zip,image/*"
                   currentValue={formData.manualLink}
@@ -1252,19 +1267,35 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Primary Programming Language</label>
-                <select
-                  name="language"
-                  value={formData.language || 'Python'}
-                  onChange={handleChange}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                >
-                  <option value="Python">Python</option>
-                  <option value="R">R Language</option>
-                  <option value="JavaScript">JavaScript (GEE)</option>
-                  <option value="Other">Other Language</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Primary Programming Language</label>
+                  <select
+                    name="language"
+                    value={formData.language || 'Python'}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  >
+                    <option value="Python">Python</option>
+                    <option value="R">R Language</option>
+                    <option value="JavaScript">JavaScript (GEE)</option>
+                    <option value="Other">Other Language</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Visibility Access</label>
+                  <select
+                    name="visibility"
+                    value={formData.visibility || 'public'}
+                    onChange={handleChange}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                  >
+                    <option value="public">Public (Visible to everyone)</option>
+                    <option value="members">Members Only (Signed-in lab members)</option>
+                    <option value="admin">Admin Only (Lab administrators)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -1291,6 +1322,13 @@ export const EditModal: React.FC<EditModalProps> = ({
                 />
                 <BoxUploadButton
                   destination="software"
+                  entityContext={{
+                    category: 'software',
+                    itemId: formData.id,
+                    itemName: formData.title,
+                    isPrivate: Boolean(formData.visibility && formData.visibility !== 'public'),
+                    boxFolderUrl: formData.boxFolderUrl,
+                  }}
                   label="Upload Code / ZIP / Guide File"
                   currentValue={formData.link}
                   onClear={() => setFormData((prev: any) => ({ ...prev, link: '' }))}

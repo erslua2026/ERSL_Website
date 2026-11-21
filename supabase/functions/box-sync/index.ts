@@ -37,13 +37,13 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
 // Explicit allowlist mapping ERSL portal keys to ERSL_Website_Storage folders
 const SECTION_FOLDER_MAP: Record<string, string> = {
-  ersl_sec_datalayers: '02_Datasets_Public',
+  ersl_sec_datalayers: 'Datasets',
   ersl_sec_publications: '02_Datasets_Public',
   ersl_sec_themes: '02_Datasets_Public',
   ersl_subpage_themes: '02_Datasets_Public',
   ersl_sec_home: '06_Website_Data_Sync',
   ersl_sec_research: '02_Datasets_Public',
-  ersl_sec_people: '03_Datasets_Members',
+  ersl_sec_people: 'People',
   ersl_sec_teaching: '03_Datasets_Members',
   ersl_sec_bulletins: '03_Datasets_Members',
   ersl_sec_bulletin_folders: '03_Datasets_Members',
@@ -53,28 +53,38 @@ const SECTION_FOLDER_MAP: Record<string, string> = {
   ersl_workplan_matrix: '03_Datasets_Members',
   ersl_reservoir: '03_Datasets_Members',
   ersl_reservoir_matrix: '03_Datasets_Members',
-  ersl_sec_projects: '04_Projects',
-  ersl_subpage_projects: '04_Projects',
-  ersl_subpage_students: '07_Students',
-  ersl_sec_software: '05_Softwares_And_Guides',
-  ersl_sec_instruments: '06_Website_Data_Sync',
-  ersl_subpage_instruments: '06_Website_Data_Sync',
+  ersl_sec_projects: 'Projects',
+  ersl_subpage_projects: 'Projects',
+  ersl_subpage_students: 'People',
+  ersl_sec_software: 'Software',
+  ersl_sec_instruments: 'Instruments',
+  ersl_subpage_instruments: 'Instruments',
   ersl_sec_news: '06_Website_Data_Sync',
   ersl_site_config: '06_Website_Data_Sync',
   ersl_custom_pages: '06_Website_Data_Sync',
   ersl_sec_auditlogs: '06_Website_Data_Sync',
 };
 
+const ENTITY_CATEGORY_FOLDER_MAP: Record<string, string> = {
+  people: 'People',
+  projects: 'Projects',
+  instruments: 'Instruments',
+  datasets: 'Datasets',
+  software: 'Software',
+};
+
 const PRIVATE_UPLOAD_DESTINATIONS = new Set(['workplan', 'bulletins', 'teaching']);
 
 const FILE_DESTINATION_MAP: Record<string, [string, string?]> = {
   publications: ['02_Datasets_Public', 'Publications'],
-  datasets: ['02_Datasets_Public', 'Datasets'],
+  datasets: ['Datasets', '_Shared_Datasets'],
   teaching: ['03_Datasets_Members', 'Teaching_Materials'],
   bulletins: ['03_Datasets_Members', 'Bulletins_Docs'],
   workplan: ['03_Datasets_Members', 'Workplan_Attachments'],
-  projects: ['04_Projects', 'Project_Files'],
-  software: ['05_Softwares_And_Guides', 'Files'],
+  projects: ['Projects', '_Shared_Project_Files'],
+  instruments: ['Instruments', '_Shared_Manuals'],
+  software: ['Software', '_Shared_Releases'],
+  people: ['People', '_Shared_Files'],
   general: ['06_Website_Data_Sync', 'Uploads'],
 };
 
@@ -112,9 +122,23 @@ async function getBoxToken(): Promise<string> {
   return cachedToken.token;
 }
 
+function sanitizeFolderSegment(name: string, fallback = 'Item'): string {
+  const cleaned = String(name || '')
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 75);
+  if (!cleaned || cleaned === '.' || cleaned === '..') {
+    return fallback;
+  }
+  return cleaned;
+}
+
 async function listFolderItems(token: string, folderId: string) {
   const res = await fetch(
-    `https://api.box.com/2.0/folders/${folderId}/items?fields=id,name,type&limit=1000`,
+    `https://api.box.com/2.0/folders/${folderId}/items?fields=id,name,type,size,modified_at,shared_link&limit=1000`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) {
@@ -125,14 +149,25 @@ async function listFolderItems(token: string, folderId: string) {
   return data.entries || [];
 }
 
-async function ensureFolder(token: string, parentId: string, name: string): Promise<string> {
-  const entries = await listFolderItems(token, parentId);
+async function getOrCreateFolderWithEntries(
+  token: string,
+  parentId: string,
+  name: string,
+  entriesCache?: any[]
+): Promise<{ id: string; created: boolean; shareUrl?: string | null }> {
+  const entries = entriesCache || (await listFolderItems(token, parentId));
   const existing = entries.find(
     (e: any) => e.type === 'folder' && String(e.name || '').toLowerCase() === name.toLowerCase()
   );
-  if (existing) return existing.id;
+  if (existing) {
+    return {
+      id: existing.id,
+      created: false,
+      shareUrl: existing?.shared_link?.url || null,
+    };
+  }
 
-  const createRes = await fetch('https://api.box.com/2.0/folders', {
+  const createRes = await fetch('https://api.box.com/2.0/folders?fields=id,name,shared_link', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -145,7 +180,69 @@ async function ensureFolder(token: string, parentId: string, name: string): Prom
     throw new Error(`Box create folder "${name}" failed (${createRes.status}): ${text}`);
   }
   const created = await createRes.json();
-  return created.id;
+  if (entriesCache) {
+    entriesCache.push({ ...created, type: 'folder' });
+  }
+  return { id: created.id, created: true, shareUrl: created?.shared_link?.url || null };
+}
+
+async function ensureFolder(token: string, parentId: string, name: string): Promise<string> {
+  const res = await getOrCreateFolderWithEntries(token, parentId, name);
+  return res.id;
+}
+
+async function createFolderSharedLink(
+  token: string,
+  folderId: string,
+  isPrivate = true
+): Promise<string> {
+  try {
+    const res = await fetch(`https://api.box.com/2.0/folders/${folderId}?fields=shared_link`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        shared_link: {
+          access: isPrivate ? 'company' : 'open',
+          permissions: {
+            can_download: true,
+            can_preview: true,
+          },
+        },
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.shared_link?.url) return data.shared_link.url;
+    }
+  } catch {
+    // Fall back to direct enterprise folder URL below
+  }
+  return `https://ua.app.box.com/folder/${folderId}`;
+}
+
+async function downscopeUploadToken(token: string, folderId: string): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: token,
+      subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      scope: 'item_upload item_preview item_readwrite',
+      resource: `https://api.box.com/2.0/folders/${folderId}`,
+    });
+    const res = await fetch('https://api.box.com/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.access_token || null;
+  } catch {
+    return null;
+  }
 }
 
 async function upsertFileToBox(
@@ -216,15 +313,25 @@ async function createSharedLinks(
 
 async function resolveUploadFolderId(token: string, destination: string): Promise<string> {
   if (destination.startsWith('images/')) {
-    const sub = destination.slice('images/'.length) || 'General';
+    const sub = sanitizeFolderSegment(destination.slice('images/'.length), 'General');
     const rootImagesId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '01_Website_Images');
     return ensureFolder(token, rootImagesId, sub);
   }
   if (destination.startsWith('students/')) {
-    const rawName = destination.slice('students/'.length).replace(/[^A-Za-z0-9._-]/g, '_') || 'General';
-    const rootStudentsId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, '07_Students');
-    return ensureFolder(token, rootStudentsId, rawName);
+    const rawName = sanitizeFolderSegment(destination.slice('students/'.length), 'General');
+    const rootPeopleId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, 'People');
+    return ensureFolder(token, rootPeopleId, rawName);
   }
+
+  for (const [catKey, rootName] of Object.entries(ENTITY_CATEGORY_FOLDER_MAP)) {
+    const prefix = `${catKey}/`;
+    if (destination.startsWith(prefix)) {
+      const subName = sanitizeFolderSegment(destination.slice(prefix.length), 'General');
+      const catFolderId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, rootName);
+      return ensureFolder(token, catFolderId, subName);
+    }
+  }
+
   const [parentName, childName] = FILE_DESTINATION_MAP[destination] || ['06_Website_Data_Sync', 'Uploads'];
   const parentId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, parentName);
   return childName ? ensureFolder(token, parentId, childName) : parentId;
@@ -318,6 +425,205 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (action === 'ensure_entity_folder') {
+      const category = String(body?.category || '').toLowerCase();
+      const rootFolderName = ENTITY_CATEGORY_FOLDER_MAP[category];
+      if (!rootFolderName) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Invalid Box entity category.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const rawName = String(body?.folderName || body?.itemName || body?.itemId || 'Item');
+      const safeName = sanitizeFolderSegment(rawName, 'Item');
+      const isPrivate = body?.isPrivate !== false;
+
+      const rootEntries = await listFolderItems(token, BOX_ROOT_FOLDER_ID);
+      const catRes = await getOrCreateFolderWithEntries(token, BOX_ROOT_FOLDER_ID, rootFolderName, rootEntries);
+      const itemRes = await getOrCreateFolderWithEntries(token, catRes.id, safeName);
+      const shareUrl = itemRes.shareUrl || (await createFolderSharedLink(token, itemRes.id, isPrivate));
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          category,
+          categoryFolderId: catRes.id,
+          folderId: itemRes.id,
+          folderName: safeName,
+          folderPath: `${rootFolderName}/${safeName}`,
+          shareUrl,
+          created: itemRes.created,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'sync_entity_folders') {
+      const items = Array.isArray(body?.items) ? body.items : [];
+      const rootEntries = await listFolderItems(token, BOX_ROOT_FOLDER_ID);
+      const categoryFolderMap: Record<string, { id: string; shareUrl: string; entries: any[] }> = {};
+
+      for (const [catKey, rootName] of Object.entries(ENTITY_CATEGORY_FOLDER_MAP)) {
+        const catRes = await getOrCreateFolderWithEntries(token, BOX_ROOT_FOLDER_ID, rootName, rootEntries);
+        const catShareUrl = catRes.shareUrl || (await createFolderSharedLink(token, catRes.id, catKey === 'people' || catKey === 'projects'));
+        const catEntries = await listFolderItems(token, catRes.id);
+        categoryFolderMap[catKey] = { id: catRes.id, shareUrl: catShareUrl, entries: catEntries };
+      }
+
+      const results: Array<{
+        category: string;
+        id: string;
+        folderId: string;
+        folderName: string;
+        folderPath: string;
+        shareUrl: string;
+        created: boolean;
+      }> = [];
+
+      for (const item of items) {
+        const catKey = String(item?.category || '').toLowerCase();
+        const catInfo = categoryFolderMap[catKey];
+        if (!catInfo || !item?.id) continue;
+
+        const safeName = sanitizeFolderSegment(String(item.folderName || item.name || item.id), String(item.id));
+        const itemRes = await getOrCreateFolderWithEntries(token, catInfo.id, safeName, catInfo.entries);
+        const isPrivate = item?.isPrivate !== undefined ? Boolean(item.isPrivate) : (catKey === 'people' || catKey === 'projects');
+        const shareUrl = itemRes.shareUrl || (await createFolderSharedLink(token, itemRes.id, isPrivate));
+
+        results.push({
+          category: catKey,
+          id: String(item.id),
+          folderId: itemRes.id,
+          folderName: safeName,
+          folderPath: `${ENTITY_CATEGORY_FOLDER_MAP[catKey]}/${safeName}`,
+          shareUrl,
+          created: itemRes.created,
+        });
+      }
+
+      const categoryRoots: Record<string, { folderId: string; rootName: string; shareUrl: string }> = {};
+      for (const [catKey, rootName] of Object.entries(ENTITY_CATEGORY_FOLDER_MAP)) {
+        categoryRoots[catKey] = {
+          folderId: categoryFolderMap[catKey].id,
+          rootName,
+          shareUrl: categoryFolderMap[catKey].shareUrl,
+        };
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          categoryRoots,
+          results,
+          createdCount: results.filter(r => r.created).length,
+          totalSynced: results.length,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'list_box_folder') {
+      const requestedFolderId = body?.folderId ? String(body.folderId).trim() : '';
+      const category = body?.category ? String(body.category).toLowerCase() : '';
+      const rawSubName = body?.folderName ? String(body.folderName).trim() : '';
+
+      let targetFolderId = BOX_ROOT_FOLDER_ID;
+      let resolvedPath = 'ERSL_Website_Storage';
+
+      if (requestedFolderId) {
+        targetFolderId = requestedFolderId;
+        resolvedPath = String(body?.folderPath || requestedFolderId);
+      } else if (category && ENTITY_CATEGORY_FOLDER_MAP[category]) {
+        const rootName = ENTITY_CATEGORY_FOLDER_MAP[category];
+        const catId = await ensureFolder(token, BOX_ROOT_FOLDER_ID, rootName);
+        if (rawSubName) {
+          const safeSub = sanitizeFolderSegment(rawSubName, 'Item');
+          targetFolderId = await ensureFolder(token, catId, safeSub);
+          resolvedPath = `${rootName}/${safeSub}`;
+        } else {
+          targetFolderId = catId;
+          resolvedPath = rootName;
+        }
+      }
+
+      const [entries, folderShareUrl] = await Promise.all([
+        listFolderItems(token, targetFolderId),
+        createFolderSharedLink(token, targetFolderId, category === 'people' || category === 'projects'),
+      ]);
+
+      const normalizedEntries = entries.map((e: any) => ({
+        id: String(e.id),
+        name: String(e.name || 'Untitled'),
+        type: e.type === 'folder' ? 'folder' : 'file',
+        size: Number(e.size || 0),
+        modifiedAt: e.modified_at || null,
+        shareUrl: e?.shared_link?.url || null,
+        directUrl: e?.shared_link?.download_url || e?.shared_link?.url || null,
+      }));
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          folderId: targetFolderId,
+          folderPath: resolvedPath,
+          shareUrl: folderShareUrl,
+          entries: normalizedEntries,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get_box_file_link') {
+      const fileId = String(body?.fileId || '').trim();
+      const isPrivate = Boolean(body?.isPrivate);
+      if (!fileId) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'fileId is required.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const links = await createSharedLinks(token, fileId, isPrivate);
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          fileId,
+          shareUrl: links.shareUrl,
+          directUrl: links.directUrl,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get_upload_token') {
+      const resolvedDestination = String(body?.destination || 'general');
+      const targetFolderId = body?.folderId
+        ? String(body.folderId).trim()
+        : await resolveUploadFolderId(token, resolvedDestination);
+      const [uploadToken, folderShareUrl] = await Promise.all([
+        downscopeUploadToken(token, targetFolderId),
+        createFolderSharedLink(
+          token,
+          targetFolderId,
+          PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
+            resolvedDestination.startsWith('people/') ||
+            resolvedDestination.startsWith('students/') ||
+            resolvedDestination.startsWith('projects/')
+        ),
+      ]);
+
+      return new Response(
+        JSON.stringify({
+          ok: Boolean(uploadToken),
+          uploadToken,
+          folderId: targetFolderId,
+          folderShareUrl,
+          error: uploadToken ? undefined : 'Direct upload token unavailable.',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (action === 'upload_file' || action === 'upload_image') {
       const {
         destination,
@@ -325,6 +631,7 @@ Deno.serve(async (req: Request) => {
         fileName,
         contentType = 'application/octet-stream',
         base64Data,
+        folderId: explicitFolderId,
       } = body;
       if (!fileName || !base64Data) {
         return new Response(
@@ -334,7 +641,9 @@ Deno.serve(async (req: Request) => {
       }
 
       const resolvedDestination = String(destination || `images/${String(category)}`);
-      const targetFolderId = await resolveUploadFolderId(token, resolvedDestination);
+      const targetFolderId = explicitFolderId
+        ? String(explicitFolderId).trim()
+        : await resolveUploadFolderId(token, resolvedDestination);
       const cleanName = String(fileName).replace(/[^A-Za-z0-9._-]/g, '_');
       const uploaded = await upsertFileToBox(
         token,
@@ -345,7 +654,9 @@ Deno.serve(async (req: Request) => {
       );
       const isPrivateDest =
         PRIVATE_UPLOAD_DESTINATIONS.has(resolvedDestination) ||
-        resolvedDestination.startsWith('students/');
+        resolvedDestination.startsWith('students/') ||
+        resolvedDestination.startsWith('people/') ||
+        Boolean(body?.isPrivate);
       const links = uploaded?.id
         ? await createSharedLinks(token, uploaded.id, isPrivateDest)
         : { directUrl: null, shareUrl: null };
@@ -354,6 +665,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           ok: true,
           fileId: uploaded?.id,
+          folderId: targetFolderId,
           fileName: uploaded?.name || cleanName,
           directUrl: links.directUrl,
           shareUrl: links.shareUrl,
