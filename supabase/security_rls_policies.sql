@@ -35,9 +35,11 @@ AS $$
 $$;
 
 -- ============================================================================
--- 2. PROFILES TABLE: Prevent self-promotion to admin/member
+-- 2. PROFILES TABLE: Prevent self-promotion to admin/member & allow 'collaborator'
 -- ============================================================================
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin', 'member', 'collaborator', 'pending'));
 
 DROP POLICY IF EXISTS "profiles_select_policy" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_insert_policy" ON public.profiles;

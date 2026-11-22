@@ -95,54 +95,17 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
   const [uploadingToBox, setUploadingToBox] = useState(false);
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null);
 
-  const defaultBoxFolders: BoxFolder[] = [
-    {
-      id: 'box-pub-pdf',
-      name: 'ERSL Publications & Manuscripts PDF Vault',
-      description: 'Full-text peer-reviewed articles, author response letters, and high-res vector figures.',
-      share_url: 'https://ua.box.com/s/ersl-publications-pdf',
-      visibility: 'public'
-    },
-    {
-      id: 'box-field-raw',
-      name: 'Raw UAV LiDAR, Multispectral & ADCP River Survey Datasets',
-      description: 'High-volume point clouds, orthomosaics, and SonTek M9 ADCP hydrographic field logs.',
-      share_url: 'https://ua.box.com/s/ersl-raw-uav-field-data',
-      visibility: 'private'
-    },
-    {
-      id: 'box-[#teach-gym]',
-      name: 'GY 404/504 Teaching Materials & Lab Manuals',
-      description: 'Course syllabi, GEE lab guides, Python tutorials, and student dataset downloads.',
-      share_url: 'https://ua.box.com/s/ersl-teaching-materials',
-      visibility: 'public'
-    },
-    {
-      id: 'box-ciroh-noaa',
-      name: 'CIROH & NOAA National Water Center Project Deliverables',
-      description: 'Annual project progress reports, RS-FloodXDepth validation charts, and code archives.',
-      share_url: 'https://ua.box.com/s/ersl-ciroh-deliverables',
-      visibility: 'private'
-    },
-    {
-      id: 'box-geoai-weights',
-      name: 'Geospatial AI & SAM2 Machine Learning Model Weights',
-      description: 'Pre-trained PyTorch weights, river channel segmentation masks, and GEE scripts.',
-      share_url: 'https://ua.box.com/s/ersl-geoai-models',
-      visibility: 'private'
-    }
-  ];
-
   const load = useCallback(async () => {
     if (!supabase) {
-      setFolders(defaultBoxFolders);
+      setFolders([]);
       return;
     }
     const { data, error: err } = await supabase.from('box_folders').select('*').order('created_at');
-    if (err || !data || data.length === 0) {
-      setFolders(defaultBoxFolders);
+    if (err) {
+      setError(err.message);
+      setFolders([]);
     } else {
-      setFolders(data as BoxFolder[]);
+      setFolders((data || []) as BoxFolder[]);
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -338,9 +301,32 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
   };
   const remove = async (f: BoxFolder) => {
     if (!confirm(`Remove folder "${f.name}" from the site? (The Box folder itself is not touched.)`)) return;
-    await supabase!.from('box_folders').delete().eq('id', f.id);
+    setError('');
+    if (supabase) {
+      const { error: delErr } = await supabase.from('box_folders').delete().eq('id', f.id);
+      if (delErr) {
+        setError(`Could not remove folder: ${delErr.message}`);
+        return;
+      }
+    }
+    setFolders(prev => prev.filter(x => x.id !== f.id));
     if (active === f.id) setActive(null);
-    load();
+  };
+
+  const clearAllCustomFolders = async () => {
+    if (folders.length === 0) return;
+    if (!confirm(`Remove all ${folders.length} custom Box shortcut cards from this page? (Your actual Box folders and the structured 5-category directory above are untouched.)`)) return;
+    setError('');
+    if (supabase) {
+      const ids = folders.map(f => f.id);
+      const { error: delErr } = await supabase.from('box_folders').delete().in('id', ids);
+      if (delErr) {
+        setError(`Could not clear folders: ${delErr.message}`);
+        return;
+      }
+    }
+    setFolders([]);
+    setActive(null);
   };
 
   const visibleFolders = folders.filter(f => {
@@ -693,6 +679,20 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
         </form>
       )}
 
+      {isAdmin && visibleFolders.length > 0 && (
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="font-bold text-slate-600">Pinned Quick-Link Cards ({visibleFolders.length})</span>
+          <button
+            type="button"
+            onClick={clearAllCustomFolders}
+            className="px-3 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold inline-flex items-center gap-1 cursor-pointer"
+          >
+            <Trash2 className="w-3 h-3" />
+            <span>Remove All Shortcut Cards</span>
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {visibleFolders.map(f => {
           const badgeCls =
@@ -723,7 +723,11 @@ export const BoxFolders: React.FC<BoxFoldersProps> = ({
             </div>
           );
         })}
-        {visibleFolders.length === 0 && <div className="md:col-span-3 bg-white p-8 rounded-xl border border-dashed border-gray-300 text-center text-xs text-gray-500">No folders accessible for your account yet.</div>}
+        {visibleFolders.length === 0 && (
+          <div className="md:col-span-3 bg-white p-6 rounded-xl border border-dashed border-gray-200 text-center text-xs text-gray-500">
+            No extra pinned Box shortcut cards. Use the structured 5-category Box Explorer above, or add a custom shortcut card if needed.
+          </div>
+        )}
       </div>
 
       {current && (

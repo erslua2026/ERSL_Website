@@ -99,8 +99,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
           <button onClick={onClose} className="absolute top-4 right-4 text-white/80 hover:text-white cursor-pointer" title="Close">
             <X className="w-4 h-4" />
           </button>
-          <h2 className="text-lg font-extrabold">ERSL Member Portal</h2>
-          <p className="text-xs text-red-100 mt-1">Private area for lab members. Works with any email address.</p>
+          <h2 className="text-lg font-extrabold">ERSL Portal Login</h2>
+          <p className="text-xs text-red-100 mt-1">Sign in as an ERSL Lab Member or invited Project Collaborator / Co-PI.</p>
         </div>
 
         {!supabaseConfigured ? (

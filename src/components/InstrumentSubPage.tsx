@@ -273,7 +273,7 @@ export const InstrumentSubPage: React.FC<InstrumentSubPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-            {currentUser && instrument.boxFolderUrl && sanitizeExternalUrl(instrument.boxFolderUrl) && (
+            {currentUser && currentUser.role !== 'Viewer' && instrument.boxFolderUrl && sanitizeExternalUrl(instrument.boxFolderUrl) && (
               <a
                 href={sanitizeExternalUrl(instrument.boxFolderUrl)}
                 target="_blank"

@@ -11,7 +11,7 @@ export interface Profile {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'member' | 'pending';
+  role: 'admin' | 'member' | 'collaborator' | 'pending';
 }
 
 export const ADMIN_EMAILS = [
@@ -79,11 +79,12 @@ export async function fetchProfile(
 export function profileToUser(p: Profile): User {
   const email = (p.email || '').toLowerCase().trim();
   const isAdmin = p.role === 'admin' || ADMIN_EMAILS.includes(email);
+  const role = isAdmin ? 'Admin' : p.role === 'collaborator' ? 'Viewer' : 'Researcher';
   return {
     id: p.id,
     name: p.name || (p.email ? p.email.split('@')[0] : 'Lab Member'),
     email: p.email || '',
-    role: isAdmin ? 'Admin' : 'Researcher',
-    department: 'Environmental Remote Sensing Laboratory',
+    role,
+    department: p.role === 'collaborator' ? 'External Project Collaborator' : 'Environmental Remote Sensing Laboratory',
   };
 }

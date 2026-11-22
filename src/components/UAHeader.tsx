@@ -80,10 +80,11 @@ export const UAHeader: React.FC<UAHeaderProps> = ({
   const isVertical = siteConfig.layoutMode === 'vertical-left' || siteConfig.layoutMode === 'vertical-right';
   const isCompact = siteConfig.compactMode || siteConfig.layoutMode === 'horizontal-compact';
   const isAdmin = currentUser?.role === 'Admin';
+  const isLabMember = Boolean(currentUser && currentUser.role !== 'Viewer');
 
   const visibleTabs: TabConfig[] = siteConfig.tabs.filter(t => {
     if (t.visibility === 'hidden') return false;
-    if (t.visibility === 'members' && !currentUser) return false;
+    if (t.visibility === 'members' && !isLabMember) return false;
     if (t.visibility === 'admin' && !isAdmin) return false;
     return true;
   });

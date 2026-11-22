@@ -544,6 +544,40 @@ export function buildNormalizedSubTabs(
 
 export type PreviewRole = 'actual' | 'public' | 'collaborator' | 'member' | 'admin';
 
+export function isInternalLabMemberUser(
+  currentUser: User | null | undefined,
+  people: Person[] = []
+): boolean {
+  if (!currentUser) return false;
+  if (currentUser.role === 'Admin') return true;
+  if (currentUser.role === 'Viewer') return false;
+  const email = (currentUser.email || '').trim().toLowerCase();
+  const isCollaboratorOnlyInDirectory = Boolean(
+    email &&
+      people.some(p => p.email?.trim().toLowerCase() === email && p.group === 'collaborator') &&
+      !people.some(p => p.email?.trim().toLowerCase() === email && p.group !== 'collaborator')
+  );
+  if (isCollaboratorOnlyInDirectory) return false;
+  return currentUser.role === 'Researcher';
+}
+
+export function isUserEmailLinkedToProject(
+  email: string | undefined,
+  collaborators: ProjectCollaborator[] = [],
+  people: Person[] = []
+): boolean {
+  const norm = (email || '').trim().toLowerCase();
+  if (!norm) return false;
+  return collaborators.some(c => {
+    if (c.email?.trim().toLowerCase() === norm) return true;
+    if (c.personId) {
+      const matched = people.find(p => p.id === c.personId);
+      if (matched?.email?.trim().toLowerCase() === norm) return true;
+    }
+    return false;
+  });
+}
+
 export function resolveProjectViewerAccess(params: {
   currentUser: User | null;
   people?: Person[];
@@ -578,21 +612,8 @@ export function resolveProjectViewerAccess(params: {
 
   const isAdmin = currentUser?.role === 'Admin';
   const email = (currentUser?.email || '').trim().toLowerCase();
-
-  // Distinguish external collaborator-only accounts listed in People Directory (group === 'collaborator')
-  // from ERSL internal lab members.
-  const isCollaboratorOnlyInDirectory = Boolean(
-    email &&
-      !isAdmin &&
-      (currentUser?.role === 'Viewer' ||
-        (people.some(p => p.email?.trim().toLowerCase() === email && p.group === 'collaborator') &&
-          !people.some(p => p.email?.trim().toLowerCase() === email && p.group !== 'collaborator')))
-  );
-
-  const isLabMember = Boolean(currentUser && !isCollaboratorOnlyInDirectory && (isAdmin || currentUser.role === 'Researcher'));
-  const isEmailLinkedCollaborator = Boolean(
-    email && collaborators.some(c => c.email?.trim().toLowerCase() === email)
-  );
+  const isLabMember = isInternalLabMemberUser(currentUser, people);
+  const isEmailLinkedCollaborator = isUserEmailLinkedToProject(email, collaborators, people);
   const isLinkedCollaborator = Boolean(passkeyUnlocked || isEmailLinkedCollaborator);
 
   return {

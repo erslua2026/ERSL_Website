@@ -1027,6 +1027,18 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
         </div>
 
         <div className="p-5 space-y-5 text-xs max-h-[82vh] overflow-y-auto">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-600 leading-relaxed space-y-1">
+            <p className="font-extrabold text-slate-800">How External Project PIs &amp; Shared Collaborators Enter:</p>
+            <p>
+              <strong>Option 1 — Multi-Project Partner Login (Recommended):</strong> Add recurring PIs/collaborators once in{' '}
+              <strong>People → Collaborators</strong> with their email, click <strong>Link</strong> below on each project they share, and have them sign up via{' '}
+              <strong>Login → Request access</strong> (approve as <strong>Collaborator / PI</strong> in Control Panel). One sign-in unlocks all their linked projects without exposing internal ERSL lab tabs.
+            </p>
+            <p>
+              <strong>Option 2 — Project Passkey (No login needed):</strong> Set a passkey at the bottom and send the standalone <code>?project=...</code> share link.
+            </p>
+          </div>
+
           {/* Quick Link from People -> Collaborators */}
           {directoryCollaborators.length > 0 && (
             <div className="space-y-2">
@@ -1049,6 +1061,9 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
                       <div className="min-w-0">
                         <div className="truncate">{person.name}</div>
                         <div className="text-[10px] text-slate-500 truncate">{person.role}</div>
+                        <div className={`text-[10px] truncate ${person.email ? 'text-blue-700 font-mono' : 'text-amber-700 font-semibold'}`}>
+                          {person.email || 'Add email in People -> Collaborators for login unlock'}
+                        </div>
                       </div>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold shrink-0 ${active ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-slate-600'}`}>
                         {active ? 'Linked' : 'Link'}

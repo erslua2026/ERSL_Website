@@ -56,7 +56,12 @@ import {
 import { ImageUploadField } from './components/ImageUploadField';
 import { buildSiteSearchItems, SiteSearchItem } from './lib/siteSearch';
 import { applyAutoGraduation } from './lib/peopleUtils';
-import { isFinishedProject, isReservoirManagedProject } from './lib/projectSubPageUtils';
+import {
+  isFinishedProject,
+  isInternalLabMemberUser,
+  isReservoirManagedProject,
+  isUserEmailLinkedToProject,
+} from './lib/projectSubPageUtils';
 import { STUDENT_WORKSPACES_UPDATED_EVENT } from './lib/workplanUtils';
 
 // Helper to resolve image paths (local folder under public/images/{category} vs base64/URL assets)
@@ -619,9 +624,10 @@ export default function App() {
     ];
     const ADMIN_KEYS = ['ersl_sec_auditlogs'];
 
+    const canFetchMemberKeys = Boolean(effectiveUser && effectiveUser.role !== 'Viewer');
     const keys = [
       ...PUBLIC_KEYS,
-      ...(effectiveUser ? MEMBER_KEYS : []),
+      ...(canFetchMemberKeys ? MEMBER_KEYS : []),
       ...(effectiveUser?.role === 'Admin' ? ADMIN_KEYS : []),
     ];
 
@@ -719,7 +725,7 @@ export default function App() {
         }
       } catch { }
     }
-    if (effectiveUser) {
+    if (effectiveUser && effectiveUser.role !== 'Viewer') {
       const tch = pick<any[]>('ersl_sec_teaching', 'teaching');
       if (tch && (showToast || !isRecentlyWritten('ersl_sec_teaching'))) {
         setTeachingList(tch);
@@ -2189,14 +2195,16 @@ export default function App() {
   const activeHeroImg = resolveAssetUrl(resolveImagePath(activeHeroTheme?.image, 'research'));
   const subheadingAccent = siteConfig.subheadingColor || '#9E1B32';
   const isGlassTheme = siteConfig.themeStyle !== 'classic';
-  const effectiveLayoutMode = !currentUser
+  const isLabMemberUser = isInternalLabMemberUser(currentUser, people);
+  const isCollaboratorUser = Boolean(currentUser && !isLabMemberUser);
+  const effectiveLayoutMode = !isLabMemberUser
     ? 'horizontal-top'
     : (siteConfig.memberLayoutMode || (siteConfig.layoutMode === 'horizontal-top' ? 'vertical-left' : siteConfig.layoutMode));
 
   const siteSearchItems = buildSiteSearchItems({
     siteConfig,
-    currentUser,
-    editMode,
+    currentUser: isLabMemberUser ? currentUser : null,
+    editMode: isLabMemberUser ? editMode : false,
     themes,
     projects,
     publications,
@@ -2251,8 +2259,8 @@ export default function App() {
   const headerSiteConfig: SiteConfig = {
     ...siteConfig,
     layoutMode: effectiveLayoutMode,
-    tabs: !currentUser
-      ? siteConfig.tabs.filter(t => t.visibility === 'public' && t.id !== 'home')
+    tabs: !isLabMemberUser
+      ? siteConfig.tabs.filter(t => t.visibility === 'public' && (currentUser || t.id !== 'home'))
       : siteConfig.tabs,
   };
 
@@ -2263,8 +2271,33 @@ export default function App() {
       style={isGlassTheme ? undefined : { backgroundColor: siteConfig.pageBgColor || '#f8fafc' }}
     >
 
-      {/* Top Banner indicating Admin / Editor rights */}
-      {currentUser && currentUser.role !== 'Viewer' && (
+      {/* Top Banner indicating Admin / Editor / Collaborator status */}
+      {isCollaboratorUser && currentUser && (
+        <div className="bg-slate-900 text-white px-3 sm:px-4 py-1.5 text-xs flex flex-wrap justify-between items-center gap-2 z-40 border-b border-slate-700 select-none">
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2 h-2 bg-blue-400 rounded-full shrink-0"></span>
+            <span className="font-bold uppercase tracking-wider text-[11px] truncate">
+              🤝 Project Collaborator / External PI Session
+            </span>
+            <span className="text-slate-400 hidden sm:inline">·</span>
+            <span className="text-slate-300 font-medium hidden sm:inline truncate">
+              {currentUser.name} ({currentUser.email}) — Linked project collaborator sections unlocked
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('projects');
+              setSelectedProjectDetails(null);
+            }}
+            className="text-[10px] font-extrabold px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white uppercase tracking-wider cursor-pointer"
+          >
+            View My Projects
+          </button>
+        </div>
+      )}
+
+      {isLabMemberUser && currentUser && currentUser.role !== 'Viewer' && (
         <div className="bg-[#1e293b] text-white px-3 sm:px-4 py-1.5 text-xs flex flex-wrap justify-between items-center gap-2 z-40 border-b border-slate-700 select-none">
           <div className="flex items-center space-x-2 min-w-0">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-ping shrink-0"></span>
@@ -2345,7 +2378,7 @@ export default function App() {
                 workspaceData={studentWorkspaces[standaloneStu.id] || standaloneStu.subPage}
                 people={people}
                 currentUser={currentUser}
-                canEdit={Boolean(editMode)}
+                canEdit={Boolean(editMode) && isLabMemberUser}
                 isStandalone
                 siteConfig={siteConfig}
                 primaryColor={accentColor}
@@ -2384,7 +2417,7 @@ export default function App() {
                 themes={themes}
                 people={people}
                 currentUser={currentUser}
-                canEdit={Boolean(editMode)}
+                canEdit={Boolean(editMode) && isLabMemberUser}
                 isStandalone
                 siteConfig={siteConfig}
                 primaryColor={accentColor}
@@ -2450,7 +2483,7 @@ export default function App() {
           {/* Main Body view route controller (aligned cleanly to max-w-7xl guide) */}
           <main className={`flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 ${siteConfig.compactMode ? 'pt-2 pb-4' : 'pt-2.5 pb-6'}`}>
 
-            {!currentUser && !isTabPublic(activeTab) ? (
+            {!isLabMemberUser && !isTabPublic(activeTab) ? (
               <div className="bg-white p-10 md:p-12 rounded-2xl border border-gray-200 text-center max-w-lg mx-auto shadow-sm space-y-4 my-8">
                 <Lock className="w-12 h-12 mx-auto" style={{ color: accentColor }} />
                 <div>
@@ -2462,24 +2495,28 @@ export default function App() {
                   </span>
                   <h3 className="text-base font-extrabold text-slate-900 mt-3">Members-Only Workspace</h3>
                   <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                    Public access includes ERSL Home, People, Research Themes, Research Projects, Publications, Instruments, Software, and Datasets. Sign in via myBama / ERSL Portal to access internal lab workspaces.
+                    {isCollaboratorUser
+                      ? 'Your account is signed in as an External Project Collaborator. Internal ERSL lab tools are reserved for ERSL lab members; open Research Projects to access your linked projects.'
+                      : 'Public access includes ERSL Home, People, Research Themes, Research Projects, Publications, Instruments, Software, and Datasets. Sign in via myBama / ERSL Portal to access internal lab workspaces.'}
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-2 pt-1">
+                  {!currentUser && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSSOPopup(true)}
+                      style={{ backgroundColor: accentColor }}
+                      className="hover:opacity-90 text-white text-xs font-bold py-2.5 px-5 rounded-xl shadow-sm cursor-pointer"
+                    >
+                      Authenticate via myBama SSO
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setShowSSOPopup(true)}
-                    style={{ backgroundColor: accentColor }}
-                    className="hover:opacity-90 text-white text-xs font-bold py-2.5 px-5 rounded-xl shadow-sm cursor-pointer"
-                  >
-                    Authenticate via myBama SSO
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('home')}
+                    onClick={() => setActiveTab(isCollaboratorUser ? 'projects' : 'home')}
                     className="text-xs font-bold py-2.5 px-4 rounded-xl border border-gray-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
                   >
-                    Back to Home
+                    {isCollaboratorUser ? 'Go to Research Projects' : 'Back to Home'}
                   </button>
                 </div>
               </div>
@@ -2669,7 +2706,7 @@ export default function App() {
                                 <span>Edit Heading</span>
                               </button>
                             )}
-                            {(currentUser || isAdmin || editMode) && (
+                            {(isLabMemberUser || isAdmin || editMode) && (
                               <button
                                 onClick={() => {
                                   setEditingNewsItem(null);
@@ -2815,7 +2852,7 @@ export default function App() {
                                     )}
                                   </div>
 
-                                  {(currentUser || isAdmin || editMode) && (
+                                  {(isLabMemberUser || isAdmin || editMode) && (
                                     <div className="flex items-center space-x-1">
                                       <button
                                         onClick={() => {
@@ -3179,7 +3216,7 @@ export default function App() {
                         themes={themes}
                         people={people}
                         currentUser={currentUser}
-                        canEdit={Boolean(editMode)}
+                        canEdit={Boolean(editMode) && isLabMemberUser}
                         siteConfig={siteConfig}
                         primaryColor={accentColor}
                         initialSubTabId={selectedProjectSubTabId}
@@ -3297,6 +3334,14 @@ export default function App() {
                           const renderProjectCard = (proj: Project, idx: number, groupIds: string[]) => {
                             const projThemes = themes.filter(t => Array.isArray(proj.themeIds) && proj.themeIds.includes(t.id));
                             const isFinished = isFinishedProject(proj);
+                            const isLinkedCollaboratorProject = Boolean(
+                              isCollaboratorUser &&
+                                isUserEmailLinkedToProject(
+                                  currentUser?.email,
+                                  proj.subPage?.collaborators || [],
+                                  people
+                                )
+                            );
                             return (
                               <div
                                 key={proj.id}
@@ -3424,11 +3469,16 @@ export default function App() {
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-[#9E1B32] border border-rose-200">
                                         📊 Reservoir Protocol Matrix
                                       </span>
-                                    ) : (currentUser || proj.subPage?.customSubTabs?.some(t => t.kind === 'workplan-tracker')) ? (
+                                    ) : (isLabMemberUser || proj.subPage?.customSubTabs?.some(t => t.kind === 'workplan-tracker' && t.visibility === 'public')) ? (
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                                         📊 Project Management (Custom)
                                       </span>
                                     ) : null}
+                                    {isLinkedCollaboratorProject && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                        🤝 Collaborator Access Unlocked
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -3571,7 +3621,7 @@ export default function App() {
                       </div>
 
                       <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2">
-                        {(currentUser || isAdmin || editMode) ? (
+                        {(isLabMemberUser || isAdmin || editMode) ? (
                           <>
                             <button
                               onClick={() => {
@@ -3619,12 +3669,12 @@ export default function App() {
                           <div>
                             <h4 className="text-sm font-bold text-gray-700">No publication records currently displayed.</h4>
                             <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                              {currentUser
+                              {isLabMemberUser
                                 ? 'Click "+ Add" above to add research publications.'
                                 : 'Publications will be displayed here once cataloged by the laboratory.'}
                             </p>
                           </div>
-                          {(currentUser || isAdmin || editMode) && (
+                          {(isLabMemberUser || isAdmin || editMode) && (
                             <button
                               onClick={() => {
                                 setModalType('publication');
@@ -3731,7 +3781,7 @@ export default function App() {
                               </div>
 
                               {/* Interactive elements on individual record */}
-                              {(currentUser || isAdmin || editMode) && (
+                              {(isLabMemberUser || isAdmin || editMode) && (
                                 <div className="flex space-x-1 opacity-80 group-hover:opacity-100 transition-opacity">
                                   <button
                                     onClick={() => {
@@ -3768,7 +3818,7 @@ export default function App() {
 
                 {/* VIEW: PROFESSIONAL DEVELOPMENT (RESTRICTED FOR MEMBERS ONLY) */}
                 {activeTab === 'professional' && (
-                  currentUser ? (
+                  isLabMemberUser ? (
                     <ProfessionalDevelopment currentUser={currentUser} {...getSubHeaderPassProps('professional')} />
                   ) : (
                     <div className="bg-white p-12 rounded-2xl border border-gray-100 text-center max-w-lg mx-auto shadow-sm space-y-5 animate-in fade-in duration-300">
@@ -3830,7 +3880,7 @@ export default function App() {
                     />
 
                     {/* Card grid */}
-                    {!currentUser && softwareList.some(s => s.visibility === 'members') && (
+                    {!isLabMemberUser && softwareList.some(s => s.visibility === 'members') && (
                       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
                         <span className="font-semibold flex items-center gap-1.5">
                           <Lock className="w-3.5 h-3.5 text-amber-700" />
@@ -3851,7 +3901,7 @@ export default function App() {
                         .filter(soft => {
                           const vis = soft.visibility || 'public';
                           if (vis === 'admin') return isAdmin || editMode;
-                          if (vis === 'members') return Boolean(currentUser) || editMode;
+                          if (vis === 'members') return isLabMemberUser || editMode;
                           return true;
                         })
                         .map((soft) => {
@@ -3920,7 +3970,7 @@ export default function App() {
                               <span className="text-[10px] font-bold text-gray-400">
                                 {vis === 'public' ? 'LICENSE: MIT OPEN SOURCE' : 'ERSL RESTRICTED PACKAGE'}
                               </span>
-                              {currentUser && soft.boxFolderUrl && sanitizeExternalUrl(soft.boxFolderUrl) && (
+                              {isLabMemberUser && soft.boxFolderUrl && sanitizeExternalUrl(soft.boxFolderUrl) && (
                                 <a
                                   href={sanitizeExternalUrl(soft.boxFolderUrl)}
                                   target="_blank"
@@ -4038,7 +4088,7 @@ export default function App() {
 
                             {/* Actions and access buttons */}
                             <div className="flex items-center space-x-2.5 self-end md:self-center shrink-0">
-                              {currentUser && data.boxFolderUrl && sanitizeExternalUrl(data.boxFolderUrl) && (
+                              {isLabMemberUser && data.boxFolderUrl && sanitizeExternalUrl(data.boxFolderUrl) && (
                                 <a
                                   href={sanitizeExternalUrl(data.boxFolderUrl)}
                                   target="_blank"
@@ -4115,7 +4165,7 @@ export default function App() {
                       <InstrumentSubPage
                         instrument={activeInstObj}
                         currentUser={currentUser}
-                        canEdit={Boolean(editMode)}
+                        canEdit={Boolean(editMode) && isLabMemberUser}
                         primaryColor={accentColor}
                         resolveInstrumentImage={(img) => resolveImagePath(img, 'instruments')}
                         onBack={() => setSelectedInstrumentDetails(null)}
@@ -4403,7 +4453,7 @@ export default function App() {
                             {label} ({people.filter(p => (p.group || 'member') === k).length})
                           </button>
                         ))}
-                        {currentUser && (
+                        {isLabMemberUser && (
                           <button
                             type="button"
                             onClick={() => setPeopleSubTab('workplan')}
@@ -4419,7 +4469,7 @@ export default function App() {
                         )}
                       </div>
 
-                      {peopleSubTab === 'workplan' && currentUser ? (
+                      {peopleSubTab === 'workplan' && isLabMemberUser ? (
                         <Workplan
                           currentUser={currentUser}
                           peopleRoster={people}
@@ -5255,7 +5305,7 @@ export default function App() {
                 {/* VIEW 9: BOX FOLDERS (public folders for everyone, private ones for approved members) */}
                 {activeTab === 'box' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
-                    {currentUser ? (
+                    {isLabMemberUser ? (
                       <BoxFolders
                         currentUser={currentUser}
                         people={people}
@@ -5289,7 +5339,7 @@ export default function App() {
                 {/* VIEW: WORK PLAN (private) */}
                 {activeTab === 'workplan' && (
                   <div>
-                    {currentUser ? (
+                    {isLabMemberUser ? (
                       <Workplan currentUser={currentUser} {...getSubHeaderPassProps('workplan')} />
                     ) : (
                       <div className="bg-white p-12 rounded-xl border border-gray-100 text-center max-w-lg mx-auto shadow-sm space-y-4">
@@ -5304,7 +5354,7 @@ export default function App() {
                 {/* VIEW: PROJECT MANAGEMENT (HOUSES RESERVOIR DELINEATION MATRIX) */}
                 {activeTab === 'reservoir' && (
                   <div>
-                    {currentUser ? (
+                    {isLabMemberUser ? (
                       <ReservoirProject
                         currentUser={currentUser}
                         projects={projects}
@@ -5390,7 +5440,7 @@ export default function App() {
                       </div>
                     );
                   }
-                  if (tabMeta?.visibility === 'members' && !currentUser) {
+                  if (tabMeta?.visibility === 'members' && !isLabMemberUser) {
                     return (
                       <div className="bg-white p-12 rounded-xl border border-gray-200 text-center max-w-lg mx-auto shadow-xs space-y-4">
                         <Lock className="w-12 h-12 mx-auto" style={{ color: accentColor }} />
@@ -5398,13 +5448,15 @@ export default function App() {
                           <h3 className="text-sm font-bold text-gray-800">Members Only Section</h3>
                           <p className="text-xs text-gray-500 mt-1">Sign in as an approved ERSL member to view this custom workspace.</p>
                         </div>
-                        <button
-                          onClick={() => setShowSSOPopup(true)}
-                          style={{ backgroundColor: accentColor }}
-                          className="text-white text-xs font-bold py-2 px-6 rounded cursor-pointer"
-                        >
-                          Log in via myBama / ERSL Portal
-                        </button>
+                        {!currentUser && (
+                          <button
+                            onClick={() => setShowSSOPopup(true)}
+                            style={{ backgroundColor: accentColor }}
+                            className="text-white text-xs font-bold py-2 px-6 rounded cursor-pointer"
+                          >
+                            Log in via myBama / ERSL Portal
+                          </button>
+                        )}
                       </div>
                     );
                   }
@@ -5687,7 +5739,7 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {(currentUser || isAdmin || editMode) && (
+                    {(isLabMemberUser || isAdmin || editMode) && (
                       <button
                         type="button"
                         onClick={() => {
