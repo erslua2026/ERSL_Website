@@ -366,8 +366,8 @@ export const ProjectWorkplanTracker: React.FC<ProjectWorkplanTrackerProps> = ({
     );
 
     const cleanedCustom: Record<string, string> = {};
-    Object.entries(allocModal.customFields).forEach(([k, v]) => {
-      if (v.trim()) cleanedCustom[k] = v.trim();
+    Object.entries(allocModal.customFields || {}).forEach(([k, v]) => {
+      if (typeof v === 'string' && v.trim()) cleanedCustom[k] = v.trim();
     });
 
     const nextAlloc: ProjectTrackerAllocation = {

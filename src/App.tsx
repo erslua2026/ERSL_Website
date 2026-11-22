@@ -4801,7 +4801,9 @@ export default function App() {
                                             <ChevronRight className="w-3.5 h-3.5" />
                                           </button>
                                         ) : (
-                                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:inline">UA GEOGRAPHY</span>
+                                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:inline text-right truncate max-w-[65%]">
+                                            {[person.department, person.institution || person.currentAffiliation].filter(Boolean).join(' · ') || 'COLLABORATOR'}
+                                          </span>
                                         )}
                                       </div>
                                     </div>
