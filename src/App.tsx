@@ -1079,6 +1079,23 @@ export default function App() {
       })
       .subscribe();
 
+    const handleStorageSync = (evt: StorageEvent) => {
+      if (!mounted || !evt.key || !evt.newValue) return;
+      try {
+        const parsed = JSON.parse(evt.newValue);
+        if (evt.key === 'ersl_projects' && Array.isArray(parsed)) {
+          setProjects(normalizeProjects(parsed));
+        } else if (evt.key === 'ersl_themes' && Array.isArray(parsed)) {
+          setThemes(normalizeThemes(parsed));
+        } else if (evt.key === 'ersl_people' && Array.isArray(parsed)) {
+          setPeople(applyAutoGraduation(parsed).updatedList);
+        } else if (evt.key === 'ersl_site_config' && parsed && Array.isArray(parsed.tabs)) {
+          setSiteConfig(normalizeSiteConfig(parsed));
+        }
+      } catch { }
+    };
+    window.addEventListener('storage', handleStorageSync);
+
     let lastVisibilityHydrate = 0;
     const handleVisibility = () => {
       if (!mounted || document.visibilityState !== 'visible') return;
@@ -1091,6 +1108,7 @@ export default function App() {
 
     return () => {
       mounted = false;
+      window.removeEventListener('storage', handleStorageSync);
       window.removeEventListener(STUDENT_WORKSPACES_UPDATED_EVENT, handleStudentWorkspaceSync);
       document.removeEventListener('visibilitychange', handleVisibility);
       supabase?.removeChannel(channel);
@@ -1846,23 +1864,32 @@ export default function App() {
       syncSiteContentToCloud({ teaching: updated });
       appendAuditLog(isEdit ? 'UPDATE_TEACHING_MATERIAL' : 'ADD_TEACHING_MATERIAL', savedItem.title);
     } else if (modalType === 'project') {
+      const nextAgency = (savedItem.sponsor || savedItem.agency || 'ERSL Grant').trim();
+      const nextPeriod = (savedItem.period || savedItem.subPage?.timeline || '').trim();
       const normalizedProject: Project = {
         ...savedItem,
-        agency: savedItem.agency || savedItem.sponsor || 'ERSL Grant',
-        sponsor: savedItem.sponsor || savedItem.agency || 'ERSL Grant',
+        agency: nextAgency,
+        sponsor: nextAgency,
+        period: nextPeriod || undefined,
         details: savedItem.details || savedItem.summary || '',
         summary: savedItem.summary || savedItem.details || '',
         themeIds: Array.isArray(savedItem.themeIds) ? savedItem.themeIds : [],
-        subPage: savedItem.subPage || {
+        subPage: {
           tabVisibility: { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
           objectives: [],
           resources: [],
           events: [],
           datasets: [],
+          ...(savedItem.subPage || {}),
+          summary: savedItem.subPage?.summary || savedItem.summary || '',
+          timeline: nextPeriod || savedItem.subPage?.timeline || 'Active Research Grant',
         },
       };
       const updated = isEdit ? projects.map(p => p.id === normalizedProject.id ? normalizedProject : p) : [normalizedProject, ...projects];
       setProjects(updated);
+      if (selectedProjectDetails?.id === normalizedProject.id) {
+        setSelectedProjectDetails(normalizedProject);
+      }
       try { localStorage.setItem('ersl_projects', JSON.stringify(updated)); } catch { }
       syncSiteContentToCloud({ projects: updated });
       appendAuditLog(isEdit ? 'UPDATE_PROJECT' : 'ADD_PROJECT', normalizedProject.title);

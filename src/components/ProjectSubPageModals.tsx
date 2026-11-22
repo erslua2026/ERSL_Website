@@ -60,7 +60,7 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
   onSave,
 }) => {
   const [title, setTitle] = useState(project.title);
-  const [agency, setAgency] = useState(project.agency);
+  const [agency, setAgency] = useState(project.agency || project.sponsor || '');
   const [details, setDetails] = useState(project.details);
   const [investigators, setInvestigators] = useState<ProjectInvestigator[]>(() => {
     if (Array.isArray(initialInvestigators) && initialInvestigators.length > 0) {
@@ -71,7 +71,7 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
       ? parsed
       : [{ id: `inv-${Date.now()}`, name: '', role: 'PI', affiliation: 'The University of Alabama' }];
   });
-  const [timeline, setTimeline] = useState(initialTimeline);
+  const [timeline, setTimeline] = useState(initialTimeline || project.period || '');
   const [boxFolderUrl, setBoxFolderUrl] = useState(initialBoxFolderUrl);
   const [link, setLink] = useState(project.link || '');
   const [headerBgColor, setHeaderBgColor] = useState(initialHeaderBgColor || primaryColor);

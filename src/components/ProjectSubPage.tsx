@@ -675,9 +675,23 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           )}
 
           <div>
-            <h2 className="text-xl md:text-2xl font-black leading-snug" style={{ color: headerAccent }}>
-              {project.title}
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-xl md:text-2xl font-black leading-snug" style={{ color: headerAccent }}>
+                {project.title}
+              </h2>
+              {showEditControls && (
+                <button
+                  type="button"
+                  onClick={() => setEditingInfo(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50/70 hover:bg-red-50 cursor-pointer"
+                  style={{ color: headerAccent }}
+                  title="Edit Project Title, Sponsor, Years & Connected Themes"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span className="hidden sm:inline">Edit Title / Info</span>
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-gray-100">
               <div className="flex flex-wrap items-center gap-2">
                 {linkedThemes.map(t => (
@@ -699,11 +713,11 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                   className="text-[11px] font-extrabold px-2.5 py-1 rounded-md text-white shadow-2xs"
                   style={{ backgroundColor: headerAccent }}
                 >
-                  {project.agency}
+                  {project.agency || project.sponsor || 'ERSL Grant'}
                 </span>
-                {subPage.timeline && (
+                {(subPage.timeline || project.period) && (
                   <span className="text-[11px] font-bold px-2.5 py-1 rounded-md border border-slate-200 bg-slate-100 text-slate-800">
-                    {subPage.timeline}
+                    {subPage.timeline || project.period}
                   </span>
                 )}
               </div>
@@ -1346,7 +1360,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                       Status / Timeline
                     </span>
-                    <p className="font-bold text-slate-800 mt-0.5">{subPage.timeline || 'Active Research Grant'}</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{subPage.timeline || project.period || 'Active Research Grant'}</p>
                   </div>
 
                   {/* Linked Collaborators */}
@@ -1464,7 +1478,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
           primaryColor={primaryColor}
           initialPiInfo={subPage.piInfo || project.details}
           initialInvestigators={subPage.investigators}
-          initialTimeline={subPage.timeline || 'Active Research Grant'}
+          initialTimeline={subPage.timeline || project.period || 'Active Research Grant'}
           initialBoxFolderUrl={subPage.boxFolderUrl || ''}
           initialHeaderBgColor={subPage.headerBgColor || primaryColor}
           onClose={() => setEditingInfo(false)}
@@ -1481,6 +1495,8 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
               {
                 title: patch.title,
                 agency: patch.agency,
+                sponsor: patch.agency,
+                period: patch.timeline,
                 details: patch.details,
                 link: patch.link,
                 themeIds: patch.themeIds,

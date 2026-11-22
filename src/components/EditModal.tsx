@@ -207,6 +207,9 @@ export const EditModal: React.FC<EditModalProps> = ({
             : parseLegacyInvestigators(item.subPage?.piInfo, item.details);
         setFormData({
           ...item,
+          sponsor: item.sponsor || item.agency || '',
+          period: item.period || item.subPage?.timeline || '',
+          summary: item.summary || item.subPage?.summary || '',
           investigators:
             existingInvs.length > 0
               ? existingInvs
@@ -377,6 +380,9 @@ export const EditModal: React.FC<EditModalProps> = ({
         }))
         .filter((inv: ProjectInvestigator) => inv.name);
       const piSummary = formatInvestigatorsSummary(cleanInvestigators);
+      const cleanSponsor = (formData.sponsor || formData.agency || 'ERSL Grant').trim();
+      const cleanPeriod = (formData.period || '').trim();
+      const cleanSummary = (formData.summary || '').trim();
       const existingSub = formData.subPage || {
         tabVisibility: { overview: 'public', resources: 'public', events: 'public', datasets: 'members' },
         objectives: [],
@@ -387,13 +393,17 @@ export const EditModal: React.FC<EditModalProps> = ({
       onSave({
         ...formData,
         id: formData.id || `${type}-${Date.now()}`,
-        details: (formData.details || '').trim() || piSummary || '',
+        agency: cleanSponsor,
+        sponsor: cleanSponsor,
+        period: cleanPeriod || existingSub.timeline || undefined,
+        summary: cleanSummary || existingSub.summary || '',
+        details: piSummary || (formData.details || '').trim() || cleanSummary || '',
         subPage: {
           ...existingSub,
-          summary: existingSub.summary || formData.summary || '',
+          summary: cleanSummary || existingSub.summary || '',
           piInfo: piSummary || existingSub.piInfo || formData.details || '',
           investigators: cleanInvestigators,
-          timeline: existingSub.timeline || formData.period || 'Active Research Grant',
+          timeline: cleanPeriod || existingSub.timeline || 'Active Research Grant',
         },
       });
       return;
