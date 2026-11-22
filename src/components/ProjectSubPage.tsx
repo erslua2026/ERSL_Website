@@ -1383,8 +1383,10 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                                 </span>
                               )}
                             </div>
-                            {col.affiliation && (
-                              <p className="text-[11px] text-slate-500 mt-0.5">{col.affiliation}</p>
+                            {(col.department || col.affiliation) && (
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                {[col.department, col.affiliation].filter(Boolean).join(' · ')}
+                              </p>
                             )}
                             {showCollaboratorEmails && col.email && (
                               <p className="text-[10px] font-mono text-slate-400 mt-0.5">{col.email}</p>

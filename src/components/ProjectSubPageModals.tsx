@@ -967,6 +967,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
   const [list, setList] = useState<ProjectCollaborator[]>(initialCollaborators);
   const [accessCode, setAccessCode] = useState(initialAccessCode);
   const [cName, setCName] = useState('');
+  const [cDepartment, setCDepartment] = useState('');
   const [cAffiliation, setCAffiliation] = useState('');
   const [cRole, setCRole] = useState('Collaborator');
   const [cEmail, setCEmail] = useState('');
@@ -985,7 +986,8 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
           id: `collab-${person.id}`,
           personId: person.id,
           name: person.name,
-          affiliation: person.researchFocus || person.role,
+          department: person.department || undefined,
+          affiliation: person.institution || person.currentAffiliation || person.researchFocus || person.role,
           role: person.role || 'Collaborator',
           email: person.email || undefined,
           url: person.scholar || person.linkedin || undefined,
@@ -1001,6 +1003,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
       {
         id: `collab-${Date.now()}`,
         name: cName.trim(),
+        department: cDepartment.trim() || undefined,
         affiliation: cAffiliation.trim() || undefined,
         role: cRole.trim() || 'Collaborator',
         email: cEmail.trim() || undefined,
@@ -1008,6 +1011,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
       },
     ]);
     setCName('');
+    setCDepartment('');
     setCAffiliation('');
     setCRole('Collaborator');
     setCEmail('');
@@ -1060,7 +1064,9 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
                     >
                       <div className="min-w-0">
                         <div className="truncate">{person.name}</div>
-                        <div className="text-[10px] text-slate-500 truncate">{person.role}</div>
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {[person.role, person.department, person.institution || person.currentAffiliation].filter(Boolean).join(' · ')}
+                        </div>
                         <div className={`text-[10px] truncate ${person.email ? 'text-blue-700 font-mono' : 'text-amber-700 font-semibold'}`}>
                           {person.email || 'Add email in People -> Collaborators for login unlock'}
                         </div>
@@ -1082,9 +1088,10 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <input value={cName} onChange={e => setCName(e.target.value)} placeholder="Full Name * (e.g., Dr. Ximing Cai)" className="p-2 bg-white border border-gray-300 rounded-lg" />
-              <input value={cAffiliation} onChange={e => setCAffiliation(e.target.value)} placeholder="Agency / University (e.g., USGS, UIUC)" className="p-2 bg-white border border-gray-300 rounded-lg" />
               <input value={cRole} onChange={e => setCRole(e.target.value)} placeholder="Role (e.g., Co-PI, Agency Liaison)" className="p-2 bg-white border border-gray-300 rounded-lg" />
-              <input type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="Email (used for signed-in access match)" className="p-2 bg-white border border-gray-300 rounded-lg" />
+              <input value={cDepartment} onChange={e => setCDepartment(e.target.value)} placeholder="Department (e.g., Civil & Environmental Engineering)" className="p-2 bg-white border border-gray-300 rounded-lg" />
+              <input value={cAffiliation} onChange={e => setCAffiliation(e.target.value)} placeholder="Institute / Agency / University (e.g., UIUC, USGS)" className="p-2 bg-white border border-gray-300 rounded-lg" />
+              <input type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="Email (used for signed-in access match)" className="sm:col-span-2 p-2 bg-white border border-gray-300 rounded-lg" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <input value={cUrl} onChange={e => setCUrl(e.target.value)} placeholder="Profile / Lab Website URL (Optional)" className="flex-1 p-2 bg-white border border-gray-300 rounded-lg" />
@@ -1115,7 +1122,7 @@ export const CollaboratorsModal: React.FC<CollaboratorsModalProps> = ({
                         {col.role && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 ml-1">{col.role}</span>}
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        {[col.affiliation, col.email].filter(Boolean).join(' · ') || 'External Partner'}
+                        {[col.department, col.affiliation, col.email].filter(Boolean).join(' · ') || 'External Partner'}
                       </div>
                     </div>
                     <button

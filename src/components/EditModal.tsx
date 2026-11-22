@@ -253,6 +253,8 @@ export const EditModal: React.FC<EditModalProps> = ({
         setFormData({
           name: '',
           role: '',
+          department: '',
+          institution: '',
           researchFocus: '',
           bio: '',
           email: '',
@@ -1107,11 +1109,13 @@ export const EditModal: React.FC<EditModalProps> = ({
               ) : (
                 <>
                   <div className="space-y-1">
-                    <label className="block font-bold text-gray-700">Academic Role *</label>
+                    <label className="block font-bold text-gray-700">
+                      {formData.group === 'collaborator' ? 'Role / Academic Title *' : 'Academic Role *'}
+                    </label>
                     <input
                       type="text"
                       name="role"
-                      placeholder="e.g., Assistant Professor"
+                      placeholder={formData.group === 'collaborator' ? 'e.g., Co-PI · Professor / Research Hydrologist' : 'e.g., Assistant Professor / PhD Candidate'}
                       value={formData.role || ''}
                       onChange={handleChange}
                       className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
@@ -1119,8 +1123,41 @@ export const EditModal: React.FC<EditModalProps> = ({
                     />
                   </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="block font-bold text-gray-700">
+                        Department {formData.group === 'collaborator' ? '*' : '(Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        name="department"
+                        placeholder={formData.group === 'collaborator' ? 'e.g., Dept. of Civil & Environmental Engineering' : 'e.g., Dept. of Geography & the Environment'}
+                        value={formData.department || ''}
+                        onChange={handleChange}
+                        className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                        required={formData.group === 'collaborator'}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block font-bold text-gray-700">
+                        Institute / University / Agency {formData.group === 'collaborator' ? '*' : '(Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        name="institution"
+                        placeholder={formData.group === 'collaborator' ? 'e.g., NOAA OWP / USGS / Auburn University' : 'e.g., The University of Alabama'}
+                        value={formData.institution || ''}
+                        onChange={handleChange}
+                        className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
+                        required={formData.group === 'collaborator'}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
-                    <label className="block font-bold text-gray-700">Research Focus Areas *</label>
+                    <label className="block font-bold text-gray-700">
+                      Research Focus Areas {formData.group === 'collaborator' ? '(Optional)' : '*'}
+                    </label>
                     <input
                       type="text"
                       name="researchFocus"
@@ -1128,19 +1165,22 @@ export const EditModal: React.FC<EditModalProps> = ({
                       value={formData.researchFocus || ''}
                       onChange={handleChange}
                       className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                      required
+                      required={formData.group !== 'collaborator'}
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block font-bold text-gray-700">Biography / Research Background *</label>
+                    <label className="block font-bold text-gray-700">
+                      {formData.group === 'collaborator' ? 'Biography / Collaboration Scope (Optional)' : 'Biography / Research Background *'}
+                    </label>
                     <textarea
                       name="bio"
                       value={formData.bio || ''}
                       onChange={handleChange}
                       rows={4}
+                      placeholder={formData.group === 'collaborator' ? 'Joint grant research focus, field expertise, or lab partnership summary...' : ''}
                       className="w-full p-2.5 bg-white border border-gray-300 rounded focus:outline-none focus:border-[#9E1B32]"
-                      required
+                      required={formData.group !== 'collaborator'}
                     />
                   </div>
 

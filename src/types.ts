@@ -190,6 +190,7 @@ export interface ProjectCollaborator {
   id: string;
   personId?: string;
   name: string;
+  department?: string;
   affiliation?: string;
   role?: string;
   email?: string;
@@ -317,6 +318,8 @@ export interface Person {
   id: string;
   name: string;
   role: string;
+  department?: string;
+  institution?: string;
   researchFocus: string;
   bio: string;
   email: string;

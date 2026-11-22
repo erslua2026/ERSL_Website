@@ -4722,6 +4722,11 @@ export default function App() {
                                           <div>
                                             <h4 className="text-lg md:text-xl font-extrabold text-[#9E1B32] tracking-tight">{person.name}</h4>
                                             <h6 className="text-xs font-semibold text-gray-500 mt-0.5 capitalize tracking-wide">{person.role}</h6>
+                                            {(person.department || person.institution || person.currentAffiliation) && (
+                                              <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                                                {[person.department, person.institution || person.currentAffiliation].filter(Boolean).join(' · ')}
+                                              </p>
+                                            )}
                                           </div>
                                           {editMode && key === 'member' && person.expectedGraduationDate && (
                                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
@@ -4731,13 +4736,17 @@ export default function App() {
                                         </div>
 
                                         <div className="space-y-2">
-                                          <p className="text-xs md:text-sm text-gray-800 leading-relaxed line-clamp-2">
-                                            <strong className="text-gray-900 font-extrabold">Research Focus:</strong>{' '}
-                                            <span className="font-semibold text-gray-600">{person.researchFocus}</span>
-                                          </p>
-                                          <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal text-justify line-clamp-4 md:line-clamp-3 lg:line-clamp-4" id={`bio-${person.id}`}>
-                                            {person.bio}
-                                          </p>
+                                          {person.researchFocus && (
+                                            <p className="text-xs md:text-sm text-gray-800 leading-relaxed line-clamp-2">
+                                              <strong className="text-gray-900 font-extrabold">Research Focus:</strong>{' '}
+                                              <span className="font-semibold text-gray-600">{person.researchFocus}</span>
+                                            </p>
+                                          )}
+                                          {person.bio && (
+                                            <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal text-justify line-clamp-4 md:line-clamp-3 lg:line-clamp-4" id={`bio-${person.id}`}>
+                                              {person.bio}
+                                            </p>
+                                          )}
                                         </div>
                                       </div>
 

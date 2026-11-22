@@ -93,6 +93,7 @@ ALTER TABLE public.reservoir_matrix ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "reservoir_matrix_public_read" ON public.reservoir_matrix;
 DROP POLICY IF EXISTS "reservoir_matrix_member_read" ON public.reservoir_matrix;
+DROP POLICY IF EXISTS "reservoir_matrix_admin_read" ON public.reservoir_matrix;
 DROP POLICY IF EXISTS "reservoir_matrix_write_policy" ON public.reservoir_matrix;
 DROP POLICY IF EXISTS "reservoir_matrix_update_policy" ON public.reservoir_matrix;
 DROP POLICY IF EXISTS "reservoir_matrix_delete_policy" ON public.reservoir_matrix;
