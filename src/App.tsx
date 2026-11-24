@@ -3368,7 +3368,8 @@ export default function App() {
                                 isUserEmailLinkedToProject(
                                   currentUser?.email,
                                   proj.subPage?.collaborators || [],
-                                  people
+                                  people,
+                                  proj.subPage?.investigators || []
                                 )
                             );
                             return (
@@ -5661,6 +5662,7 @@ export default function App() {
           type={modalType}
           item={editingItem}
           themes={themes}
+          people={people}
           existingPublications={modalType === 'publication' ? publications : undefined}
           defaultPersonGroup={peopleSubTab}
           initialPersonGroupOverride={personGroupOverride}

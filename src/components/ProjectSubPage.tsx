@@ -292,6 +292,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
     currentUser,
     people,
     collaborators,
+    investigators: subPage.investigators,
     passkeyUnlocked,
     previewRole: effectivePreview,
   });
@@ -1586,25 +1587,50 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                       if (invList.length > 0) {
                         return (
                           <div className="space-y-1.5 mt-1.5">
-                            {invList.map(inv => (
-                              <div key={inv.id} className="bg-white border border-slate-200 rounded-lg px-2.5 py-2 flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="font-bold text-slate-900">{inv.name}</div>
-                                  {inv.affiliation && (
-                                    <div className="text-[11px] text-slate-500">{inv.affiliation}</div>
-                                  )}
+                            {invList.map(inv => {
+                              const matchedPerson =
+                                (inv.personId ? people.find(p => p.id === inv.personId) : undefined) ||
+                                people.find(p => p.name.trim().toLowerCase() === inv.name.trim().toLowerCase());
+                              const profileHref = sanitizeExternalUrl(
+                                inv.url || matchedPerson?.scholar || matchedPerson?.linkedin
+                              );
+                              const displayAff =
+                                inv.affiliation ||
+                                [matchedPerson?.department, matchedPerson?.institution || matchedPerson?.currentAffiliation]
+                                  .filter(Boolean)
+                                  .join(' · ');
+                              return (
+                                <div key={inv.id} className="bg-white border border-slate-200 rounded-lg px-2.5 py-2 flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    {profileHref ? (
+                                      <a
+                                        href={profileHref}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-bold text-slate-900 hover:text-[#9E1B32] hover:underline inline-flex items-center gap-1"
+                                      >
+                                        <span>{inv.name}</span>
+                                        <ExternalLink className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                      </a>
+                                    ) : (
+                                      <div className="font-bold text-slate-900">{inv.name}</div>
+                                    )}
+                                    {displayAff && (
+                                      <div className="text-[11px] text-slate-500">{displayAff}</div>
+                                    )}
+                                  </div>
+                                  <span
+                                    className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shrink-0 border ${
+                                      inv.role === 'PI'
+                                        ? 'bg-red-50 text-[#9E1B32] border-red-200'
+                                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                                    }`}
+                                  >
+                                    {inv.role}
+                                  </span>
                                 </div>
-                                <span
-                                  className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shrink-0 border ${
-                                    inv.role === 'PI'
-                                      ? 'bg-red-50 text-[#9E1B32] border-red-200'
-                                      : 'bg-slate-100 text-slate-700 border-slate-200'
-                                  }`}
-                                >
-                                  {inv.role}
-                                </span>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         );
                       }
@@ -1621,63 +1647,82 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                     <p className="font-bold text-slate-800 mt-0.5">{subPage.timeline || project.period || 'Active Research Grant'}</p>
                   </div>
 
-                  {/* Linked Collaborators */}
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                        Project Collaborators ({collaborators.length})
-                      </span>
-                      {showEditControls && (
-                        <button
-                          type="button"
-                          onClick={() => setManagingCollaborators(true)}
-                          className="text-[10px] font-extrabold hover:underline cursor-pointer"
-                          style={{ color: headerAccent }}
-                        >
-                          Manage
-                        </button>
-                      )}
-                    </div>
+                  {/* Additional Project Collaborators (deduplicated against Investigators above) */}
+                  {(() => {
+                    const invListForDedup =
+                      Array.isArray(subPage.investigators) && subPage.investigators.length > 0
+                        ? subPage.investigators
+                        : parseLegacyInvestigators(subPage.piInfo, project.details);
+                    const extraCollaborators = collaborators.filter(
+                      col =>
+                        !invListForDedup.some(
+                          inv =>
+                            (inv.personId && col.personId && inv.personId === col.personId) ||
+                            inv.name.trim().toLowerCase() === col.name.trim().toLowerCase()
+                        )
+                    );
+                    if (extraCollaborators.length === 0 && !showEditControls) return null;
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                            Additional Collaborators ({extraCollaborators.length})
+                          </span>
+                          {showEditControls && (
+                            <button
+                              type="button"
+                              onClick={() => setManagingCollaborators(true)}
+                              className="text-[10px] font-extrabold hover:underline cursor-pointer"
+                              style={{ color: headerAccent }}
+                            >
+                              Manage
+                            </button>
+                          )}
+                        </div>
 
-                    {collaborators.length === 0 ? (
-                      <p className="text-[11px] text-slate-400 italic mt-1">
-                        No external collaborators linked yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5 mt-1.5">
-                        {collaborators.map(col => (
-                          <div key={col.id} className="bg-white border border-slate-200 rounded-lg p-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-slate-900">{col.name}</span>
-                              {col.role && (
-                                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                                  {col.role}
-                                </span>
-                              )}
-                            </div>
-                            {(col.department || col.affiliation) && (
-                              <p className="text-[11px] text-slate-500 mt-0.5">
-                                {[col.department, col.affiliation].filter(Boolean).join(' · ')}
-                              </p>
-                            )}
-                            {showCollaboratorEmails && col.email && (
-                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{col.email}</p>
-                            )}
-                            {col.url && (
-                              <a
-                                href={col.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline mt-1"
-                              >
-                                <ExternalLink className="w-2.5 h-2.5" /> Profile
-                              </a>
-                            )}
+                        {extraCollaborators.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 italic mt-1">
+                            {collaborators.length > 0
+                              ? 'Co-PI / collaborator already shown under Investigators above.'
+                              : 'No additional collaborators linked yet.'}
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5 mt-1.5">
+                            {extraCollaborators.map(col => (
+                              <div key={col.id} className="bg-white border border-slate-200 rounded-lg p-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-bold text-slate-900">{col.name}</span>
+                                  {col.role && (
+                                    <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                      {col.role}
+                                    </span>
+                                  )}
+                                </div>
+                                {(col.department || col.affiliation) && (
+                                  <p className="text-[11px] text-slate-500 mt-0.5">
+                                    {[col.department, col.affiliation].filter(Boolean).join(' · ')}
+                                  </p>
+                                )}
+                                {showCollaboratorEmails && col.email && (
+                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{col.email}</p>
+                                )}
+                                {col.url && sanitizeExternalUrl(col.url) && (
+                                  <a
+                                    href={sanitizeExternalUrl(col.url)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline mt-1"
+                                  >
+                                    <ExternalLink className="w-2.5 h-2.5" /> Profile
+                                  </a>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   <div>
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -1733,6 +1778,7 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         <ProjectInfoModal
           project={project}
           themes={themes}
+          people={people}
           primaryColor={primaryColor}
           initialPiInfo={subPage.piInfo || project.details}
           initialInvestigators={subPage.investigators}

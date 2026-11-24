@@ -181,9 +181,12 @@ export interface ProjectCustomSubTab {
 
 export interface ProjectInvestigator {
   id: string;
+  personId?: string;
   name: string;
   role: string;
   affiliation?: string;
+  email?: string;
+  url?: string;
 }
 
 export interface ProjectCollaborator {

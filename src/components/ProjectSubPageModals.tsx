@@ -27,6 +27,7 @@ import { RichBlogEditor } from './RichBlogEditor';
 interface ProjectInfoModalProps {
   project: Project;
   themes: ResearchTheme[];
+  people?: Person[];
   primaryColor: string;
   initialPiInfo: string;
   initialInvestigators?: ProjectInvestigator[];
@@ -51,6 +52,7 @@ interface ProjectInfoModalProps {
 export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
   project,
   themes,
+  people = [],
   primaryColor,
   initialPiInfo,
   initialInvestigators,
@@ -154,22 +156,69 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
           </div>
 
           <div className="bg-slate-50 border border-gray-200 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="font-extrabold text-slate-800 text-xs">
-                Principal Investigators (PI, Co-PIs &amp; Leads)
+                Principal Investigators (PI, Co-PIs &amp; Collaborators)
               </label>
-              <button
-                type="button"
-                onClick={() =>
-                  setInvestigators(prev => [
-                    ...prev,
-                    { id: `inv-${Date.now()}-${prev.length}`, name: '', role: 'Co-PI', affiliation: '' },
-                  ])
-                }
-                className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3 h-3" /> Add Investigator
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {people.length > 0 && (
+                  <select
+                    value=""
+                    onChange={e => {
+                      const p = people.find(x => x.id === e.target.value);
+                      if (!p) return;
+                      const aff =
+                        [p.department, p.institution || p.currentAffiliation].filter(Boolean).join(' · ') ||
+                        'The University of Alabama';
+                      setInvestigators(prev => [
+                        ...prev.filter(x => x.name.trim() !== ''),
+                        {
+                          id: `inv-${p.id}-${Date.now()}`,
+                          personId: p.id,
+                          name: p.name,
+                          role: p.group === 'collaborator' ? 'Co-PI' : 'PI',
+                          affiliation: aff,
+                          email: p.email || undefined,
+                          url: p.scholar || p.linkedin || undefined,
+                        },
+                      ]);
+                    }}
+                    className="text-[11px] font-bold px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-800 cursor-pointer max-w-[230px]"
+                  >
+                    <option value="">+ Link Co-PI / Collaborator from People...</option>
+                    <optgroup label="Collaborators Directory">
+                      {people
+                        .filter(p => p.group === 'collaborator')
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({[p.department, p.institution].filter(Boolean).join(' · ') || p.role})
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="ERSL Lab Team">
+                      {people
+                        .filter(p => (p.group || 'member') === 'member')
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.role})
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInvestigators(prev => [
+                      ...prev,
+                      { id: `inv-${Date.now()}-${prev.length}`, name: '', role: 'Co-PI', affiliation: '' },
+                    ])
+                  }
+                  className="text-[11px] font-bold px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" /> Add Custom
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">

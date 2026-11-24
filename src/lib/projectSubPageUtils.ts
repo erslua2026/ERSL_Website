@@ -564,14 +564,24 @@ export function isInternalLabMemberUser(
 export function isUserEmailLinkedToProject(
   email: string | undefined,
   collaborators: ProjectCollaborator[] = [],
-  people: Person[] = []
+  people: Person[] = [],
+  investigators: ProjectInvestigator[] = []
 ): boolean {
   const norm = (email || '').trim().toLowerCase();
   if (!norm) return false;
-  return collaborators.some(c => {
+  const inCollaborators = collaborators.some(c => {
     if (c.email?.trim().toLowerCase() === norm) return true;
     if (c.personId) {
       const matched = people.find(p => p.id === c.personId);
+      if (matched?.email?.trim().toLowerCase() === norm) return true;
+    }
+    return false;
+  });
+  if (inCollaborators) return true;
+  return investigators.some(inv => {
+    if (inv.email?.trim().toLowerCase() === norm) return true;
+    if (inv.personId) {
+      const matched = people.find(p => p.id === inv.personId);
       if (matched?.email?.trim().toLowerCase() === norm) return true;
     }
     return false;
@@ -582,6 +592,7 @@ export function resolveProjectViewerAccess(params: {
   currentUser: User | null;
   people?: Person[];
   collaborators: ProjectCollaborator[];
+  investigators?: ProjectInvestigator[];
   passkeyUnlocked: boolean;
   previewRole?: PreviewRole;
 }): {
@@ -590,7 +601,7 @@ export function resolveProjectViewerAccess(params: {
   isLinkedCollaborator: boolean;
   canViewVisibility: (vis: SubTabVisibility) => boolean;
 } {
-  const { currentUser, people = [], collaborators, passkeyUnlocked, previewRole = 'actual' } = params;
+  const { currentUser, people = [], collaborators, investigators = [], passkeyUnlocked, previewRole = 'actual' } = params;
 
   if (previewRole && previewRole !== 'actual') {
     const isAdmin = previewRole === 'admin';
@@ -613,7 +624,7 @@ export function resolveProjectViewerAccess(params: {
   const isAdmin = currentUser?.role === 'Admin';
   const email = (currentUser?.email || '').trim().toLowerCase();
   const isLabMember = isInternalLabMemberUser(currentUser, people);
-  const isEmailLinkedCollaborator = isUserEmailLinkedToProject(email, collaborators, people);
+  const isEmailLinkedCollaborator = isUserEmailLinkedToProject(email, collaborators, people, investigators);
   const isLinkedCollaborator = Boolean(passkeyUnlocked || isEmailLinkedCollaborator);
 
   return {
