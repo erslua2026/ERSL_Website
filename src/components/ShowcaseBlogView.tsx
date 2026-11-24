@@ -169,7 +169,7 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
   };
 
   return (
-    <article className="max-w-[860px] mx-auto text-left space-y-6 pb-2">
+    <article className="w-full text-left space-y-6 pb-2">
       {/* Editorial Article Header */}
       <header className="space-y-3 pb-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
