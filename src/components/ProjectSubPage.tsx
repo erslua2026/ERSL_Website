@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   Calendar,
   Check,
   CheckSquare,
+  ChevronDown,
   Code2,
   Copy,
   Database,
@@ -194,7 +195,23 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
       : resolveAssetUrl(rawLogo)
     : 'https://alabama.box.com/shared/static/bl5k9qrcbymh4xgvlt03u8fdw81j8vlq.jpg';
 
-  // Modals
+  // Modals & Compact Top Dropdowns
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<
+    null | 'sections' | 'edit-tab' | 'admin-tools' | 'passkey'
+  >(null);
+
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handleOutsideClick = (evt: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(evt.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [openDropdown]);
+
   const [editingInfo, setEditingInfo] = useState(false);
   const [managingCollaborators, setManagingCollaborators] = useState(false);
   const [subTabModal, setSubTabModal] = useState<{ open: boolean; existing: ProjectCustomSubTab | null }>({
@@ -726,65 +743,110 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
         </div>
       </div>
 
-      {/* Vertical Left Sidebar (Sub-Tabs + Member Share Link + Edit Controls) + Main Project Content Area */}
-      <div className="flex flex-col lg:flex-row gap-5 items-start">
-        <aside className="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-xs p-3.5 space-y-4">
-          {/* Vertical Sub-Page Navigation (Protected tabs hidden from public) */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-2 block mb-1.5">
-              Project Sections
-            </span>
-            {visibleSubTabs.map(tab => {
-              const active = activeSubTabObj?.id === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveSubId(tab.id);
-                    setEmbeddedBoxUrl(null);
-                  }}
-                  className={`w-full px-3 py-2.5 text-xs font-bold rounded-xl flex items-center justify-between gap-2 transition-colors cursor-pointer text-left ${
-                    active ? 'text-white shadow-xs' : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                  style={active ? { backgroundColor: headerAccent } : undefined}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="shrink-0">{getSubTabIcon(tab.kind)}</span>
-                    <span className="truncate">{tab.label}</span>
-                  </span>
-                  {showEditControls && (
-                    <span className="shrink-0">{getVisibilityIcon(tab.visibility, active)}</span>
-                  )}
-                </button>
-              );
-            })}
-
-            {(showEditControls || (isAdmin && !isShowingPreviewAsOther)) && (
+      {/* Full-Width Compact Dropdown Navigation & Tools Bar + 100%-Width Project Canvas */}
+      <div className="space-y-4">
+        <div
+          ref={toolbarRef}
+          className="bg-white rounded-2xl border border-gray-200 shadow-xs px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2.5 relative z-30"
+        >
+          {/* Left: Click-to-Open Project Sections Dropdown */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => setSubTabModal({ open: true, existing: null })}
-                className="w-full mt-2 px-3 py-2 text-xs font-bold rounded-xl border border-dashed border-slate-300 text-slate-700 hover:border-[#9E1B32] hover:bg-red-50/60 hover:text-[#9E1B32] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                onClick={() => setOpenDropdown(prev => (prev === 'sections' ? null : 'sections'))}
+                className="px-3.5 py-2 rounded-xl text-xs font-extrabold text-white shadow-xs inline-flex items-center gap-2 cursor-pointer hover:opacity-95 transition-opacity"
+                style={{ backgroundColor: headerAccent }}
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Sub-Page</span>
+                <span className="shrink-0">{getSubTabIcon(activeSubTabObj?.kind)}</span>
+                <span>{activeSubTabObj?.label || 'Select Section'}</span>
+                {showEditControls && activeSubTabObj && (
+                  <span className="opacity-90">{getVisibilityIcon(activeSubTabObj.visibility, true)}</span>
+                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${openDropdown === 'sections' ? 'rotate-180' : ''}`}
+                />
               </button>
+
+              {openDropdown === 'sections' && (
+                <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-200 p-2 space-y-1 z-40">
+                  <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                    Project Sections ({visibleSubTabs.length})
+                  </div>
+                  {visibleSubTabs.map(tab => {
+                    const active = activeSubTabObj?.id === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveSubId(tab.id);
+                          setEmbeddedBoxUrl(null);
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-between gap-2 transition-colors cursor-pointer text-left ${
+                          active ? 'text-white shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                        style={active ? { backgroundColor: headerAccent } : undefined}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0">{getSubTabIcon(tab.kind)}</span>
+                          <span className="truncate">{tab.label}</span>
+                        </span>
+                        {showEditControls && (
+                          <span className="shrink-0">{getVisibilityIcon(tab.visibility, active)}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {(showEditControls || (isAdmin && !isShowingPreviewAsOther)) && (
+                    <div className="pt-1 mt-1 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenDropdown(null);
+                          setSubTabModal({ open: true, existing: null });
+                        }}
+                        className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-dashed border-slate-300 text-slate-700 hover:border-[#9E1B32] hover:bg-red-50/60 hover:text-[#9E1B32] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Sub-Page</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {showEditControls && (
+              <span className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 inline-flex items-center gap-1.5">
+                {getVisibilityIcon(currentVisibility, false)}
+                <span>{activeVisMeta.shortLabel}</span>
+              </span>
+            )}
+
+            {!isLabMember && isLinkedCollaborator && currentUser && (
+              <span className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-800 inline-flex items-center gap-1.5">
+                <Key className="w-3 h-3 shrink-0" style={{ color: headerAccent }} />
+                <span>Collaborator Access</span>
+              </span>
             )}
           </div>
 
-          {/* Copy Share Link inside Vertical Sidebar — Visible Only After Member Login */}
-          {currentUser && (
-            <div className="pt-3 border-t border-gray-100 space-y-2">
+          {/* Right: Share Link, Collaborator Passkey, Edit Section Dropdown & Project Admin Tools Dropdown */}
+          <div className="flex flex-wrap items-center gap-2">
+            {currentUser && (
               <button
                 type="button"
                 onClick={handleCopySponsorLink}
-                className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 text-xs font-bold rounded-xl border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 inline-flex items-center gap-1.5 cursor-pointer"
                 title="Copy direct shareable URL for sponsors and collaborators"
               >
                 {copiedSponsorLink ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-emerald-700">Share Link Copied!</span>
+                    <span className="text-emerald-700">Copied!</span>
                   </>
                 ) : (
                   <>
@@ -793,169 +855,219 @@ export const ProjectSubPage: React.FC<ProjectSubPageProps> = ({
                   </>
                 )}
               </button>
+            )}
 
-              {!isLabMember && isLinkedCollaborator && (
-                <div className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-800 flex items-center gap-1.5">
-                  <Key className="w-3 h-3 shrink-0" style={{ color: headerAccent }} />
-                  <span>Collaborator Access</span>
-                </div>
-              )}
-
-              {showEditControls && (
-                <div className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 flex items-center gap-1.5">
-                  {getVisibilityIcon(currentVisibility, false)}
-                  <span>{activeVisMeta.shortLabel}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Optional Collaborator Passkey Unlock in Sidebar (only if project has a passkey & locked tabs exist) */}
-          {hasPasskeyCollaboratorTabs && (
-            <form onSubmit={handleUnlockWithPasskey} className="pt-3 border-t border-gray-100 space-y-2">
-              <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                <Key className="w-3 h-3" style={{ color: headerAccent }} /> Collaborator Passkey
-              </label>
-              <div className="flex gap-1.5">
-                <input
-                  type="password"
-                  value={passkeyInput}
-                  onChange={e => setPasskeyInput(e.target.value)}
-                  placeholder="Enter passkey..."
-                  className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="px-2.5 py-1.5 rounded-lg text-white text-[11px] font-bold cursor-pointer hover:opacity-90"
-                  style={{ backgroundColor: headerAccent }}
-                >
-                  Go
-                </button>
-              </div>
-              {passkeyError && <p className="text-[10px] font-bold text-red-600">{passkeyError}</p>}
-            </form>
-          )}
-
-          {/* Vertical Sub-Page Edit Tools (Visible when Edit Mode active, or to Admin on Project Management tabs) */}
-          {showEditControls && activeSubTabObj && (
-            activeSubTabObj.kind === 'workplan-tracker' || activeSubTabObj.kind === 'reservoir-tracker'
-          ) && !isAdmin ? (
-            <div className="pt-3 border-t border-gray-100 text-[11px] text-slate-500 bg-slate-50 rounded-xl p-2.5">
-              <strong className="text-slate-700 block">Admin-Only Management Tab</strong>
-              Only lab administrators can customize or delete Project Management tabs.
-            </div>
-          ) : (showEditControls || (isAdmin && !isShowingPreviewAsOther && (activeSubTabObj?.kind === 'workplan-tracker' || activeSubTabObj?.kind === 'reservoir-tracker'))) && activeSubTabObj && (
-            <div className="pt-3 border-t border-gray-100 space-y-2.5 text-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
-                Edit Sub-Page: {activeSubTabObj.label}
-              </span>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-600 block px-1">Visibility Access</label>
-                <select
-                  value={activeSubTabObj.visibility}
-                  onChange={e => handleChangeSubTabVisibility(activeSubTabObj.id, e.target.value as SubTabVisibility)}
-                  className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-900 focus:outline-none cursor-pointer"
-                >
-                  {VISIBILITY_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSubTabModal({ open: true, existing: activeSubTabObj })}
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Edit2 className="w-3.5 h-3.5" style={{ color: headerAccent }} />
-                <span>Rename / Edit Intro</span>
-              </button>
-
-              <div className="grid grid-cols-2 gap-1.5">
+            {hasPasskeyCollaboratorTabs && (
+              <div className="relative">
                 <button
                   type="button"
-                  disabled={activeTabIndex <= 0}
-                  onClick={() => handleMoveSubTab(activeTabIndex, -1)}
-                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
-                  title="Move sub-page up"
+                  onClick={() => setOpenDropdown(prev => (prev === 'passkey' ? null : 'passkey'))}
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 inline-flex items-center gap-1.5 cursor-pointer"
                 >
-                  <ArrowUp className="w-3.5 h-3.5" />
-                  <span>Up</span>
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Collaborator Passkey</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
                 </button>
+                {openDropdown === 'passkey' && (
+                  <form
+                    onSubmit={e => {
+                      handleUnlockWithPasskey(e);
+                    }}
+                    className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-200 p-3.5 space-y-2 z-40"
+                  >
+                    <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                      <Key className="w-3 h-3" style={{ color: headerAccent }} /> Collaborator Passkey
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="password"
+                        value={passkeyInput}
+                        onChange={e => setPasskeyInput(e.target.value)}
+                        placeholder="Enter passkey..."
+                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3 py-1.5 rounded-lg text-white text-[11px] font-bold cursor-pointer hover:opacity-90"
+                        style={{ backgroundColor: headerAccent }}
+                      >
+                        Go
+                      </button>
+                    </div>
+                    {passkeyError && <p className="text-[10px] font-bold text-red-600">{passkeyError}</p>}
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* Edit Sub-Page Dropdown */}
+            {(showEditControls || (isAdmin && !isShowingPreviewAsOther && (activeSubTabObj?.kind === 'workplan-tracker' || activeSubTabObj?.kind === 'reservoir-tracker'))) && activeSubTabObj && (
+              <div className="relative">
                 <button
                   type="button"
-                  disabled={activeTabIndex >= customSubTabs.length - 1}
-                  onClick={() => handleMoveSubTab(activeTabIndex, 1)}
-                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
-                  title="Move sub-page down"
+                  onClick={() => setOpenDropdown(prev => (prev === 'edit-tab' ? null : 'edit-tab'))}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl border inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    openDropdown === 'edit-tab'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-gray-200'
+                  }`}
                 >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                  <span>Down</span>
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Sub-Page</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
                 </button>
+
+                {openDropdown === 'edit-tab' && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-200 p-3.5 space-y-2.5 text-xs z-40">
+                    {showEditControls &&
+                    (activeSubTabObj.kind === 'workplan-tracker' || activeSubTabObj.kind === 'reservoir-tracker') &&
+                    !isAdmin ? (
+                      <div className="text-[11px] text-slate-500 bg-slate-50 rounded-xl p-2.5">
+                        <strong className="text-slate-700 block">Admin-Only Management Tab</strong>
+                        Only lab administrators can customize or delete Project Management tabs.
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block truncate">
+                          Section: {activeSubTabObj.label}
+                        </span>
+
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-600 block px-1">Visibility Access</label>
+                          <select
+                            value={activeSubTabObj.visibility}
+                            onChange={e => handleChangeSubTabVisibility(activeSubTabObj.id, e.target.value as SubTabVisibility)}
+                            className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-900 focus:outline-none cursor-pointer"
+                          >
+                            {VISIBILITY_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenDropdown(null);
+                            setSubTabModal({ open: true, existing: activeSubTabObj });
+                          }}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" style={{ color: headerAccent }} />
+                          <span>Rename / Edit Intro</span>
+                        </button>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            disabled={activeTabIndex <= 0}
+                            onClick={() => handleMoveSubTab(activeTabIndex, -1)}
+                            className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                            <span>Move Up</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={activeTabIndex >= customSubTabs.length - 1}
+                            onClick={() => handleMoveSubTab(activeTabIndex, 1)}
+                            className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center gap-1 disabled:opacity-35 cursor-pointer"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                            <span>Move Down</span>
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={customSubTabs.length <= 1}
+                          onClick={() => {
+                            setOpenDropdown(null);
+                            handleDeleteSubTab(activeSubTabObj);
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove Sub-Page</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+            )}
 
-              <button
-                type="button"
-                disabled={customSubTabs.length <= 1}
-                onClick={() => handleDeleteSubTab(activeSubTabObj)}
-                className="w-full px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Remove Sub-Page</span>
-              </button>
-            </div>
-          )}
-
-          {/* Vertical Project Settings & Role Preview (Admins / Member Editors) */}
-          {canEdit && (
-            <div className="pt-3 border-t border-gray-100 space-y-2 text-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
-                Project Admin Tools
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setEditingInfo(true)}
-                className="w-full px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 cursor-pointer bg-red-50/60 hover:bg-red-50 border-red-200"
-                style={{ color: headerAccent }}
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-                <span>Edit Project Info</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setManagingCollaborators(true)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Collaborators ({collaborators.length})</span>
-              </button>
-
-              <div className="space-y-1 pt-1">
-                <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1 px-1">
-                  <Eye className="w-3 h-3" /> Preview View As
-                </label>
-                <select
-                  value={previewRole}
-                  onChange={e => setPreviewRole(e.target.value as PreviewRole)}
-                  className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+            {/* Project Admin Tools Dropdown */}
+            {canEdit && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(prev => (prev === 'admin-tools' ? null : 'admin-tools'))}
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl border border-red-200 bg-red-50/70 hover:bg-red-50 inline-flex items-center gap-1.5 cursor-pointer"
+                  style={{ color: headerAccent }}
                 >
-                  <option value="actual">Editor View (All Tabs)</option>
-                  <option value="public">Public Visitor</option>
-                  <option value="collaborator">Linked Collaborator</option>
-                  <option value="member">ERSL Lab Member</option>
-                </select>
-              </div>
-            </div>
-          )}
-        </aside>
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Project Settings</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
 
-        {/* Right Main Sub-Page Canvas */}
-        <div className="flex-1 min-w-0 w-full space-y-4">
+                {openDropdown === 'admin-tools' && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-200 p-3.5 space-y-2 text-xs z-40">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-1 block">
+                      Project Admin Tools
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenDropdown(null);
+                        setEditingInfo(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 cursor-pointer bg-red-50/60 hover:bg-red-50 border-red-200"
+                      style={{ color: headerAccent }}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit Project Info</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenDropdown(null);
+                        setManagingCollaborators(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>Collaborators ({collaborators.length})</span>
+                    </button>
+
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1 px-1">
+                        <Eye className="w-3 h-3" /> Preview View As
+                      </label>
+                      <select
+                        value={previewRole}
+                        onChange={e => setPreviewRole(e.target.value as PreviewRole)}
+                        className="w-full p-2 text-xs bg-slate-50 border border-gray-200 rounded-lg font-extrabold text-slate-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value="actual">Editor View (All Tabs)</option>
+                        <option value="public">Public Visitor</option>
+                        <option value="collaborator">Linked Collaborator</option>
+                        <option value="member">ERSL Lab Member</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Full-Width Main Sub-Page Canvas */}
+        <div className="w-full space-y-4">
           {isShowingPreviewAsOther && (
             <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs">
               <span className="font-bold text-amber-900">
