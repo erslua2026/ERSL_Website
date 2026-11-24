@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Plus, Save, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Key, Plus, Save, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
 import {
   Person,
   Project,
@@ -223,7 +223,7 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
 
             <div className="space-y-2">
               {investigators.map((inv, idx) => (
-                <div key={inv.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2 rounded-lg border border-gray-200">
+                <div key={inv.id} className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 items-center bg-white p-2 rounded-lg border border-gray-200">
                   <select
                     value={inv.role}
                     onChange={e => {
@@ -237,6 +237,8 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
                     <option value="Co-Investigator">Co-Investigator</option>
                     <option value="Lead Researcher">Lead Researcher</option>
                     <option value="Senior Personnel">Senior Personnel</option>
+                    <option value="Postdoctoral Researcher">Postdoctoral Researcher</option>
+                    <option value="Graduate Researcher">Graduate Researcher</option>
                     <option value="Collaborator">Collaborator</option>
                   </select>
                   <input
@@ -255,17 +257,51 @@ export const ProjectInfoModal: React.FC<ProjectInfoModalProps> = ({
                       setInvestigators(prev => prev.map((x, i) => (i === idx ? { ...x, affiliation: val } : x)));
                     }}
                     placeholder="Institution (Optional)"
-                    className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                    className="sm:col-span-3 p-1.5 border border-gray-300 rounded text-xs"
                   />
-                  <button
-                    type="button"
-                    disabled={investigators.length <= 1}
-                    onClick={() => setInvestigators(prev => prev.filter((_, i) => i !== idx))}
-                    className="sm:col-span-1 p-1.5 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer flex justify-center"
-                    title="Remove investigator"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="sm:col-span-2 flex items-center justify-end gap-0.5">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() =>
+                        setInvestigators(prev => {
+                          if (idx <= 0) return prev;
+                          const next = [...prev];
+                          [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                          return next;
+                        })
+                      }
+                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                      title="Move up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === investigators.length - 1}
+                      onClick={() =>
+                        setInvestigators(prev => {
+                          if (idx >= prev.length - 1) return prev;
+                          const next = [...prev];
+                          [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                          return next;
+                        })
+                      }
+                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                      title="Move down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={investigators.length <= 1}
+                      onClick={() => setInvestigators(prev => prev.filter((_, i) => i !== idx))}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer"
+                      title="Remove investigator"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

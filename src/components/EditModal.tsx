@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Edit, Plus, Sparkles, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowUp, X, Save, Edit, Plus, Sparkles, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
 import { Publication, DataLayer, ResearchTheme, Instrument, Person, FormerStint, ProjectInvestigator } from '../types';
 import { getLocalTodayYmd, graduatePersonToFormer, inferAlumniRoleFromRoleText } from '../lib/peopleUtils';
 import { formatInvestigatorsSummary, parseLegacyInvestigators } from '../lib/projectSubPageUtils';
@@ -1646,6 +1646,8 @@ export const EditModal: React.FC<EditModalProps> = ({
                         <option value="Co-Investigator">Co-Investigator</option>
                         <option value="Lead Researcher">Lead Researcher</option>
                         <option value="Senior Personnel">Senior Personnel</option>
+                        <option value="Postdoctoral Researcher">Postdoctoral Researcher</option>
+                        <option value="Graduate Researcher">Graduate Researcher</option>
                         <option value="Collaborator">Collaborator</option>
                       </select>
                       <input
@@ -1670,22 +1672,56 @@ export const EditModal: React.FC<EditModalProps> = ({
                           }));
                         }}
                         placeholder="Institution (Optional)"
-                        className="sm:col-span-4 p-1.5 border border-gray-300 rounded text-xs"
+                        className="sm:col-span-3 p-1.5 border border-gray-300 rounded text-xs"
                       />
-                      <button
-                        type="button"
-                        disabled={(formData.investigators?.length || 0) <= 1}
-                        onClick={() =>
-                          setFormData((prev: any) => ({
-                            ...prev,
-                            investigators: prev.investigators.filter((_: any, i: number) => i !== idx),
-                          }))
-                        }
-                        className="sm:col-span-1 p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer flex justify-center text-xs font-bold"
-                        title="Remove"
-                      >
-                        ×
-                      </button>
+                      <div className="sm:col-span-2 flex items-center justify-end gap-0.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() =>
+                            setFormData((prev: any) => {
+                              if (idx <= 0) return prev;
+                              const next = [...prev.investigators];
+                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              return { ...prev, investigators: next };
+                            })
+                          }
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                          title="Move up"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === (formData.investigators?.length || 1) - 1}
+                          onClick={() =>
+                            setFormData((prev: any) => {
+                              if (idx >= prev.investigators.length - 1) return prev;
+                              const next = [...prev.investigators];
+                              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                              return { ...prev, investigators: next };
+                            })
+                          }
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer"
+                          title="Move down"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={(formData.investigators?.length || 0) <= 1}
+                          onClick={() =>
+                            setFormData((prev: any) => ({
+                              ...prev,
+                              investigators: prev.investigators.filter((_: any, i: number) => i !== idx),
+                            }))
+                          }
+                          className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-30 cursor-pointer"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
