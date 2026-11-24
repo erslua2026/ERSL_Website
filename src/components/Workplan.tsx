@@ -204,10 +204,41 @@ export const Workplan: React.FC<{
     const peopleByEmail = new Map<string, Profile>();
     const aliases: Record<string, string> = {};
 
-    const sourceRoster =
-      Array.isArray(peopleRoster) && peopleRoster.length > 0
-        ? peopleRoster.filter(p => (p.group || 'member') === 'member')
-        : initialPeople;
+    const rawRoster =
+      Array.isArray(peopleRoster) && peopleRoster.length > 0 ? peopleRoster : initialPeople;
+    const sourceRoster = rawRoster.filter(p => (p.group || 'member') === 'member');
+
+    // Track collaborators & former members so they are excluded from internal lab Work Plan tracking
+    const excludedIds = new Set<string>();
+    const excludedEmails = new Set<string>();
+    const memberIdsInRoster = new Set(sourceRoster.map(p => p.id));
+    const memberEmailsInRoster = new Set(
+      sourceRoster
+        .map(p => norm(p.email || (p.id === 'person-purushothaman' ? 'npurushothaman@ua.edu' : '')))
+        .filter(Boolean)
+    );
+    const markExcludedIfNonMember = (item: { id?: string; email?: string; group?: string }) => {
+      if (!item || (item.group !== 'collaborator' && item.group !== 'former')) return;
+      const em = norm(item.email);
+      if ((item.id && memberIdsInRoster.has(item.id)) || (em && memberEmailsInRoster.has(em))) {
+        return;
+      }
+      if (item.id) excludedIds.add(item.id);
+      if (em) excludedEmails.add(em);
+    };
+    rawRoster.forEach(markExcludedIfNonMember);
+
+    let savedPeopleList: Array<{ id?: string; name?: string; email?: string; role?: string; group?: string }> = [];
+    const savedPeople = localStorage.getItem('ersl_people');
+    if (savedPeople) {
+      try {
+        const parsed = JSON.parse(savedPeople);
+        if (Array.isArray(parsed)) {
+          savedPeopleList = parsed;
+          savedPeopleList.forEach(markExcludedIfNonMember);
+        }
+      } catch {}
+    }
 
     sourceRoster.forEach(p => {
       const email = norm(p.email || (p.id === 'person-purushothaman' ? 'npurushothaman@ua.edu' : `${p.id}@ua.edu`));
@@ -227,10 +258,14 @@ export const Workplan: React.FC<{
     aliases['user-naveen'] = aliases['user-naveen'] || 'person-purushothaman';
 
     // Merge helper that merges incoming profiles by email instead of creating duplicate cards
-    const mergeProfile = (incoming: { id?: string; name?: string; email?: string; role?: string }) => {
+    const mergeProfile = (incoming: { id?: string; name?: string; email?: string; role?: string; group?: string }) => {
       if (!incoming) return;
+      if (incoming.group === 'collaborator' || incoming.group === 'former') return;
       const email = norm(incoming.email);
       const incomingId = incoming.id || '';
+      if ((incomingId && excludedIds.has(incomingId)) || (email && excludedEmails.has(email))) {
+        return;
+      }
 
       if (email && peopleByEmail.has(email)) {
         // Person already exists with this email - merge into the canonical record!
@@ -280,21 +315,16 @@ export const Workplan: React.FC<{
       aliases[currentUser.id] = canonical.id;
     }
 
-    // Merge savedPeople from localStorage
-    const savedPeople = localStorage.getItem('ersl_people');
-    if (savedPeople) {
-      try {
-        const pList = JSON.parse(savedPeople);
-        if (Array.isArray(pList)) {
-          pList.forEach(item => mergeProfile(item));
-        }
-      } catch {}
-    }
+    // Merge savedPeople from localStorage (active lab Team members only)
+    savedPeopleList.forEach(item => mergeProfile(item));
 
     // Set merged state immediately
     const deduplicatedList = Array.from(peopleByEmail.values());
     setPeople(deduplicatedList);
     setAliasMap({ ...aliases });
+    try {
+      localStorage.setItem('ersl_workplan_profiles', JSON.stringify(deduplicatedList));
+    } catch {}
 
     // 1. Fetch cloud workplan matrix & merge any Student Weekly To-Do items cleanly
     try {

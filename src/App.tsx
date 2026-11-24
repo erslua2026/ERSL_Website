@@ -5381,7 +5381,7 @@ export default function App() {
                 {activeTab === 'workplan' && (
                   <div>
                     {isLabMemberUser ? (
-                      <Workplan currentUser={currentUser} {...getSubHeaderPassProps('workplan')} />
+                      <Workplan currentUser={currentUser} peopleRoster={people} {...getSubHeaderPassProps('workplan')} />
                     ) : (
                       <div className="bg-white p-12 rounded-xl border border-gray-100 text-center max-w-lg mx-auto shadow-sm space-y-4">
                         <Lock className="w-12 h-12 mx-auto text-[#9E1B32]" />
