@@ -22,6 +22,7 @@ import {
   VISIBILITY_OPTIONS,
 } from '../lib/projectSubPageUtils';
 import { BLOCK_TYPE_OPTIONS } from './ProjectBlockRenderer';
+import { RichBlogEditor } from './RichBlogEditor';
 
 interface ProjectInfoModalProps {
   project: Project;
@@ -337,7 +338,7 @@ export const SubTabEditorModal: React.FC<SubTabEditorModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
+      <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
         <div className="p-4 text-white flex justify-between items-center" style={{ backgroundColor: primaryColor }}>
           <h3 className="font-extrabold text-sm">
             {existing ? `Edit Sub-Page: ${existing.label}` : 'Add Project Sub-Page'}
@@ -544,7 +545,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
+      <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
         <div className="p-4 text-white flex justify-between items-center" style={{ backgroundColor: primaryColor }}>
           <h3 className="font-extrabold text-sm">
             {existing ? 'Edit Content Section' : 'Add Content Section'}
@@ -598,19 +599,28 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                   ? 'Items (one bullet per line)'
                   : type === 'meeting-note'
                     ? 'Discussion Notes & Action Items'
-                    : 'Text / Description (supports multiple paragraphs)'}
+                    : 'Rich Content / Description (Word-Style Formatting, Tables & Equations)'}
               </label>
-              <textarea
-                rows={type === 'paragraph' || type === 'meeting-note' || type === 'objectives' ? 6 : 3}
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                placeholder={
-                  type === 'objectives'
-                    ? 'Enter each objective or deliverable on its own line...'
-                    : 'Write detailed text paragraphs or description...'
-                }
-                className="w-full p-2 border border-gray-300 rounded-lg"
-              />
+              {type === 'objectives' || type === 'box-folder' ? (
+                <textarea
+                  rows={type === 'objectives' ? 6 : 3}
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  placeholder={
+                    type === 'objectives'
+                      ? 'Enter each objective or deliverable on its own line...'
+                      : 'Write description...'
+                  }
+                  className="w-full p-2 border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <RichBlogEditor
+                  value={body}
+                  onChange={setBody}
+                  minHeightClass={type === 'paragraph' || type === 'meeting-note' ? 'min-h-[210px]' : 'min-h-[140px]'}
+                  placeholder="Format text (Bold, Italic, Underline, Justify, Fonts, Colors), or insert Tables & LaTeX Equations..."
+                />
+              )}
             </div>
           )}
 

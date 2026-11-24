@@ -3,6 +3,8 @@ import { X, Save, Sparkles, Link as LinkIcon } from 'lucide-react';
 import { NewsItem, NewsCategory } from '../data/news';
 import { BoxUploadButton } from './BoxUploadButton';
 import { ImageUploadField } from './ImageUploadField';
+import { RichBlogEditor } from './RichBlogEditor';
+import { stripRichHtmlToPlainText } from '../lib/richTextUtils';
 
 interface NewsModalProps {
   item: NewsItem | null;
@@ -55,7 +57,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
       setError('Please provide a news headline / title.');
       return;
     }
-    if (!summary.trim()) {
+    if (!stripRichHtmlToPlainText(summary).trim()) {
       setError('Please provide a summary or description for the news story.');
       return;
     }
@@ -76,7 +78,7 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200 text-left">
+      <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200 text-left">
         {/* Header */}
         <div className="bg-[#9E1B32] p-4 text-white flex justify-between items-center">
           <div>
@@ -175,18 +177,16 @@ export const NewsModal: React.FC<NewsModalProps> = ({ item, onSave, onClose }) =
           {/* Story Summary */}
           <div>
             <label className="block text-xs font-extrabold text-slate-700 mb-1">
-              Summary / Content <span className="text-red-500">*</span>
+              Blog / News Content (Word-Style Formatting, Tables &amp; Equations) <span className="text-red-500">*</span>
             </label>
-            <textarea
-              rows={5}
+            <RichBlogEditor
               value={summary}
-              onChange={e => setSummary(e.target.value)}
-              placeholder="Describe the research milestone, publication findings, or field campaign..."
-              className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#9E1B32] leading-relaxed"
-              required
+              onChange={setSummary}
+              minHeightClass="min-h-[180px]"
+              placeholder="Write your blog or announcement with Bold, Italic, Underline, Justify, Fonts, Colors, Tables & LaTeX Equations..."
             />
             <p className="text-[10px] text-slate-400 mt-1">
-              Cards stay uniform in height on the Home grid; visitors can click any card or &ldquo;Overview Popup&rdquo; to read the full story.
+              Cards stay uniform in height on the Home grid; visitors click any card or &ldquo;Overview Popup&rdquo; to see the full formatted tables, colors, fonts &amp; equations.
             </p>
           </div>
 

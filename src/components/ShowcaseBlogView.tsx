@@ -32,7 +32,7 @@ import {
   resolveAssetUrl,
   resolveReferenceUrl,
 } from '../lib/boxUtils';
-import { LinkedReferenceText } from './LinkedReferenceText';
+import { RichBlogContent } from './RichBlogContent';
 
 interface ShowcaseBlogViewProps {
   resultTab: ProjectShowcaseTab;
@@ -82,35 +82,8 @@ const REF_KIND_META: Record<
   },
 };
 
-/**
- * Safely renders prose supporting inline **bold**, `code`, and auto-linked URLs/DOIs.
- */
 function RichBlogProse({ text }: { text: string }) {
-  const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return (
-    <>
-      {tokens.map((tok, i) => {
-        if (tok.startsWith('**') && tok.endsWith('**') && tok.length > 4) {
-          return (
-            <strong key={i} className="font-bold text-slate-900">
-              <LinkedReferenceText text={tok.slice(2, -2)} />
-            </strong>
-          );
-        }
-        if (tok.startsWith('`') && tok.endsWith('`') && tok.length > 2) {
-          return (
-            <code
-              key={i}
-              className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[0.88em] text-slate-800"
-            >
-              {tok.slice(1, -1)}
-            </code>
-          );
-        }
-        return <LinkedReferenceText key={i} text={tok} />;
-      })}
-    </>
-  );
+  return <RichBlogContent content={text} justifyByDefault={false} />;
 }
 
 export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
@@ -528,19 +501,11 @@ export const ShowcaseBlogView: React.FC<ShowcaseBlogViewProps> = ({
                   </ul>
                 ) : (
                   <div
-                    className={`space-y-3 text-sm sm:text-[15px] text-slate-800 leading-relaxed text-justify ${
+                    className={`text-sm sm:text-[15px] text-slate-800 leading-relaxed ${
                       block.highlight ? 'bg-red-50/40 border border-red-100 rounded-xl p-4' : ''
                     }`}
                   >
-                    {block.body
-                      .split(/\n{2,}/)
-                      .map(p => p.trim())
-                      .filter(Boolean)
-                      .map((para, pIdx) => (
-                        <p key={pIdx} className="whitespace-pre-line">
-                          <RichBlogProse text={para} />
-                        </p>
-                      ))}
+                    <RichBlogContent content={block.body} justifyByDefault />
                   </div>
                 )
               )}

@@ -15,6 +15,9 @@ import {
 import { ImageUploadField } from './ImageUploadField';
 import { BoxUploadButton } from './BoxUploadButton';
 import { LinkedReferenceText } from './LinkedReferenceText';
+import { RichBlogContent } from './RichBlogContent';
+import { RichBlogEditor } from './RichBlogEditor';
+import { stripRichHtmlToPlainText } from '../lib/richTextUtils';
 
 interface CustomPageViewProps {
   page: CustomPageData;
@@ -411,7 +414,7 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                             )}
                             {block.body && (
                               <span className="text-[11px] text-slate-500 truncate max-w-xl">
-                                — <LinkedReferenceText text={block.body} />
+                                — {stripRichHtmlToPlainText(block.body)}
                               </span>
                             )}
                           </div>
@@ -461,9 +464,11 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                         )}
 
                         {block.body && (
-                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line text-justify">
-                            <LinkedReferenceText text={block.body} />
-                          </p>
+                          <RichBlogContent
+                            content={block.body}
+                            className="text-xs text-slate-600 leading-relaxed"
+                            justifyByDefault
+                          />
                         )}
 
                         {block.type === 'box-folder' && block.url && isBoxUrl(block.url) && toBoxEmbedUrl(block.url) && (
@@ -539,12 +544,12 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
       {/* Add/Edit Content Block Modal */}
       {blockModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
+          <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl border border-gray-100 text-left">
             <div className="p-4 text-white flex justify-between items-center" style={{ backgroundColor: primaryColor }}>
               <h3 className="font-extrabold text-sm">{editingBlock ? 'Edit Content Block' : 'Add Content Block'}</h3>
               <button onClick={() => setBlockModalOpen(false)} className="cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-            <form onSubmit={saveBlock} className="p-5 space-y-3 text-xs">
+            <form onSubmit={saveBlock} className="p-5 space-y-3 text-xs max-h-[84vh] overflow-y-auto">
               <div>
                 <label className="font-bold text-gray-700 block mb-1">Block Type</label>
                 <select value={bType} onChange={e => setBType(e.target.value as any)} className="w-full p-2 border border-gray-300 rounded-lg">
@@ -560,8 +565,13 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
                 <input value={bTitle} onChange={e => setBTitle(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg" />
               </div>
               <div>
-                <label className="font-bold text-gray-700 block mb-1">Description / Content</label>
-                <textarea rows={3} value={bBody} onChange={e => setBBody(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" />
+                <label className="font-bold text-gray-700 block mb-1">Description / Rich Content (Word-Style Formatting, Tables &amp; Equations)</label>
+                <RichBlogEditor
+                  value={bBody}
+                  onChange={setBBody}
+                  minHeightClass="min-h-[160px]"
+                  placeholder="Write formatted prose, insert tables, LaTeX equations, fonts, colors, or justify text..."
+                />
               </div>
               {bType === 'image' ? (
                 <div className="space-y-3">

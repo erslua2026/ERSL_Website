@@ -20,6 +20,7 @@ import {
 import { ProjectContentBlock, ProjectContentBlockType } from '../types';
 import { isBoxUrl, isSafeDataDocumentUrl, openOrDownloadResource, resolveAssetUrl, resolveReferenceUrl, toBoxEmbedUrl } from '../lib/boxUtils';
 import { LinkedReferenceText } from './LinkedReferenceText';
+import { RichBlogContent } from './RichBlogContent';
 
 export interface BlockTypeMeta {
   type: ProjectContentBlockType;
@@ -191,9 +192,11 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
           {editActions}
         </div>
         {block.body && (
-          <div className="text-xs md:text-sm text-slate-700 leading-relaxed whitespace-pre-line text-justify">
-            <LinkedReferenceText text={block.body} />
-          </div>
+          <RichBlogContent
+            content={block.body}
+            className="text-xs md:text-sm text-slate-700 leading-relaxed"
+            justifyByDefault
+          />
         )}
         {(block.url || block.boxUrl) && (
           <div className="flex flex-wrap gap-2.5 pt-0.5">
@@ -424,9 +427,11 @@ export const ProjectBlockRenderer: React.FC<ProjectBlockRendererProps> = ({
 
           <div>{renderClickableTitle()}</div>
           {block.body && (
-            <p className="text-xs text-slate-600 leading-snug whitespace-pre-line text-justify">
-              <LinkedReferenceText text={block.body} />
-            </p>
+            <RichBlogContent
+              content={block.body}
+              className="text-xs text-slate-600 leading-snug"
+              justifyByDefault
+            />
           )}
         </div>
 

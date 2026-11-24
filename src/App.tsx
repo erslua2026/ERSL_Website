@@ -27,6 +27,8 @@ import {
 import { newsItems, NewsItem } from './data/news';
 import { defaultSiteConfig, defaultCustomPages } from './data/defaultSiteConfig';
 import { NewsModal } from './components/NewsModal';
+import { RichBlogContent } from './components/RichBlogContent';
+import { stripRichHtmlToPlainText } from './lib/richTextUtils';
 import { BulletinModal } from './components/BulletinModal';
 import { ProjectSubPage } from './components/ProjectSubPage';
 import { StudentSubPage } from './components/StudentSubPage';
@@ -2828,8 +2830,8 @@ export default function App() {
                                     <h3 className="font-extrabold text-slate-800 text-sm leading-snug group-hover:text-[#9E1B32] transition-colors">
                                       {n.title}
                                     </h3>
-                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-line line-clamp-4 text-justify">
-                                      {n.summary}
+                                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-4 text-justify">
+                                      {stripRichHtmlToPlainText(n.summary)}
                                     </p>
                                   </div>
                                 </div>
@@ -5731,9 +5733,11 @@ export default function App() {
                   </div>
                 )}
 
-                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line text-justify">
-                  {viewingNewsItem.summary}
-                </p>
+                <RichBlogContent
+                  content={viewingNewsItem.summary}
+                  className="text-xs sm:text-sm text-slate-700 leading-relaxed"
+                  justifyByDefault
+                />
 
                 <div className="pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
